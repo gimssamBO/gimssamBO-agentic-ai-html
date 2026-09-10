@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제1강 — 따라하기 — "LLM의 한계"를 눈으로 확인하기</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제1강 · agentic ai intro</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제1강 · agentic ai intro — 세부 목차</b><a class="" href="00_실습환경-준비하기.html">00. 실습환경 준비하기</a><a class="" href="01_왜-에이전트가-필요한가.html">01. 왜 에이전트가 필요한가</a><a class="" href="02_AI앱-vs-AI에이전트.html">02. AI앱 vs AI에이전트</a><a class="" href="03_에이전트의-4요소-LLM-도구-기억-루프.html">03. 에이전트의 4요소 LLM 도구 기억 루프</a><a class="" href="04_환각은-왜-생기는가.html">04. 환각은 왜 생기는가</a><a class="cur" href="05_따라하기-LLM의-한계-확인하기.html">05. 따라하기 LLM의 한계 확인하기</a><a class="" href="06_정리-체크리스트.html">06. 정리 체크리스트</a><a class="" href="07_실습문제와-해답.html">07. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="llm">따라하기 — "LLM의 한계"를 눈으로 확인하기</h1>
+<h2 id="_1">목표</h2>
+<p>같은 챗봇에게 <strong>답할 수 있는 질문</strong>과 <strong>답할 수 없는 질문</strong>을 던져, "왜 도구가 필요한가"를 직접 체감합니다. 실제 실습 파일은 <code>code/ch01_intro.py</code> 입니다.</p>
+<hr/>
+<h2 id="0">0. 실습 준비</h2>
+<p>먼저 환경을 켜고, 이 과정에서 처음 쓰는 라이브러리를 설치합니다.</p>
+<pre><code class="language-bash">conda activate agentic
+
+# 1강에서 처음 쓰는 라이브러리
+#  - google-genai : Gemini 공식 Python SDK (from google import genai)
+#  - python-dotenv: .env 파일에서 API 키를 읽어오는 도구
+pip install google-genai python-dotenv
+</code></pre>
+<p>설치 후 키가 잘 잡혔는지 확인합니다.</p>
+<pre><code class="language-bash">python code/common.py
+</code></pre>
+<p>출력에 <code>키 로드 상태 — GOOGLE_API_KEY: True</code> 가 보이면 준비 완료입니다. (안 보이면 프로젝트 루트의 <code>.env</code> 파일에 <code>GOOGLE_API_KEY</code> 를 채워야 합니다.)</p>
+<hr/>
+<h2 id="1">1. 공통 시작부 — 클라이언트 준비</h2>
+<p><code>code/ch01_intro.py</code> 를 열고 한 줄씩 따라 칩니다.</p>
+<pre><code class="language-python"># 실행: python code/ch01_intro.py
+import sys, pathlib
+
+# [왜 필요한가] 이 스크립트는 같은 폴더(code/)의 common.py 를 import 한다.
+#   파이썬은 '실행 위치'에 따라 import 가 실패할 수 있으므로,
+#   이 파일이 있는 폴더(code/)를 모듈 검색 경로에 강제로 추가한다.
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+
+# common.py 의 도우미를 가져온다(모든 강이 공통 사용).
+#  - get_genai_client: .env 의 API 키로 Gemini 클라이언트를 만들어 주는 함수
+#  - GEMINI_MODEL: 사용할 모델 이름(기본 "gemini-2.5-flash")
+from common import get_genai_client, GEMINI_MODEL
+
+# 클라이언트 생성. 이 객체로 모델에 요청을 보낸다.
+client = get_genai_client()
+</code></pre>
+<p>여기서 <code>get_genai_client()</code>가 <code>.env</code>의 키를 읽어 <code>genai.Client(api_key=...)</code>를 대신 만들어 줍니다. 덕분에 우리는 매번 키를 신경 쓸 필요가 없습니다.</p>
+<hr/>
+<h2 id="2">2. 가장 단순한 질문 함수</h2>
+<pre><code class="language-python">def ask(question: str) -&gt; str:
+    """질문 문자열을 받아 LLM의 답변 텍스트를 돌려주는 가장 단순한 함수.
+
+    generate_content: '한 번 요청 → 한 번 응답'의 가장 기본적인 LLM 호출.
+      - model:    어떤 모델을 쓸지
+      - contents: 보낼 내용(여기선 질문)
+    resp.text: 모델이 생성한 답변(문자열).
+    """
+    resp = client.models.generate_content(model=GEMINI_MODEL, contents=question)
+    return resp.text
+</code></pre>
+<p><code>client.models.generate_content(model=..., contents=...)</code> — 이 한 줄이 LLM 호출의 핵심입니다. 결과는 <code>resp.text</code>에 문자열로 담깁니다.</p>
+<hr/>
+<h2 id="3">3. 두 종류의 질문을 던진다</h2>
+<pre><code class="language-python">if __name__ == "__main__":
+    # ----- 질문 1: 일반 지식 (LLM이 답할 수 있음) -----
+    print("=" * 60)
+    print("질문 1 (일반 지식 — LLM이 답할 수 있음)")
+    q1 = "블루투스 이어버드를 고를 때 무엇을 봐야 하나요? 3가지만 짧게."
+    print("Q:", q1)
+    print("A:", ask(q1))
+
+    # ----- 질문 2: 실시간 사내 정보 (LLM 혼자서는 불가) -----
+    print("=" * 60)
+    print("질문 2 (실시간 사내 정보 — LLM 혼자서는 불가)")
+    q2 = "승승장구몰 주문번호 O000123은 지금 배송 어디까지 왔나요?"
+    print("Q:", q2)
+    print("A:", ask(q2))
+    print("=" * 60)
+    print("관찰: 질문 2는 '주문 조회 도구'가 있어야만 정확히 답할 수 있습니다 (→ 5강).")
+</code></pre>
+<p><code>if __name__ == "__main__":</code> 은 <strong>"이 파일을 직접 실행할 때만 아래를 돌려라"</strong> 는 파이썬 관용구입니다. 다른 파일이 이 파일을 import 할 땐 함수(<code>ask</code>)만 빌려 쓰고, 이 블록은 실행되지 않습니다.</p>
+<hr/>
+<h2 id="4">4. 실행하고 관찰하기</h2>
+<pre><code class="language-bash">python code/ch01_intro.py
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code>============================================================
+질문 1 (일반 지식 — LLM이 답할 수 있음)
+Q: 블루투스 이어버드를 고를 때 무엇을 봐야 하나요? 3가지만 짧게.
+A: 1) 음질 2) 배터리 지속시간 3) 연결 안정성 입니다.   ← 잘 답함
+
+============================================================
+질문 2 (실시간 사내 정보 — LLM 혼자서는 불가)
+Q: 승승장구몰 주문번호 O000123은 지금 배송 어디까지 왔나요?
+A: 죄송하지만 실시간 주문 정보는 확인할 수 없습니다 ...   ← 답 못 함
+   (혹은 그럴듯한 가짜 배송단계를 지어냄 = 환각)
+============================================================
+</code></pre>
+<hr/>
+<h2 id="5">5. 무엇을 관찰했나</h2>
+<ul>
+<li><strong>질문 1</strong>(일반 지식)은 LLM이 학습으로 익힌 상식이라 <strong>잘 답합니다.</strong></li>
+<li><strong>질문 2</strong>(특정 주문 상태)는 우리 회사 DB에만 있는 정보라 <strong>답하지 못하거나 지어냅니다.</strong></li>
+</ul>
+<blockquote>
+<p>⚠️ 질문 2에서 LLM이 그럴듯한 가짜 운송장 번호를 지어내면, 그게 바로 4절에서 배운 <strong>환각</strong>입니다. 에이전트는 <strong>주문 조회 도구</strong>로 사실에 근거해 이 문제를 해결합니다. 그 "도구 붙이기"가 5강부터 시작됩니다.</p>
+</blockquote>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>LLM 호출의 최소 단위는 <code>client.models.generate_content(model=, contents=)</code> 입니다.</li>
+<li>직접 실험해 보니 LLM은 <strong>일반 지식엔 강하고 실시간·사내 정보엔 약하다</strong>는 것을 확인했습니다.</li>
+<li>다음 절에서 1강 전체를 정리하고 체크리스트로 점검합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="04_환각은-왜-생기는가.html"><span class="lbl">← 이전 절</span>04. 환각은 왜 생기는가</a><a class="nxt" href="06_정리-체크리스트.html"><span class="lbl">다음 절 →</span>06. 정리 체크리스트</a></div>
+</div>
+</body></html>

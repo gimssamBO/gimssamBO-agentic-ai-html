@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제14강 — 실습문제와 해답</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제14강 · embedding</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제14강 · embedding — 세부 목차</b><a class="" href="01_텍스트를-벡터로.html">01. 텍스트를 벡터로</a><a class="" href="02_임베딩이란.html">02. 임베딩이란</a><a class="" href="03_코사인-유사도.html">03. 코사인 유사도</a><a class="" href="04_임베딩-vs-채팅-모델.html">04. 임베딩 vs 채팅 모델</a><a class="" href="05_따라하기-문장을-벡터로.html">05. 따라하기 문장을 벡터로</a><a class="" href="06_따라하기-FAQ-임베딩과-유사도-검색.html">06. 따라하기 FAQ 임베딩과 유사도 검색</a><a class="" href="07_긴-문서-임베딩-전략.html">07. 긴 문서 임베딩 전략</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="cur" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">실습문제와 해답</h1>
+<p>직접 코드를 고쳐 보며 14강 내용을 손에 익힙니다. 먼저 <strong>스스로 풀어 본 뒤</strong> 해답을 펼쳐 보세요. (이 실습은 <code>GOOGLE_API_KEY</code>가 필요합니다.)</p>
+<hr/>
+<h2 id="1">문제 1 — 코사인 유사도 검색기 작성</h2>
+<p><code>most_similar(query, docs, k=3)</code> 함수를 직접 작성하세요.</p>
+<ul>
+<li><code>models/gemini-embedding-001</code>로 docs와 query를 임베딩하고 코사인 유사도 상위 k개를 반환합니다.</li>
+<li>사용 파일: <code>data/faq.csv</code>의 <code>question</code> 컬럼을 docs로 사용</li>
+<li>기대 결과: "배송 얼마나 걸려요?" 질의에 배송 관련 FAQ가 1위로 나오고 유사도 점수가 함께 출력되면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_embeddings, DATA
+import pandas as pd
+from sklearn.metrics.pairwise import cosine_similarity
+
+emb = get_embeddings()
+
+def most_similar(query: str, docs: list[str], k: int = 3):
+    """query와 docs를 임베딩해 코사인 유사도 상위 k개를 (점수, 문서)로 반환한다."""
+    q_vec = emb.embed_query(query)
+    doc_vecs = emb.embed_documents(docs)
+    sims = cosine_similarity([q_vec], doc_vecs)[0]
+    top_k = sims.argsort()[::-1][:k]
+    return [(float(sims[i]), docs[i]) for i in top_k]
+
+if __name__ == "__main__":
+    df = pd.read_csv(DATA / "faq.csv", encoding="utf-8-sig")
+    questions = df["question"].tolist()
+
+    results = most_similar("배송 얼마나 걸려요?", questions, k=3)
+    print("질의: 배송 얼마나 걸려요?")
+    for rank, (score, q) in enumerate(results, 1):
+        print(f"  {rank}. ({score:.3f}) {q}")
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">질의: 배송 얼마나 걸려요?
+  1. (0.847) 배송은 얼마나 걸리나요?
+  2. (0.612) 배송비는 얼마인가요?
+  3. (0.541) 주문 취소는 어떻게 하나요?
+</code></pre>
+
+
+**해설**: `most_similar`는 14강에서 배운 "임베딩 → 코사인 유사도 → 상위 k" 흐름을 함수로 묶은 것입니다. "배송 얼마나 걸려요?"(질의)와 "배송은 얼마나 걸리나요?"(FAQ)는 표현이 살짝 다른데도 유사도 0.847로 1위에 나옵니다. 의미 검색이 표현 차이를 넘어 잘 작동하죠. 이 함수가 사실상 RAG 검색의 핵심이고, 15·16강에서 이걸 벡터DB와 LLM에 연결합니다.
+
+</details>
+<hr/>
+<h2 id="2">문제 2 — 유사/비유사 쌍 비교</h2>
+<p>의미가 비슷한 문장 쌍과 무관한 문장 쌍을 각각 임베딩해 코사인 유사도를 계산·비교하세요.</p>
+<ul>
+<li>사용 파일: <code>data/reviews.csv</code>의 <code>review_text</code>에서 긍정 리뷰 2개와 무관한 리뷰 1개를 골라 사용</li>
+<li>기대 결과: 비슷한 쌍의 점수 &gt; 무관한 쌍의 점수임을 수치로 보이면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_embeddings, DATA
+import numpy as np
+
+emb = get_embeddings()
+
+def cosine(a, b):
+    a, b = np.asarray(a), np.asarray(b)
+    return float(a @ b / (np.linalg.norm(a) * np.linalg.norm(b)))
+
+# 비슷한 의미 쌍 (둘 다 긍정 평가)
+pos1 = "배송도 빠르고 품질도 좋아서 만족합니다."
+pos2 = "제품이 튼튼하고 배송이 신속해서 좋았어요."
+# 무관한 문장
+neg = "사용 설명서가 영어로만 되어 있어 불편합니다."
+
+v_pos1, v_pos2, v_neg = emb.embed_documents([pos1, pos2, neg])
+
+sim_similar = cosine(v_pos1, v_pos2)    # 비슷한 쌍
+sim_unrelated = cosine(v_pos1, v_neg)   # 무관한 쌍
+
+print(f"비슷한 쌍 (긍정-긍정)  유사도: {sim_similar:.3f}")
+print(f"무관한 쌍 (긍정-불만)  유사도: {sim_unrelated:.3f}")
+print(f"→ 비슷한 쌍이 {'더 높음 ✓' if sim_similar &gt; sim_unrelated else '낮음 ✗'}")
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">비슷한 쌍 (긍정-긍정)  유사도: 0.731
+무관한 쌍 (긍정-불만)  유사도: 0.402
+→ 비슷한 쌍이 더 높음 ✓
+</code></pre>
+
+
+**해설**: 둘 다 "배송 빠르고 만족"이라는 긍정 리뷰(pos1, pos2)는 유사도가 높고(0.731), 불만 리뷰(neg)와는 낮습니다(0.402). 표현이 다르지만(빠르고/신속한, 좋다/만족) 의미가 같으면 가깝고, 의미가 다르면(만족 vs 불편) 멉니다. 이게 임베딩이 "의미"를 포착한다는 증거입니다. 이 성질로 리뷰 분류, 추천, 검색 같은 응용이 가능하죠.
+
+</details>
+<hr/>
+<h2 id="_2">정리</h2>
+<ul>
+<li>문제 1로 <strong>의미 검색 함수</strong>(<code>most_similar</code>)를 직접 만들었습니다.</li>
+<li>문제 2로 <strong>임베딩이 의미를 포착</strong>한다는 걸 유사/무관 쌍으로 확인했습니다.</li>
+</ul>
+<p>이것으로 14강을 마칩니다. 다음 15강에서 벡터를 영속 저장하는 벡터DB를 배웁니다!</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="08_정리-체크리스트.html"><span class="lbl">← 이전 절</span>08. 정리 체크리스트</a><span class="nxt off"><span class="lbl"> </span> </span></div>
+</div>
+</body></html>

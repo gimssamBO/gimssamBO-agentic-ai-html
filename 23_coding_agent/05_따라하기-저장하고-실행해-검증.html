@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제23강 — 따라하기 — 저장하고 실행해 검증</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제23강 · coding agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제23강 · coding agent — 세부 목차</b><a class="" href="01_이-스크립트-왜-안돌지.html">01. 이 스크립트 왜 안돌지</a><a class="" href="02_코딩-에이전트의-핵심-루프.html">02. 코딩 에이전트의 핵심 루프</a><a class="" href="03_안전과-책임.html">03. 안전과 책임</a><a class="" href="04_따라하기-버그-읽고-수정-요청.html">04. 따라하기 버그 읽고 수정 요청</a><a class="cur" href="05_따라하기-저장하고-실행해-검증.html">05. 따라하기 저장하고 실행해 검증</a><a class="" href="06_재귀적-버그수정-오류-피드백-루프.html">06. 재귀적 버그수정 오류 피드백 루프</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">따라하기 — 저장하고 실행해 검증</h1>
+<h2 id="_2">목표</h2>
+<p>04번에서 받은 수정 코드를 <strong>새 파일로 저장하고 실제로 실행</strong>해, 종료코드로 정상 동작을 검증합니다. "고쳤다는 말"이 아니라 "진짜 돌아간다는 증거"를 얻습니다.</p>
+<hr/>
+<h2 id="1">1. 저장하고 실행하는 함수</h2>
+<p><code>code/ch23_coding.py</code>에 <code>save_and_run</code>을 추가합니다.</p>
+<pre><code class="language-python">def save_and_run(code: str):
+    """수정 코드를 새 파일로 저장한 뒤 별도 프로세스로 실행해 (종료코드, 출력)을 반환한다.
+
+    [왜 실제 실행] '고쳤다'는 LLM 말만 믿지 않고, 진짜 돌려서 종료코드 0(성공)을
+    확인한다 — 이것이 코딩 에이전트의 자체 검증(self-verification) 단계다.
+    """
+    FIXED.write_text(code, encoding="utf-8")       # 새 파일에 저장(원본 보존)
+    # 원본이 'data/sales_daily.csv' 상대경로를 쓰므로 ROOT에서 실행
+    proc = subprocess.run(
+        [sys.executable, str(FIXED)],              # 현재 파이썬으로 수정 파일 실행
+        cwd=str(ROOT), capture_output=True, text=True, timeout=60,  # 무한루프 방지 타임아웃
+    )
+    return proc.returncode, (proc.stdout + proc.stderr)   # 0=정상 종료, 출력은 합본
+</code></pre>
+<p><strong>한 줄씩 짚기</strong></p>
+<ul>
+<li><code>FIXED.write_text(...)</code> — 수정 코드를 <strong>새 파일</strong>에 저장(원본 <code>TARGET</code>은 그대로).</li>
+<li><code>[sys.executable, str(FIXED)]</code> — <code>sys.executable</code>은 지금 돌고 있는 파이썬 경로. 같은 환경에서 실행.</li>
+<li><code>cwd=str(ROOT)</code> — 작업 디렉터리를 프로젝트 루트로. 원본이 <code>data/sales_daily.csv</code> <strong>상대경로</strong>를 쓰니, 루트에서 돌려야 파일을 찾습니다.</li>
+<li><code>capture_output=True, text=True</code> — stdout/stderr를 <strong>문자열</strong>로 캡처.</li>
+<li><code>timeout=60</code> — 무한루프 방지(03번 안전장치).</li>
+<li>반환: <code>(종료코드, 출력)</code> — 종료코드 0이면 성공, 출력은 stdout+stderr 합본.</li>
+</ul>
+<hr/>
+<h2 id="2-stdout-stderr">2. 왜 stdout과 stderr를 합치나</h2>
+<pre><code class="language-python">return proc.returncode, (proc.stdout + proc.stderr)
+</code></pre>
+<p><code>stdout</code>(정상 출력)과 <code>stderr</code>(에러 메시지)를 <strong>합쳐서</strong> 반환합니다. 이유:</p>
+<pre><code class="language-text">- 성공 시: stdout에 결과("평균 매출: ...") → 이걸 보여줌
+- 실패 시: stderr에 에러(Traceback ...) → 이걸 06번에서 LLM에 피드백
+</code></pre>
+<p>둘 다 잡아 두면, 성공이든 실패든 <strong>무슨 일이 있었는지</strong> 한 변수로 확인할 수 있죠. 특히 실패 시의 에러 메시지는 06번 재귀 수정의 <strong>핵심 입력</strong>이 됩니다.</p>
+<hr/>
+<h2 id="3">3. 전체 파이프라인 실행</h2>
+<p>읽기 → 수정 → 저장·실행을 잇습니다.</p>
+<pre><code class="language-python">if __name__ == "__main__":
+    print("[1] 원본 코드 읽기:", TARGET.name)
+    source = read_code(TARGET)              # 버그 있는 원본 읽기
+
+    print("[2] LLM에게 버그 수정 요청 중...")
+    fixed = ask_fix(source)                 # LLM이 고친 전체 코드 받기
+
+    print("[3] 새 파일로 저장 후 실행 검증:", FIXED.name)
+    code, output = save_and_run(fixed)      # 저장→실행→종료코드로 검증
+
+    print("=" * 60)
+    print("[실행 결과] 종료코드:", code, "(0=정상)")
+    print(output)
+    print("=" * 60)
+    if code == 0:
+        print("성공: 버그가 수정되어 정상 동작합니다 →", FIXED)
+    else:
+        print("실패: 여전히 오류가 있습니다. 출력을 LLM에 다시 피드백해 재수정하세요.")
+</code></pre>
+<p><strong>예상 출력(성공)</strong></p>
+<pre><code class="language-text">[1] 원본 코드 읽기: buggy_script.py
+[2] LLM에게 버그 수정 요청 중...
+[3] 새 파일로 저장 후 실행 검증: fixed_script.py
+============================================================
+[실행 결과] 종료코드: 0 (0=정상)
+평균 매출: 152437.5
+최대 매출일: 2024-01-01
+============================================================
+성공: 버그가 수정되어 정상 동작합니다 → /Users/.../data/fixed_script.py
+</code></pre>
+<p>종료코드 <strong>0</strong>이 떴습니다. "고쳤다는 LLM 말"이 아니라 <strong>"실제로 돌아간다는 객관적 증거"</strong> 를 얻은 거죠. 이게 자가 검증(self-verification)입니다.</p>
+<hr/>
+<h2 id="4">4. 고쳐진 부분 확인</h2>
+<p>수정본(<code>data/fixed_script.py</code>)을 열어 보면 세 버그가 고쳐져 있습니다.</p>
+<pre><code class="language-python">with open(path, encoding="utf-8-sig") as f:   # 버그1: 인코딩 지정 (한글 BOM 대비)
+...
+total += int(r["sales"])                       # 버그2: 문자열 → 정수 변환
+...
+if int(r["sales"]) &gt; int(best["sales"]):       # 버그3: 숫자로 비교 (문자열 비교 X)
+</code></pre>
+<p>원본(<code>buggy_script.py</code>)은 <strong>그대로</strong> 있습니다. diff를 떠 보면 "AI가 정확히 어디를 바꿨는지" 사람이 검토할 수 있죠(03번 원본 보존의 가치).</p>
+<pre><code class="language-bash">diff data/buggy_script.py data/fixed_script.py
+</code></pre>
+<hr/>
+<h2 id="5-06">5. 실패하면? — 06번 예고</h2>
+<p>만약 한 번에 안 고쳐지면(종료코드 ≠ 0), 출력에 에러가 남습니다.</p>
+<pre><code class="language-text">============================================================
+[실행 결과] 종료코드: 1 (0=정상)
+Traceback (most recent call last):
+  File ".../fixed_script.py", line 8, in &lt;module&gt;
+    total += int(r["sales"])
+ValueError: invalid literal for int() with base 10: '1,500'   ← 천단위 콤마!
+============================================================
+실패: 여전히 오류가 있습니다. 출력을 LLM에 다시 피드백해 재수정하세요.
+</code></pre>
+<p>이 경우 <strong>에러 메시지를 다시 LLM에 먹여</strong> "이 오류가 사라지게 고쳐줘"라고 하면 됩니다. 이게 06번의 <strong>재귀적 버그 수정(self-debugging 루프)</strong> 입니다. 지금은 "1회 수정 + 검증"까지 완성했고, 다음 절에서 자동 반복으로 확장합니다.</p>
+<hr/>
+<h2 id="6">6. 모듈화 — 재사용 가능한 도구로</h2>
+<p><code>read_code / ask_fix / save_and_run</code>을 분리해 둔 덕에, 이걸 <strong>함수 하나로 묶어</strong> 재사용할 수 있습니다.</p>
+<pre><code class="language-python">def fix_file(path: pathlib.Path):
+    """파일 하나를 고쳐 새 파일로 저장하고 (성공여부, 출력)을 반환하는 재사용 함수."""
+    source = read_code(path)
+    fixed = ask_fix(source)
+    code, output = save_and_run(fixed)
+    return code == 0, output
+
+# CLI·CI 훅·내부 도구에서 호출
+ok, out = fix_file(DATA / "buggy_script.py")
+print("성공" if ok else "실패", out[:100])
+</code></pre>
+<p>이렇게 묶으면 CLI 명령(<code>fix script.py</code>), CI 훅, 내부 도구로 깔끔히 붙일 수 있죠. <strong>실행은 반드시 타임아웃</strong>을 둬 무한루프로부터 보호하는 걸 잊지 마세요.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li><code>save_and_run()</code>: 수정 코드를 <strong>새 파일 저장 → subprocess 실행 → 종료코드 반환</strong>.</li>
+<li><code>cwd=ROOT</code>(상대경로 대비), <code>timeout=60</code>(무한루프 차단), stdout+stderr 합본.</li>
+<li>종료코드 <strong>0 = 객관적 성공 증거</strong> — "고쳤다는 말"이 아닌 "진짜 돌아감".</li>
+<li>원본은 보존되어 <strong>diff로 변경 검토</strong> 가능.</li>
+<li>실패 시 에러를 <strong>다시 피드백</strong> → 06번 재귀 수정으로 확장.</li>
+<li>세 함수를 <code>fix_file()</code>로 묶어 <strong>CLI·CI 도구로 재사용</strong>.</li>
+<li>다음 절에서 재귀적 버그 수정 루프를 만듭니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="04_따라하기-버그-읽고-수정-요청.html"><span class="lbl">← 이전 절</span>04. 따라하기 버그 읽고 수정 요청</a><a class="nxt" href="06_재귀적-버그수정-오류-피드백-루프.html"><span class="lbl">다음 절 →</span>06. 재귀적 버그수정 오류 피드백 루프</a></div>
+</div>
+</body></html>

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제5강 — 따라하기 — 도구로 쓸 함수 만들기</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제5강 · function calling</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제5강 · function calling — 세부 목차</b><a class="" href="01_왜-함수호출이-필요한가.html">01. 왜 함수호출이 필요한가</a><a class="" href="02_LLM은-함수를-직접-실행하지-못한다.html">02. LLM은 함수를 직접 실행하지 못한다</a><a class="" href="03_자동실행-vs-수동루프.html">03. 자동실행 vs 수동루프</a><a class="cur" href="04_따라하기-도구-함수-만들기.html">04. 따라하기 도구 함수 만들기</a><a class="" href="05_따라하기-자동-function-calling.html">05. 따라하기 자동 function calling</a><a class="" href="06_따라하기-수동-루프로-결정-관찰.html">06. 따라하기 수동 루프로 결정 관찰</a><a class="" href="07_도구-실행-오류-처리.html">07. 도구 실행 오류 처리</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">따라하기 — 도구로 쓸 함수 만들기</h1>
+<h2 id="_2">목표</h2>
+<p>LLM에게 쥐여 줄 도구 두 개(재고 조회·환율 조회)를 파이썬 함수로 만듭니다. 핵심은 <strong>독스트링과 타입힌트</strong> — 이게 모델에게 주는 "사용 설명서"입니다. 실제 파일은 <code>code/ch05_function_calling.py</code> 입니다.</p>
+<hr/>
+<h2 id="0">0. 실습 준비 (설치)</h2>
+<pre><code class="language-bash">conda activate agentic
+
+# 5강에 필요한 라이브러리 (앞 강에서 설치했다면 생략 가능)
+pip install google-genai python-dotenv pandas
+</code></pre>
+<p>이번 강은 <code>data/exchange_rates.csv</code>(환율)와 <code>data/inventory.csv</code>(재고)를 씁니다.</p>
+<hr/>
+<h2 id="1">1. 공통 시작부 + 데이터 로드</h2>
+<pre><code class="language-python"># 실행: python code/ch05_function_calling.py
+import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_genai_client, GEMINI_MODEL, DATA
+from google.genai import types
+import pandas as pd
+
+client = get_genai_client()
+rates = pd.read_csv(DATA / "exchange_rates.csv")   # 환율 (currency, krw_per_unit)
+inv = pd.read_csv(DATA / "inventory.csv")          # 재고 (product_name, stock, warehouse)
+</code></pre>
+<hr/>
+<h2 id="2-1">2. 도구 함수 ① — 환율 조회</h2>
+<pre><code class="language-python"># [중요] 함수의 독스트링과 타입힌트가 모델에게 주는 '사용 설명서'다(모델은 본문을 못 본다).
+def get_exchange_rate(currency: str) -&gt; str:
+    """통화 코드(USD, EUR, JPY 등)를 받아 1단위당 원화(KRW) 환율을 반환한다."""
+    row = rates[rates["currency"].str.upper() == currency.upper()]
+    if row.empty:
+        return f"{currency} 환율 정보가 없습니다."
+    krw = float(row.iloc[0]["krw_per_unit"])
+    return f"1 {currency.upper()} = {krw:,.2f} KRW"
+</code></pre>
+<p>뜯어보면:</p>
+<ul>
+<li><strong>독스트링</strong> <code>"""통화 코드를 받아..."""</code> → 모델이 "환율 질문엔 이 도구"라고 판단하는 근거.</li>
+<li><strong>타입힌트</strong> <code>currency: str</code> → 모델이 "문자열 인자를 넣어야 한다"고 이해.</li>
+<li><strong><code>-&gt; str</code></strong> → 결과는 문자열로 돌려준다(모델은 문자열을 읽음).</li>
+<li>없는 통화면 <code>"...정보가 없습니다."</code> 를 돌려줘 <strong>빈 결과도 안전하게</strong> 처리.</li>
+</ul>
+<hr/>
+<h2 id="3-2">3. 도구 함수 ② — 재고 조회</h2>
+<pre><code class="language-python">def get_stock(product_name: str) -&gt; str:
+    """상품명(일부만 입력해도 됨)을 받아 현재 재고 수량을 반환한다."""
+    row = inv[inv["product_name"].str.contains(product_name, na=False)]
+    if row.empty:
+        return f"'{product_name}' 재고 정보를 찾지 못했습니다."
+    r = row.iloc[0]
+    return f"{r['product_name']} 재고 {int(r['stock'])}개 ({r['warehouse']})"
+</code></pre>
+<p>여기서 <code>str.contains</code>를 쓴 게 포인트입니다. 고객은 "이어버드"라고만 입력하지만, 실제 상품명은 "승승 무선 블루투스 이어버드 SE"처럼 깁니다. <strong>부분 일치</strong>로 찾아 줘야 실용적이죠. 독스트링에도 <code>"(일부만 입력해도 됨)"</code>이라고 명시해 모델이 알게 합니다.</p>
+<hr/>
+<h2 id="4">4. 함수가 잘 도는지 먼저 확인 (모델 없이)</h2>
+<p>도구를 LLM에 붙이기 전에, <strong>함수 자체가 제대로 도는지</strong> 직접 호출해 봅니다. (이건 디버깅의 기본입니다.)</p>
+<pre><code class="language-python">print(get_stock("이어버드"))          # 승승 무선 블루투스 이어버드 SE 재고 225개 (...)
+print(get_exchange_rate("USD"))      # 1 USD = 1,385.50 KRW
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">승승 무선 블루투스 이어버드 SE 재고 225개 (서울물류)
+1 USD = 1,385.50 KRW
+</code></pre>
+<p>함수가 잘 동작하네요. 이제 이걸 LLM에 도구로 연결할 차례입니다.</p>
+<hr/>
+<h2 id="5-3">5. 좋은 도구 함수의 3원칙 (미리보기)</h2>
+<p>다음 6강에서 자세히 다루지만, 핵심만 미리 봅니다.</p>
+<ol>
+<li><strong>독스트링을 명확히</strong>: 모델이 도구를 고르는 유일한 근거.</li>
+<li><strong>타입힌트를 정확히</strong>: 모델이 인자를 올바르게 채우게 함.</li>
+<li><strong>빈 결과·오류를 안전하게</strong>: 없는 상품·통화면 친절한 메시지 반환(예외로 죽지 않게 — 7강에서 심화).</li>
+</ol>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>도구 = <strong>독스트링 + 타입힌트를 갖춘 파이썬 함수</strong>.</li>
+<li>독스트링이 모델의 <strong>도구 선택 근거</strong>이므로 명확히 쓴다.</li>
+<li>재고처럼 부분 일치가 필요하면 <code>str.contains</code>를 쓰고 독스트링에 명시한다.</li>
+<li>LLM에 붙이기 전에 <strong>함수를 직접 호출</strong>해 동작을 확인한다.</li>
+<li>다음 절에서 이 도구들을 <strong>자동 Function Calling</strong>으로 연결합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="03_자동실행-vs-수동루프.html"><span class="lbl">← 이전 절</span>03. 자동실행 vs 수동루프</a><a class="nxt" href="05_따라하기-자동-function-calling.html"><span class="lbl">다음 절 →</span>05. 따라하기 자동 function calling</a></div>
+</div>
+</body></html>

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제14강 — 따라하기 — FAQ 임베딩과 유사도 검색</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제14강 · embedding</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제14강 · embedding — 세부 목차</b><a class="" href="01_텍스트를-벡터로.html">01. 텍스트를 벡터로</a><a class="" href="02_임베딩이란.html">02. 임베딩이란</a><a class="" href="03_코사인-유사도.html">03. 코사인 유사도</a><a class="" href="04_임베딩-vs-채팅-모델.html">04. 임베딩 vs 채팅 모델</a><a class="" href="05_따라하기-문장을-벡터로.html">05. 따라하기 문장을 벡터로</a><a class="cur" href="06_따라하기-FAQ-임베딩과-유사도-검색.html">06. 따라하기 FAQ 임베딩과 유사도 검색</a><a class="" href="07_긴-문서-임베딩-전략.html">07. 긴 문서 임베딩 전략</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="faq">따라하기 — FAQ 임베딩과 유사도 검색</h1>
+<h2 id="_1">목표</h2>
+<p>FAQ 질문들을 임베딩해 두고, 사용자 질문과 코사인 유사도로 <strong>가장 비슷한 FAQ</strong>를 찾습니다. 벡터DB 없이 numpy만으로 "미니 의미 검색"을 만듭니다.</p>
+<hr/>
+<h2 id="1-faq-05">1. 준비 — FAQ 임베딩 (05번 복습)</h2>
+<pre><code class="language-python">import pandas as pd
+import numpy as np
+from common import get_embeddings, DATA
+
+df = pd.read_csv(DATA / "faq.csv")
+questions = df["question"].tolist()
+
+emb = get_embeddings()
+doc_vectors = emb.embed_documents(questions)   # FAQ 질문들 → 벡터 (배치)
+</code></pre>
+<p>FAQ 10개를 미리 벡터로 만들어 뒀습니다. 이게 13강에서 배운 "인덱싱"(사전 준비)입니다.</p>
+<hr/>
+<h2 id="2">2. 사용자 질문 임베딩</h2>
+<pre><code class="language-python">user_q = "돈 언제 돌려받아요?"   # '환불'이라는 단어가 전혀 없다!
+q_vec = emb.embed_query(user_q)   # 질문 한 개는 embed_query로
+</code></pre>
+<p>여기서 핵심: <code>"돈 언제 돌려받아요?"</code> 에는 <strong>"환불"이라는 단어가 없습니다.</strong> 13강의 단어 매칭이라면 환불 FAQ를 못 찾았겠죠. 임베딩 검색은 어떨까요?</p>
+<hr/>
+<h2 id="3-faq">3. 코사인 유사도로 가장 비슷한 FAQ 찾기</h2>
+<p>03번의 <code>cosine</code> 함수로, 질문 벡터와 각 FAQ 벡터의 유사도를 계산합니다.</p>
+<pre><code class="language-python">def cosine(a, b) -&gt; float:
+    a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+    denom = np.linalg.norm(a) * np.linalg.norm(b)
+    return float(a @ b / denom) if denom else 0.0
+
+# 질문 벡터 vs 각 FAQ 벡터의 코사인 유사도를 모두 계산
+scores = [cosine(q_vec, dv) for dv in doc_vectors]
+best = int(np.argmax(scores))   # 유사도가 가장 높은 FAQ의 인덱스
+
+print(f"질문: {user_q}")
+print(f"가장 비슷한 FAQ(유사도 {scores[best]:.3f}):")
+print("  Q:", df.iloc[best]["question"])
+print("  A:", df.iloc[best]["answer"])
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">질문: 돈 언제 돌려받아요?
+가장 비슷한 FAQ(유사도 0.812):
+  Q: 환불은 언제 처리되나요?
+  A: 반품 상품이 물류센터에 도착한 후 영업일 기준 3일 이내에 환불됩니다 ...
+</code></pre>
+<p><strong>단어가 하나도 안 겹치는데</strong> "환불 FAQ"를 정확히 찾았습니다! "돈 돌려받기"와 "환불"의 의미가 가깝다는 걸 임베딩이 알아낸 거죠. 이게 <strong>의미 기반 검색</strong>의 힘입니다. 13강 단어 매칭이 못 한 일을 해냈습니다.</p>
+<hr/>
+<h2 id="4">4. 동작 원리 정리</h2>
+<pre><code class="language-text">1. FAQ 10개 임베딩 (사전)        → 10개 벡터
+2. "돈 돌려받기" 임베딩            → 질문 벡터
+3. 질문 벡터 vs 10개 벡터 유사도   → [0.81, 0.34, 0.21, ...]
+4. 가장 높은 것 선택               → "환불은 언제 처리되나요?" (0.81)
+</code></pre>
+<p>03번에서 배운 의미 검색 4단계가 그대로 코드가 됐습니다. <code>np.argmax(scores)</code>가 "유사도가 가장 높은 인덱스"를 찾아 주죠.</p>
+<hr/>
+<h2 id="5-k-sklearn">5. 상위 k개 + sklearn으로 빠르게</h2>
+<p>가장 비슷한 1개만이 아니라 <strong>상위 3개</strong>를 찾고 싶으면? 그리고 매번 루프 도는 게 느리면? <code>sklearn</code>의 <code>cosine_similarity</code>로 <strong>한 번의 행렬 연산</strong>으로 처리합니다.</p>
+<pre><code class="language-python">from sklearn.metrics.pairwise import cosine_similarity
+
+# 질문 1개 vs 전체 → 유사도 배열 (행렬 연산, 빠름)
+sims = cosine_similarity([q_vec], doc_vectors)[0]
+
+# 유사도 내림차순 정렬 후 상위 3개 인덱스
+top_k = sims.argsort()[::-1][:3]
+
+print("Top-3 유사 FAQ:")
+for rank, idx in enumerate(top_k, 1):
+    print(f"  {rank}. ({sims[idx]:.3f}) {df.iloc[idx]['question']}")
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">Top-3 유사 FAQ:
+  1. (0.812) 환불은 언제 처리되나요?
+  2. (0.659) 주문 취소는 어떻게 하나요?
+  3. (0.641) 교환은 어떻게 신청하나요?
+</code></pre>
+<p><code>argsort()[::-1][:3]</code>을 뜯어보면:</p>
+<ul>
+<li><code>argsort()</code>: 유사도를 <strong>오름차순</strong>으로 정렬한 인덱스</li>
+<li><code>[::-1]</code>: 뒤집어서 <strong>내림차순</strong>(높은 것부터)</li>
+<li><code>[:3]</code>: 상위 3개</li>
+</ul>
+<p>"환불"이 1위, 그다음 "취소", "교환" 순으로 의미가 가까운 FAQ들이 나왔습니다. 모두 환불과 관련된 주제죠.</p>
+<hr/>
+<h2 id="6-numpy-vs-sklearn">6. numpy 루프 vs sklearn 행렬</h2>
+<p>두 방법은 같은 결과를 내지만 효율이 다릅니다.</p>
+<table>
+<thead>
+<tr>
+<th>방법</th>
+<th>특징</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>numpy 루프(<code>for</code>)</td>
+<td>원리가 잘 보임, 느림</td>
+</tr>
+<tr>
+<td>sklearn 행렬(<code>cosine_similarity</code>)</td>
+<td>빠름, 깔끔함</td>
+</tr>
+</tbody>
+</table>
+<p>문서가 적으면 루프도 괜찮지만, 수천 개면 행렬 연산이 훨씬 빠릅니다. 그리고 수십만 개면? 그땐 행렬 연산도 느려져서 <strong>전용 벡터DB(FAISS)</strong> 가 필요합니다 — 그게 15강입니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>FAQ를 미리 임베딩해 두고, 질문과 <strong>코사인 유사도</strong>로 검색.</li>
+<li><strong>단어가 안 겹쳐도</strong>("돈 돌려받기") 의미로 찾음("환불 FAQ").</li>
+<li><code>np.argmax</code>로 1위, <code>argsort()[::-1][:k]</code>로 상위 k개.</li>
+<li><code>cosine_similarity</code>(sklearn)로 빠른 행렬 연산.</li>
+<li>문서가 아주 많으면 <strong>벡터DB(FAISS, 15강)</strong> 가 필요.</li>
+<li>다음 절에서 긴 문서를 임베딩하는 전략을 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="05_따라하기-문장을-벡터로.html"><span class="lbl">← 이전 절</span>05. 따라하기 문장을 벡터로</a><a class="nxt" href="07_긴-문서-임베딩-전략.html"><span class="lbl">다음 절 →</span>07. 긴 문서 임베딩 전략</a></div>
+</div>
+</body></html>

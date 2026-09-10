@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제6강 — 실습문제와 해답</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제6강 · tool system</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제6강 · tool system — 세부 목차</b><a class="" href="01_도구가-많아지면-생기는-문제.html">01. 도구가 많아지면 생기는 문제</a><a class="" href="02_모델은-무엇을-보고-도구를-고르나.html">02. 모델은 무엇을 보고 도구를 고르나</a><a class="" href="03_좋은-도구-설계-원칙.html">03. 좋은 도구 설계 원칙</a><a class="" href="04_따라하기-도구-4개-등록하고-관찰.html">04. 따라하기 도구 4개 등록하고 관찰</a><a class="" href="05_따라하기-독스트링-망가뜨려보기.html">05. 따라하기 독스트링 망가뜨려보기</a><a class="" href="06_비슷한-도구-구분하기.html">06. 비슷한 도구 구분하기</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="cur" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">실습문제와 해답</h1>
+<p>직접 코드를 고쳐 보며 6강 내용을 손에 익힙니다. 먼저 <strong>스스로 풀어 본 뒤</strong> 해답을 펼쳐 보세요.</p>
+<hr/>
+<h2 id="1">문제 1 — 리뷰 요약 도구 추가</h2>
+<p><code>code/ch06_tools.py</code>에 도구 <code>get_review_summary(product_name)</code>을 추가하세요.</p>
+<ul>
+<li><code>data/reviews.csv</code>를 읽어 해당 상품의 <code>rating</code> 평균과 리뷰 개수를 계산해 <code>"후드티: 평점 4.1 (리뷰 23건)"</code> 형태로 반환합니다.</li>
+<li>독스트링에 "상품의 고객 평점/후기 평가 질문에 사용"이라고 명확히 적고 <code>TOOLS</code>에 등록합니다.</li>
+<li><code>which_tool("후드티 평이 어때?")</code>로 확인합니다.</li>
+<li>사용 파일: <code>data/reviews.csv</code> (컬럼: product_name, rating)</li>
+<li>기대 결과: 그 질문에서 모델이 <code>get_review_summary</code>를 고르면(가격/재고 도구가 아니라) 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_genai_client, GEMINI_MODEL, DATA
+from google.genai import types
+import pandas as pd
+
+client = get_genai_client()
+reviews = pd.read_csv(DATA / "reviews.csv", encoding="utf-8-sig")
+
+def get_review_summary(product_name: str) -&gt; str:
+    """상품명을 받아 고객 평점 평균과 리뷰 개수를 반환한다. 상품의 평점/후기 평가 질문에 사용."""
+    hit = reviews[reviews["product_name"].str.contains(product_name, na=False)]
+    if hit.empty:
+        return f"'{product_name}' 리뷰를 찾지 못했습니다."
+    avg = hit["rating"].mean()
+    return f"{product_name}: 평점 {avg:.1f} (리뷰 {len(hit)}건)"
+
+# (get_price, get_stock 등은 기존 도구 — 함께 등록)
+TOOLS = [get_price, get_stock, get_review_summary]
+
+def which_tool(q):
+    r = client.models.generate_content(
+        model=GEMINI_MODEL, contents=q,
+        config=types.GenerateContentConfig(
+            tools=TOOLS,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+            temperature=0))
+    for fc in (r.function_calls or []):
+        print(f"  '{q}' → {fc.name}({dict(fc.args)})")
+
+which_tool("후드티 평이 어때?")
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">  '후드티 평이 어때?' → get_review_summary({'product_name': '후드티'})
+</code></pre>
+
+
+**해설**: 독스트링에 "평점/후기 평가 질문에 사용"이라고 명시한 덕분에, "평이 어때?"라는 질문이 이 도구와 매칭됐습니다. 새 도구를 추가할 때는 **기존 도구들과 역할이 겹치지 않게** 설명을 쓰는 게 핵심입니다.
+
+</details>
+<hr/>
+<h2 id="2">문제 2 — 겹치는 도구 충돌 실험</h2>
+<p><code>get_price</code>와 같은 일을 하는 중복 도구 <code>lookup_amount(product_name)</code>(독스트링도 가격 조회로 비슷하게)을 추가해 <code>TOOLS</code>에 함께 넣으세요. <code>which_tool("슬림핏 청바지 얼마야?")</code>를 5번 실행해 모델이 둘 중 어느 도구를 고르는지 집계하세요.</p>
+<ul>
+<li>사용 파일: <code>data/products.csv</code></li>
+<li>기대 결과: 선택이 둘 사이에서 갈리거나 일관되지 않음을 횟수로 확인하고, 중복 도구를 빼고 다시 실행하면 선택이 안정됨을 비교할 수 있으면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib
+from collections import Counter
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_genai_client, GEMINI_MODEL, DATA
+from google.genai import types
+import pandas as pd
+
+client = get_genai_client()
+products = pd.read_csv(DATA / "products.csv", encoding="utf-8-sig")
+
+def get_price(product_name: str) -&gt; str:
+    """상품명을 받아 판매가(원)를 반환한다. 가격/얼마 질문에 사용."""
+    row = products[products["product_name"].str.contains(product_name, na=False)]
+    return f"{row.iloc[0]['product_name']} {int(row.iloc[0]['price']):,}원" if not row.empty else "없음"
+
+def lookup_amount(product_name: str) -&gt; str:
+    """상품의 금액을 조회한다. 가격을 알려준다."""   # get_price와 거의 같은 역할!
+    return get_price(product_name)
+
+def pick(tools, q="슬림핏 청바지 얼마야?"):
+    r = client.models.generate_content(
+        model=GEMINI_MODEL, contents=q,
+        config=types.GenerateContentConfig(
+            tools=tools,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+            temperature=0))
+    calls = r.function_calls or []
+    return calls[0].name if calls else "(없음)"
+
+# (1) 중복 도구 둘 다 등록 → 5번 집계
+print("[중복 있음]")
+picks = [pick([get_price, lookup_amount]) for _ in range(5)]
+print(Counter(picks))
+
+# (2) 중복 제거 → 5번 집계
+print("[중복 제거]")
+picks2 = [pick([get_price]) for _ in range(5)]
+print(Counter(picks2))
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">[중복 있음]
+Counter({'get_price': 3, 'lookup_amount': 2})   ← 선택이 갈림(불안정)
+[중복 제거]
+Counter({'get_price': 5})                        ← 항상 일관
+</code></pre>
+
+
+**해설**: 거의 같은 일을 하는 두 도구가 있으면 모델의 선택이 **갈립니다**(불안정). 중복을 제거하니 선택이 **완벽히 일관**됩니다. 이래서 "비슷한 도구는 합치거나 줄여라"가 중요합니다(06번 5절). 도구는 많다고 좋은 게 아니라, **역할이 또렷한 도구**가 좋은 겁니다.
+
+</details>
+<hr/>
+<h2 id="_2">정리</h2>
+<ul>
+<li>문제 1로 <strong>새 도구를 역할이 겹치지 않게</strong> 추가하는 법을 익혔습니다.</li>
+<li>문제 2로 <strong>중복 도구가 선택을 불안정하게</strong> 만드는 걸 숫자로 확인했습니다.</li>
+</ul>
+<p>이것으로 6강을 마칩니다. 다음 7강에서는 도구 호출을 반복하는 <strong>Agent Loop</strong>를 만듭니다!</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="07_정리-체크리스트.html"><span class="lbl">← 이전 절</span>07. 정리 체크리스트</a><span class="nxt off"><span class="lbl"> </span> </span></div>
+</div>
+</body></html>

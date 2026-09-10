@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제8강 — 목표를 단계로 쪼개기</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제8강 · planning agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제8강 · planning agent — 세부 목차</b><a class="cur" href="01_목표를-단계로-쪼개기.html">01. 목표를 단계로 쪼개기</a><a class="" href="02_Plan-and-Execute란.html">02. Plan and Execute란</a><a class="" href="03_ReAct-vs-Plan-and-Execute.html">03. ReAct vs Plan and Execute</a><a class="" href="04_구조화-출력-Pydantic-스키마.html">04. 구조화 출력 Pydantic 스키마</a><a class="" href="05_따라하기-목표를-하위작업으로-분해.html">05. 따라하기 목표를 하위작업으로 분해</a><a class="" href="06_따라하기-실행-에이전트-구성.html">06. 따라하기 실행 에이전트 구성</a><a class="" href="07_계획이-잘못됐을때-대응.html">07. 계획이 잘못됐을때 대응</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">목표를 단계로 쪼개기</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>"가을 패딩을 출시하라" 같은 <strong>큰 목표</strong>는 한 번에 못 끝냅니다. 이런 일은 <strong>먼저 전체 계획(하위 작업 목록)을 세우고 그 다음 실행</strong>하는 게 안정적입니다. 이것이 <strong>Planning Agent</strong>이고, 이번 강부터 현업 프레임워크 <strong>LangChain</strong>을 씁니다.</p>
+<hr/>
+<h2 id="1">1. 큰 목표의 문제</h2>
+<p>승승장구몰 기획팀에 이런 목표가 떨어졌다고 합시다.</p>
+<blockquote>
+<p>"신상품 <strong>가을 패딩</strong>을 출시하라."</p>
+</blockquote>
+<p>이건 도구 한두 번으로 끝나는 일이 아닙니다. 여러 단계로 이뤄지죠.</p>
+<p><strong>가을 패딩 출시</strong>를 위한 하위 작업:</p>
+<ol>
+<li>시장조사 (경쟁 패딩 분석)</li>
+<li>상품 콘셉트·가격 확정</li>
+<li>상세페이지 기획·디자인</li>
+<li>초기 재고 발주</li>
+<li>마케팅 캠페인</li>
+<li>출시 후 성과 리포트</li>
+</ol>
+<p>7강의 ReAct 에이전트는 "질문 → 도구 한두 번 → 답"에 강합니다. 하지만 이렇게 <strong>단계가 많고 순서가 중요한</strong> 큰 목표에는, 한 스텝씩 즉흥적으로 움직이다 보면 <strong>큰 그림을 잃고 헤맬 수</strong> 있습니다.</p>
+<blockquote>
+<p>비유: 여행을 떠날 때, 무작정 발 닿는 대로 가는 것(ReAct)과 먼저 일정표를 짜고 움직이는 것(Planning)의 차이입니다. 당일치기 근교 나들이는 즉흥도 좋지만, 2주 유럽 여행은 일정을 먼저 짜야 길을 안 잃습니다.</p>
+</blockquote>
+<hr/>
+<h2 id="2">2. 해법 — 계획부터 세운다</h2>
+<p><strong>Plan-and-Execute</strong>는 큰 목표를 받으면:</p>
+<ol>
+<li><strong>계획(Plan)</strong>: 먼저 전체 하위 작업 목록을 만든다.</li>
+<li><strong>실행(Execute)</strong>: 각 단계를 차례로 처리한다.</li>
+</ol>
+<p>"먼저 일정표를 짜고, 그 일정대로 움직인다"는 거죠. 이러면 단계가 많아도 큰 그림을 유지하며 진행할 수 있습니다.</p>
+<pre><code class="language-python">goal = "가을 패딩 출시"
+plan = make_plan(goal)     # ① 계획: [시장조사, 콘셉트확정, 상세페이지, ...]
+# ② 실행: 각 단계를 차례로 처리 (도구로 진행상황 점검)
+</code></pre>
+<hr/>
+<h2 id="3-langchain">3. 이번 강의 큰 변화 — LangChain 도입</h2>
+<p>7강까지는 raw SDK(<code>google-genai</code>)로 <strong>원리를 손으로</strong> 만들었습니다. 8강부터는 <strong>LangChain</strong>이라는 현업 프레임워크를 씁니다.</p>
+<p>왜 이제 와서 프레임워크를 쓸까요?</p>
+<ul>
+<li><strong>원리를 이미 배웠다</strong>: 도구·루프·구조화 출력을 직접 만들어 봤으니, 프레임워크가 안에서 뭘 하는지 압니다.</li>
+<li><strong>코드가 짧아진다</strong>: 7강에서 <code>while</code> 루프로 30줄 짜던 ReAct 에이전트를, LangChain은 <code>create_agent(...)</code> 한 줄로 만듭니다.</li>
+<li><strong>현업 표준이다</strong>: 실무에서는 대부분 LangChain·LangGraph 같은 프레임워크를 씁니다.</li>
+</ul>
+<blockquote>
+<p>핵심: <strong>원리를 알고 프레임워크를 쓰면, 프레임워크가 마법이 아니라 "내가 손으로 하던 일의 자동화"로 보입니다.</strong> 1부에서 고생한 게 여기서 빛을 발합니다.</p>
+</blockquote>
+<hr/>
+<h2 id="4">4. 이 강에서 만들 것</h2>
+<p>두 가지를 만듭니다.</p>
+<ol>
+<li><strong>Planner</strong>: 목표를 하위 작업 목록(JSON)으로 분해 — <code>with_structured_output</code>(구조화 출력)</li>
+<li><strong>Executor</strong>: 진행상황을 조회하며 다음 할 일을 제안 — <code>create_agent</code>(LangChain 에이전트)</li>
+</ol>
+<p>데이터는 <code>data/project_tasks.csv</code>(컬럼: <code>task_id, task_name, team, status, due_date</code>)를 씁니다. <code>status</code>는 <code>완료 / 진행중 / 대기</code> 중 하나입니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>큰 목표는 <strong>계획부터 세우고 실행</strong>하는 게 안정적이다(Plan-and-Execute).</li>
+<li>ReAct(즉흥적 한 스텝씩)와 달리, <strong>큰 그림을 먼저</strong> 그린다.</li>
+<li>8강부터 <strong>LangChain</strong> 프레임워크 도입 — 원리를 알았으니 이제 자동화한다.</li>
+<li>다음 절에서 Plan-and-Execute를 더 자세히 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><span class="prv off"><span class="lbl"> </span> </span><a class="nxt" href="02_Plan-and-Execute란.html"><span class="lbl">다음 절 →</span>02. Plan and Execute란</a></div>
+</div>
+</body></html>

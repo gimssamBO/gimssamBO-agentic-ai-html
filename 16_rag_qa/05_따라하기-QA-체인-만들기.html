@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제16강 — 따라하기 — QA 체인 만들기 (LCEL)</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제16강 · rag qa</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제16강 · rag qa — 세부 목차</b><a class="" href="01_문서-근거로만-답하고-출처-밝히기.html">01. 문서 근거로만 답하고 출처 밝히기</a><a class="" href="02_QA-체인-구조-LCEL.html">02. QA 체인 구조 LCEL</a><a class="" href="03_환각을-억제하는-프롬프트.html">03. 환각을 억제하는 프롬프트</a><a class="" href="04_출처를-함께-반환하기.html">04. 출처를 함께 반환하기</a><a class="cur" href="05_따라하기-QA-체인-만들기.html">05. 따라하기 QA 체인 만들기</a><a class="" href="06_따라하기-답변과-출처-모듈화.html">06. 따라하기 답변과 출처 모듈화</a><a class="" href="07_따라하기-모르는-질문엔-모른다고.html">07. 따라하기 모르는 질문엔 모른다고</a><a class="" href="08_검색-품질-높이기-k값과-재정렬.html">08. 검색 품질 높이기 k값과 재정렬</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="qa-lcel">따라하기 — QA 체인 만들기 (LCEL)</h1>
+<h2 id="_1">목표</h2>
+<p>retriever + 프롬프트 + LLM을 LCEL로 엮어 RAG QA 체인을 만듭니다. 실제 파일은 <code>code/ch16_rag_qa.py</code> 입니다.</p>
+<hr/>
+<h2 id="0">0. 실습 준비 (설치)</h2>
+<pre><code class="language-bash">conda activate agentic
+
+# 16강에 필요한 라이브러리 (앞 강에서 설치했다면 생략 가능)
+pip install langchain langchain-community langchain-google-genai faiss-cpu pypdf
+</code></pre>
+<p>이번 강은 <code>data/docs/환불교환정책.pdf</code>, <code>멤버십정책.pdf</code>를 씁니다. <code>GOOGLE_API_KEY</code>가 필요합니다.</p>
+<hr/>
+<h2 id="1-retriever">1. 인덱싱 — 두 문서 통합 retriever</h2>
+<p>15강의 인덱싱으로 retriever를 만듭니다. 두 정책 문서를 한 인덱스에 통합합니다.</p>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_chat, get_embeddings, DOCS
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import FAISS
+
+def build_retriever():
+    """정책 문서 2개를 통합 인덱싱한 retriever 반환."""
+    docs = []
+    for f in ["환불교환정책.pdf", "멤버십정책.pdf"]:
+        docs.extend(PyPDFLoader(str(DOCS / f)).load())   # 두 문서를 한 인덱스로
+    chunks = RecursiveCharacterTextSplitter(
+        chunk_size=500, chunk_overlap=50).split_documents(docs)
+    vs = FAISS.from_documents(chunks, get_embeddings())
+    # as_retriever: 벡터스토어를 'k개를 찾아 주는 검색 객체'로 변환
+    return vs.as_retriever(search_kwargs={"k": 4})
+</code></pre>
+<p><code>as_retriever</code>가 새 얼굴입니다. 벡터스토어를 <strong>"질문을 주면 청크 k개를 찾아 주는 검색 객체(retriever)"</strong> 로 바꿔 줍니다. <code>search_kwargs={"k": 4}</code>는 "상위 4개를 찾아라"는 뜻이죠.</p>
+<hr/>
+<h2 id="2-retriever">2. retriever란?</h2>
+<p><code>retriever</code>는 LCEL 체인에 끼우기 좋은 <strong>검색 전용 객체</strong>입니다.</p>
+<pre><code class="language-python">retriever = build_retriever()
+docs = retriever.invoke("환불 며칠 걸려?")   # 질문 → 관련 청크 4개
+</code></pre>
+<p>15강의 <code>vs.similarity_search(query, k=4)</code>와 같은 일을 하지만, <code>retriever.invoke(질문)</code> 형태라 <strong>LCEL 체인(<code>|</code>)에 바로 연결</strong>할 수 있습니다. 그래서 RAG 체인을 만들 땐 <code>as_retriever</code>로 retriever를 씁니다.</p>
+<hr/>
+<h2 id="3-format_docs">3. 프롬프트와 format_docs</h2>
+<p>03번의 환각 억제 프롬프트와 02번의 format_docs를 준비합니다.</p>
+<pre><code class="language-python">from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
+
+PROMPT = ChatPromptTemplate.from_template(
+    "너는 승승장구몰 CS 상담원이다.\n"
+    "아래 [문서] 내용만 근거로 한국어로 정확히 답하라.\n"
+    "문서에 없는 내용은 추측하지 말고 '제공된 문서에서 찾을 수 없습니다'라고 답하라.\n\n"
+    "[문서]\n{context}\n\n[질문] {question}\n\n[답변]"
+)
+
+def format_docs(docs):
+    """검색된 Document들의 본문을 한 덩어리 문자열(context)로 합친다."""
+    return "\n\n".join(d.page_content for d in docs)
+</code></pre>
+<hr/>
+<h2 id="4-lcel">4. LCEL 체인 조립</h2>
+<p>이제 모든 부품을 <code>|</code>로 잇습니다.</p>
+<pre><code class="language-python">llm = get_chat(temperature=0)   # temperature=0: 같은 질문에 일관된 답(재현성)
+
+rag_chain = (
+    {"context": retriever | format_docs, "question": RunnablePassthrough()}
+    | PROMPT
+    | llm
+    | StrOutputParser()
+)
+
+print(rag_chain.invoke("환불 며칠 걸려?"))
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">반품 상품이 물류센터에 도착한 후 영업일 기준 3일 이내에 환불됩니다.
+카드 취소는 카드사 사정에 따라 추가 시간이 소요될 수 있습니다.
+</code></pre>
+<p>02번에서 본 그 LCEL 체인입니다. 질문 하나가:</p>
+<ol>
+<li><code>retriever | format_docs</code> → 검색 후 context 문자열로</li>
+<li><code>RunnablePassthrough()</code> → 질문 그대로</li>
+<li><code>PROMPT</code> → 두 빈칸 채워 프롬프트 완성</li>
+<li><code>llm</code> → 답변 생성</li>
+<li><code>StrOutputParser()</code> → 문자열로</li>
+</ol>
+<p>이 흐름을 거쳐 깔끔한 답변이 나옵니다.</p>
+<hr/>
+<h2 id="5-temperature0">5. temperature=0인 이유</h2>
+<p><code>get_chat(temperature=0)</code>을 썼습니다. 왜일까요?</p>
+<p>RAG QA는 <strong>사실 기반 답변</strong>입니다. 같은 질문엔 항상 같은 답이 나와야 신뢰가 가죠. <code>temperature=0</code>은 무작위성을 꺼서 <strong>일관된(재현 가능한) 답변</strong>을 보장합니다(2강 복습). 창작이 아니라 정확한 정보 전달이 목적이니까요.</p>
+<pre><code class="language-text">홍보 문구 → temperature 0.7 (다양성)
+RAG QA   → temperature 0   (일관성·정확성)
+</code></pre>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li><code>as_retriever(search_kwargs={"k": 4})</code> — 벡터스토어를 검색 객체로 변환.</li>
+<li><code>retriever.invoke(질문)</code>은 LCEL 체인(<code>|</code>)에 바로 연결 가능.</li>
+<li>LCEL: <code>{context, question} | PROMPT | llm | StrOutputParser()</code>.</li>
+<li>RAG QA는 <strong>temperature=0</strong>(일관·정확).</li>
+<li>다음 절에서 출처까지 반환하도록 모듈화합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="04_출처를-함께-반환하기.html"><span class="lbl">← 이전 절</span>04. 출처를 함께 반환하기</a><a class="nxt" href="06_따라하기-답변과-출처-모듈화.html"><span class="lbl">다음 절 →</span>06. 따라하기 답변과 출처 모듈화</a></div>
+</div>
+</body></html>

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제10강 — 따라하기 — 자연어로 집계 질문</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제10강 · code execution agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제10강 · code execution agent — 세부 목차</b><a class="" href="01_LLM은-계산기가-아니다.html">01. LLM은 계산기가 아니다</a><a class="" href="02_코드-생성-실행-루프.html">02. 코드 생성 실행 루프</a><a class="" href="03_안전한-실행-네임스페이스-제한.html">03. 안전한 실행 네임스페이스 제한</a><a class="" href="04_따라하기-pandas-식-실행-도구.html">04. 따라하기 pandas 식 실행 도구</a><a class="cur" href="05_따라하기-자연어로-집계-질문.html">05. 따라하기 자연어로 집계 질문</a><a class="" href="06_코드-실행-실패시-재시도.html">06. 코드 실행 실패시 재시도</a><a class="" href="07_보안-주의사항과-실무-대안.html">07. 보안 주의사항과 실무 대안</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">따라하기 — 자연어로 집계 질문</h1>
+<h2 id="_2">목표</h2>
+<p><code>run_pandas</code> 도구를 에이전트에 붙여, "총 매출은?", "일평균은?" 같은 자연어 질문에 <strong>정확한 계산</strong>으로 답하게 합니다.</p>
+<hr/>
+<h2 id="1">1. 에이전트 구성 — "계산은 반드시 도구로"</h2>
+<p><code>create_agent</code>에 <code>run_pandas</code>를 연결합니다. 시스템 프롬프트가 중요합니다.</p>
+<pre><code class="language-python">agent = create_agent(
+    llm,
+    tools=[run_pandas],
+    system_prompt="너는 승승장구몰의 데이터 분석가다. 계산은 반드시 run_pandas 도구로 하고, "
+                  "결과 숫자는 천단위 콤마를 붙여 한국어로 설명하라.",
+)
+</code></pre>
+<p>시스템 프롬프트에 <strong>"계산은 반드시 run_pandas 도구로"</strong> 라고 못 박은 게 핵심입니다. 이게 없으면 LLM이 도구를 안 쓰고 <strong>암산으로 때우려</strong> 할 수 있습니다(그래서 틀리죠). "직접 계산하지 말고 도구를 써라"라고 강제하는 겁니다.</p>
+<hr/>
+<h2 id="2">2. 자연어 질문 던지기</h2>
+<pre><code class="language-python">questions = [
+    "전체 기간 총 매출은 얼마야?",
+    "일평균 매출은?",
+    "매출이 가장 높았던 날짜와 그날의 매출을 알려줘.",
+]
+
+for q in questions:
+    print("Q:", q)
+    result = agent.invoke({"messages": [{"role": "user", "content": q}]})
+    print("A:", result["messages"][-1].content)
+    print()
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">Q: 전체 기간 총 매출은 얼마야?
+A: 전체 기간 총 매출은 324,286,050원입니다.
+
+Q: 일평균 매출은?
+A: 일평균 매출은 약 414,158원입니다.
+
+Q: 매출이 가장 높았던 날짜와 그날의 매출을 알려줘.
+A: 매출이 가장 높았던 날은 2024-04-24입니다.
+</code></pre>
+<p>각 질문마다 LLM이 적절한 pandas 식을 만들고, <code>run_pandas</code>가 실행해 <strong>정확한 숫자</strong>를 얻고, 그걸 한국어로 설명했습니다.</p>
+<hr/>
+<h2 id="3">3. 안에서 무슨 일이 일어났나</h2>
+<p><code>"전체 기간 총 매출은?"</code> 질문을 예로 들면:</p>
+<pre><code class="language-text">1. LLM 생각: "총 매출 = sum. df['sales'].sum()을 실행하자"
+2. run_pandas("df['sales'].sum()") 실행 → 324286050
+3. LLM 해석: "324286050에 콤마를 붙여... 총 매출은 324,286,050원입니다"
+</code></pre>
+<p><strong>핵심</strong>: LLM은 <code>324286050</code>을 직접 계산하지 않았습니다. <code>df['sales'].sum()</code>이라는 <strong>코드를 만들었을 뿐</strong>이고, 정확한 합계는 pandas가 냈습니다. 만약 LLM이 직접 600개를 더했다면 틀렸을 겁니다(01번).</p>
+<hr/>
+<h2 id="4">4. 천단위 콤마는 누가 넣는가</h2>
+<p>재미있는 점: <code>324286050</code>을 <code>324,286,050</code>으로 <strong>콤마를 붙이는 건 LLM</strong>이 합니다. 시스템 프롬프트에 "천단위 콤마를 붙여"라고 했으니까요.</p>
+<pre><code class="language-text">계산(정확성 필요)   → pandas (324286050)
+서술·포맷(자연스러움) → LLM (324,286,050원입니다)
+</code></pre>
+<p>이게 역할 분담의 묘미입니다. <strong>정확해야 하는 계산은 코드</strong>가, <strong>읽기 좋게 만드는 서술은 LLM</strong>이. 이 원칙은 24강(비즈니스 리포트)에서 본격적으로 다룹니다 — "계산은 코드, 서술은 LLM".</p>
+<hr/>
+<h2 id="5">5. 더 복잡한 질문도</h2>
+<p>이 방식의 강력함은 <strong>어떤 집계든</strong> 가능하다는 것입니다. LLM이 코드만 바꾸면 되니까요.</p>
+<pre><code class="language-python">agent.invoke({"messages": [{"role": "user", "content": "2024년 11월 매출 합계는?"}]})
+# → LLM이 만드는 식: df[df['date'].str.startswith('2024-11')]['sales'].sum()
+# → 특정 월만 필터링해서 합계!
+
+agent.invoke({"messages": [{"role": "user", "content": "매출 상위 3일은?"}]})
+# → LLM이 만드는 식: df.nlargest(3, 'sales')[['date', 'sales']]
+</code></pre>
+<p>필터링, 정렬, 그룹화 — pandas로 할 수 있는 건 다 됩니다. 우리가 함수를 일일이 안 만들어도, LLM이 그때그때 코드를 짜니까요. 이게 "고정 도구"(5강)와 "코드 실행 도구"(10강)의 차이입니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>시스템 프롬프트로 <strong>"계산은 반드시 도구로"</strong> 못 박아 암산을 막는다.</li>
+<li>각 질문마다 LLM이 <strong>pandas 식 생성 → 실행 → 한국어 해석</strong>.</li>
+<li><strong>계산은 코드(정확), 서술·포맷은 LLM(자연스러움)</strong> — 역할 분담.</li>
+<li>코드만 바꾸면 <strong>어떤 집계든</strong> 가능(필터·정렬·그룹화).</li>
+<li>다음 절에서 LLM이 만든 코드가 <strong>틀렸을 때 재시도</strong>하는 법을 배웁니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="04_따라하기-pandas-식-실행-도구.html"><span class="lbl">← 이전 절</span>04. 따라하기 pandas 식 실행 도구</a><a class="nxt" href="06_코드-실행-실패시-재시도.html"><span class="lbl">다음 절 →</span>06. 코드 실행 실패시 재시도</a></div>
+</div>
+</body></html>

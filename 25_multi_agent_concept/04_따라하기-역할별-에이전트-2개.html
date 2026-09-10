@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제25강 — 따라하기 — 역할별 에이전트 2개</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제25강 · multi agent concept</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제25강 · multi agent concept — 세부 목차</b><a class="" href="01_만능-한명-vs-전문가-팀.html">01. 만능 한명 vs 전문가 팀</a><a class="" href="02_단일-에이전트의-한계.html">02. 단일 에이전트의 한계</a><a class="" href="03_Supervisor-vs-Handoff.html">03. Supervisor vs Handoff</a><a class="cur" href="04_따라하기-역할별-에이전트-2개.html">04. 따라하기 역할별 에이전트 2개</a><a class="" href="05_따라하기-Supervisor-라우터.html">05. 따라하기 Supervisor 라우터</a><a class="" href="06_규칙라우터-vs-LLM라우터-비교.html">06. 규칙라우터 vs LLM라우터 비교</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="2">따라하기 — 역할별 에이전트 2개</h1>
+<h2 id="_1">목표</h2>
+<p>추천 전문(sales)과 정책 전문(policy), <strong>서로 다른 프롬프트·도구를 가진 두 에이전트</strong>를 만듭니다. 각자 자기 책임의 도구만 보게 해 도구 선택 정확도를 높입니다.</p>
+<hr/>
+<h2 id="0">0. 실습 준비</h2>
+<pre><code class="language-bash">conda activate agentic
+pip install -U langgraph langchain langchain-google-genai pandas
+python code/common.py            # GOOGLE_API_KEY: True 확인
+</code></pre>
+<ul>
+<li><code>langgraph</code>·<code>langchain</code>: <code>create_agent</code> 사용(7강에서 설치).</li>
+<li><code>pandas</code>: CSV 도구(11강).</li>
+<li>데이터: <code>data/products.csv</code>(상품), <code>data/faq.csv</code>(정책 FAQ).</li>
+</ul>
+<hr/>
+<h2 id="1">1. 공통 시작부와 데이터 로드</h2>
+<p><code>code/ch25_multi_agent.py</code>를 만듭니다.</p>
+<pre><code class="language-python"># -*- coding: utf-8 -*-
+# 실행: python code/ch25_multi_agent.py
+import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))  # code/ 를 import 경로에
+from common import get_chat, DATA
+
+import pandas as pd
+from langchain_core.tools import tool         # 함수를 LLM이 쓸 수 있는 '도구'로 등록
+from langchain.agents import create_agent
+
+# [왜 멀티에이전트] 한 에이전트에 도구가 너무 많아지면 LLM이 '어느 도구를 언제 쓸지'
+#   헷갈린다. 그래서 역할(추천/정책)별로 에이전트를 쪼개고(역할 분리), 질문이 들어오면
+#   supervisor 가 알맞은 에이전트로 보낸다(라우팅). = '역할 분리 + 라우팅' 패턴.
+
+products = pd.read_csv(DATA / "products.csv")   # product_id,product_name,category,price,cost,stock,rating
+faq = pd.read_csv(DATA / "faq.csv")             # question,answer
+</code></pre>
+<hr/>
+<h2 id="2_1">2. 역할별 도구 — 책임에 맞는 도구만</h2>
+<p>각 에이전트가 쓸 도구를 <code>@tool</code>로 정의합니다(6강). <strong>추천용</strong>과 <strong>정책용</strong>을 따로 만듭니다.</p>
+<pre><code class="language-python">@tool
+def search_products(category: str) -&gt; str:
+    """카테고리명을 받아 승승장구몰에서 평점 높은 상품 3개를 추천한다.
+
+    @tool 데코레이터: 이 docstring 이 LLM에게 '도구 설명서'로 전달된다.
+    LLM은 설명을 읽고 이 도구를 언제 호출할지 스스로 판단한다.
+    """
+    hit = products[products["category"].str.contains(category, na=False)]
+    if hit.empty:
+        return f"'{category}' 카테고리 상품을 찾지 못했습니다."
+    top = hit.sort_values("rating", ascending=False).head(3)
+    return "\n".join(
+        f"- {r.product_name} ({r.price:,}원, 평점 {r.rating})"
+        for r in top.itertuples()
+    )
+
+
+@tool
+def search_faq(keyword: str) -&gt; str:
+    """키워드로 승승장구몰 FAQ에서 가장 관련 있는 답변을 찾는다."""
+    hit = faq[faq["question"].str.contains(keyword, na=False)]
+    if hit.empty:                       # 질문에 없으면 답변 본문에서도 검색
+        hit = faq[faq["answer"].str.contains(keyword, na=False)]
+    if hit.empty:
+        return "관련 FAQ를 찾지 못했습니다."
+    return "\n".join(f"Q. {r.question}\nA. {r.answer}" for r in hit.head(2).itertuples())
+</code></pre>
+<p><strong>도구 설계 포인트</strong></p>
+<ul>
+<li><code>search_products</code>: 카테고리로 상품 검색, 평점순 3개. <strong>추천 에이전트 전용.</strong></li>
+<li><code>search_faq</code>: 키워드로 FAQ 검색, 질문→답변 본문 순으로 fallback. <strong>정책 에이전트 전용.</strong></li>
+<li>docstring이 <strong>LLM에게 전달되는 도구 설명서</strong>입니다(6강). 명확하게 써야 LLM이 제대로 호출하죠.</li>
+</ul>
+<hr/>
+<h2 id="3-2">3. 역할별 에이전트 2개 생성</h2>
+<p>핵심입니다. 두 에이전트를 <strong>다른 프롬프트 + 다른 도구</strong>로 만듭니다.</p>
+<pre><code class="language-python">def build_agents():
+    """역할별 에이전트 2개(추천/정책)를 생성해 반환한다(프롬프트·도구 분리).
+
+    [왜 도구 분리] 추천 에이전트엔 search_products 만, 정책 에이전트엔 search_faq 만
+    준다. 각 에이전트가 자기 책임의 도구만 보면 헷갈릴 일이 줄어 정확해진다.
+    """
+    llm = get_chat(temperature=0)   # [왜 0] 도구 선택·분류는 정해진 답이라 무작위성 제거
+
+    sales_agent = create_agent(     # 추천 전문 에이전트
+        llm,
+        tools=[search_products],                              # 추천 도구만!
+        system_prompt="너는 승승장구몰의 '상품 추천' 전문 상담원이다. "
+               "상품 추천 외 질문은 답하지 말고 '정책 담당에게 문의하라'고 안내하라.",
+    )
+    policy_agent = create_agent(    # 정책/FAQ 전문 에이전트
+        llm,
+        tools=[search_faq],                                   # 정책 도구만!
+        system_prompt="너는 승승장구몰의 '정책/FAQ 안내' 전문 상담원이다. "
+               "환불·배송·교환·적립 등 정책만 답하고, 반드시 FAQ 근거로만 답하라.",
+    )
+    return llm, sales_agent, policy_agent
+</code></pre>
+<hr/>
+<h2 id="4">4. 무엇이 분리됐나</h2>
+<p>두 에이전트의 차이를 표로 보면:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>sales_agent</th>
+<th>policy_agent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>도구</td>
+<td><code>search_products</code>만</td>
+<td><code>search_faq</code>만</td>
+</tr>
+<tr>
+<td>프롬프트</td>
+<td>"상품 추천 전문"</td>
+<td>"정책/FAQ 전문"</td>
+</tr>
+<tr>
+<td>책임</td>
+<td>상품 추천</td>
+<td>환불·배송·교환·적립</td>
+</tr>
+<tr>
+<td>범위 밖 질문</td>
+<td>"정책 담당에 문의" 안내</td>
+<td>정책만 답</td>
+</tr>
+</tbody>
+</table>
+<p><strong>프롬프트도 다르고 도구도 다릅니다.</strong> 이게 역할 분리의 핵심이죠. 각 에이전트가:</p>
+<pre><code class="language-text">- 짧은 프롬프트로 자기 역할에 집중
+- 도구가 1개뿐이라 도구 선택 혼동 없음
+- 범위 밖 질문은 "다른 담당에 문의"로 선 긋기
+</code></pre>
+<p>특히 sales_agent의 <strong>"추천 외 질문은 정책 담당에 문의하라"</strong> 가 중요합니다. 자기 책임을 명확히 알고, 아니면 떠넘기지 않고 안내하죠.</p>
+<hr/>
+<h2 id="5">5. 에이전트 단독 테스트</h2>
+<p>Supervisor를 붙이기 전에, 각 에이전트가 잘 동작하는지 따로 확인합니다.</p>
+<pre><code class="language-python">if __name__ == "__main__":
+    llm, sales_agent, policy_agent = build_agents()
+
+    # 추천 에이전트 단독 테스트
+    r = sales_agent.invoke({"messages": [{"role": "user", "content": "전자기기 추천해줘"}]})
+    print("[추천 에이전트]", r["messages"][-1].content[:120])
+
+    # 정책 에이전트 단독 테스트
+    r = policy_agent.invoke({"messages": [{"role": "user", "content": "환불 며칠 이내?"}]})
+    print("[정책 에이전트]", r["messages"][-1].content[:120])
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[추천 에이전트] 전자기기 카테고리 추천 상품입니다.
+- 승승 스마트워치 Fit 5 (159,000원, 평점 4.8)
+- ...
+[정책 에이전트] 교환/환불은 상품 수령 후 7일 이내 신청 가능합니다. ...
+</code></pre>
+<p>각 에이전트가 <strong>자기 도구를 써서 자기 영역의 답</strong>을 합니다. 02번에서 말한 "에이전트별 단위 테스트"가 바로 이거죠. 이렇게 따로 검증한 뒤, 05번에서 Supervisor로 묶습니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li><code>@tool</code>로 <strong>추천용(search_products)·정책용(search_faq)</strong> 도구를 따로 정의.</li>
+<li><code>create_agent</code>로 <strong>프롬프트·도구가 다른 두 에이전트</strong> 생성.</li>
+<li>sales_agent엔 추천 도구만, policy_agent엔 정책 도구만 → <strong>도구 선택 정확</strong>.</li>
+<li>각 프롬프트에 <strong>역할·범위 밖 처리</strong>("다른 담당에 문의")를 명시.</li>
+<li><code>temperature=0</code> — 도구 선택은 정해진 답이라 무작위성 제거.</li>
+<li>Supervisor 전에 <strong>에이전트별 단독 테스트</strong>로 검증.</li>
+<li>다음 절에서 두 에이전트를 잇는 Supervisor 라우터를 만듭니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="03_Supervisor-vs-Handoff.html"><span class="lbl">← 이전 절</span>03. Supervisor vs Handoff</a><a class="nxt" href="05_따라하기-Supervisor-라우터.html"><span class="lbl">다음 절 →</span>05. 따라하기 Supervisor 라우터</a></div>
+</div>
+</body></html>

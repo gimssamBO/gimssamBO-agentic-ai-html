@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제8강 — 따라하기 — 실행 에이전트 구성 (create_agent)</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제8강 · planning agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제8강 · planning agent — 세부 목차</b><a class="" href="01_목표를-단계로-쪼개기.html">01. 목표를 단계로 쪼개기</a><a class="" href="02_Plan-and-Execute란.html">02. Plan and Execute란</a><a class="" href="03_ReAct-vs-Plan-and-Execute.html">03. ReAct vs Plan and Execute</a><a class="" href="04_구조화-출력-Pydantic-스키마.html">04. 구조화 출력 Pydantic 스키마</a><a class="" href="05_따라하기-목표를-하위작업으로-분해.html">05. 따라하기 목표를 하위작업으로 분해</a><a class="cur" href="06_따라하기-실행-에이전트-구성.html">06. 따라하기 실행 에이전트 구성</a><a class="" href="07_계획이-잘못됐을때-대응.html">07. 계획이 잘못됐을때 대응</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="create_agent">따라하기 — 실행 에이전트 구성 (create_agent)</h1>
+<h2 id="_1">목표</h2>
+<p>LangChain의 <code>create_agent</code>로 <strong>실행 에이전트(Executor)</strong> 를 만듭니다. 7강에서 <code>while</code> 루프로 30줄 짜던 ReAct 에이전트를, 이제 <strong>한 줄</strong>로 만듭니다. 실제 파일은 <code>code/ch08_planning.py</code> 입니다.</p>
+<hr/>
+<h2 id="1-tool-langchain">1. @tool — LangChain 방식 도구 만들기</h2>
+<p>5강에서는 raw SDK에 평범한 함수를 넘겼습니다. LangChain은 <code>@tool</code> 데코레이터로 함수를 도구로 등록합니다.</p>
+<pre><code class="language-python">import pandas as pd
+from langchain_core.tools import tool
+from common import DATA
+
+tasks_df = pd.read_csv(DATA / "project_tasks.csv")
+
+@tool
+def list_tasks(status: str = "전체") -&gt; str:
+    """신상품 출시 프로젝트의 작업 목록을 상태별로 조회한다.
+    status 에 '완료'/'진행중'/'대기' 를 넣으면 해당 상태만, '전체'면 모든 작업을 반환한다.
+    각 작업의 담당팀(team)과 마감일(due_date)도 함께 돌려준다."""
+    df = tasks_df
+    if status != "전체":
+        df = df[df["status"] == status]
+    if df.empty:
+        return f"'{status}' 상태인 작업이 없습니다."
+    lines = [
+        f"- [{r.status}] {r.task_id} {r.task_name} (담당:{r.team}, 마감:{r.due_date})"
+        for r in df.itertuples()
+    ]
+    return "\n".join(lines)
+</code></pre>
+<p><code>@tool</code>만 붙이면 끝입니다. <strong>독스트링이 곧 도구 설명</strong>이라는 원칙은 6강과 똑같습니다 — 모델은 이 독스트링을 읽고 언제·어떻게 부를지 정합니다.</p>
+<blockquote>
+<p><code>@tool</code>은 함수를 LangChain이 이해하는 "도구 객체"로 감싸 줍니다. 5강에서 raw SDK에 함수를 직접 넘긴 것과 본질은 같지만, LangChain 에이전트에 연결하려면 이 데코레이터가 필요합니다.</p>
+</blockquote>
+<hr/>
+<h2 id="2-create_agent">2. create_agent — 에이전트를 한 줄로</h2>
+<p>7강에서 <code>while</code> 루프로 직접 만든 ReAct 에이전트를, LangChain은 <code>create_agent</code> 한 줄로 만듭니다.</p>
+<pre><code class="language-python">from langchain.agents import create_agent
+
+planning_agent = create_agent(
+    llm,                          # 사용할 모델
+    tools=[list_tasks],           # 도구 목록
+    system_prompt="너는 승승장구몰의 프로젝트 매니저다. list_tasks 도구로 진행상황을 확인하고 한국어로 답하라.",
+)
+</code></pre>
+<p>이 한 줄 안에 7강에서 손으로 짠 모든 게 들어 있습니다 — 도구 등록, 모델 호출, function_calls 확인, 도구 실행, 결과 되돌리기, 반복, 종료 조건. <strong>LangChain이 그 ReAct 루프를 대신 돌려 줍니다.</strong></p>
+<blockquote>
+<p>7강에서 고생한 게 여기서 빛납니다. <code>create_agent</code>가 마법이 아니라 "내가 7강에서 손으로 하던 일의 자동화"라는 걸 알기 때문입니다. 안에서 무슨 일이 일어나는지 훤히 보이죠.</p>
+</blockquote>
+<hr/>
+<h2 id="3-invoke">3. invoke — 에이전트 실행하기</h2>
+<p>LangChain 에이전트는 <code>invoke</code>에 <strong>messages 리스트</strong>를 넘겨 호출합니다(2강에서 본 OpenAI messages 형식과 같죠).</p>
+<pre><code class="language-python">q = "신상품 출시 프로젝트 진행상황을 정리하고, 지금 가장 먼저 시작해야 할 대기 작업을 하나 추천해줘."
+
+result = planning_agent.invoke({"messages": [{"role": "user", "content": q}]})
+
+# 결과의 마지막 메시지가 최종 답변
+print(result["messages"][-1].content)
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">현재 '신상품 가을 패딩 출시'와 '상세페이지 디자인'은 완료, '초기 재고 1000개 발주'와
+'인플루언서 협업 섭외'는 진행 중입니다. 대기 작업 중 마감이 가장 빠른
+'앱 메인 배너 등록(T05, 마감 5/3)'을 가장 먼저 시작하길 추천합니다.
+</code></pre>
+<p>에이전트가 스스로:</p>
+<ol>
+<li><code>list_tasks</code> 도구를 호출해 진행상황을 조회하고,</li>
+<li>완료/진행중/대기를 정리하고,</li>
+<li>다음 할 일을 추천했습니다.</li>
+</ol>
+<p>우리는 <code>while</code> 루프를 한 줄도 안 짰는데 말이죠. LangChain이 7강의 그 루프를 내부에서 돌려 준 겁니다.</p>
+<hr/>
+<h2 id="4-invoke">4. invoke 입력·출력 형식 정리</h2>
+<p>LangChain 에이전트의 입출력 형식을 정리해 둡시다(앞으로 계속 씁니다).</p>
+<pre><code class="language-python"># 입력: messages 리스트를 담은 dict
+result = agent.invoke({"messages": [{"role": "user", "content": "질문"}]})
+
+# 출력: result["messages"] 리스트, 마지막이 최종 답변
+answer = result["messages"][-1].content
+</code></pre>
+<p>이 형식은 8강 이후 모든 LangChain 에이전트에서 동일합니다. 기억해 두세요.</p>
+<hr/>
+<h2 id="5-planner-executor-plan-and-execute">5. Planner + Executor = Plan-and-Execute</h2>
+<p>이제 두 부분이 다 모였습니다.</p>
+<ul>
+<li><strong>Planner</strong>(05번): <code>make_plan</code> — 목표를 단계로 분해</li>
+<li><strong>Executor</strong>(06번): <code>planning_agent</code> — 진행상황 보며 다음 행동</li>
+</ul>
+<p>실무에서는 Planner가 만든 각 단계를 Executor가 하나씩 처리하도록 연결합니다. 이 강에서는 두 부분을 따로 체험했지만, 둘을 묶으면 "계획 세우고 → 실행하는" 완전한 Planning Agent가 됩니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li><code>@tool</code> 데코레이터로 함수를 LangChain 도구로 등록한다(독스트링이 곧 설명).</li>
+<li><code>create_agent(llm, tools=[...], system_prompt=...)</code> <strong>한 줄</strong>로 ReAct 에이전트 완성.</li>
+<li>7강의 <code>while</code> 루프를 LangChain이 <strong>내부에서 대신</strong> 돌려 준다.</li>
+<li>입력은 <code>{"messages": [...]}</code>, 출력은 <code>result["messages"][-1].content</code>.</li>
+<li>다음 절에서 <strong>계획이 잘못됐을 때 다시 짜는</strong> 법을 배웁니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="05_따라하기-목표를-하위작업으로-분해.html"><span class="lbl">← 이전 절</span>05. 따라하기 목표를 하위작업으로 분해</a><a class="nxt" href="07_계획이-잘못됐을때-대응.html"><span class="lbl">다음 절 →</span>07. 계획이 잘못됐을때 대응</a></div>
+</div>
+</body></html>

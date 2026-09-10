@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제26강 — 무엇을 할지와 어떻게 할지 나누기</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제26강 · role based agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제26강 · role based agent — 세부 목차</b><a class="cur" href="01_무엇을-할지와-어떻게-할지-나누기.html">01. 무엇을 할지와 어떻게 할지 나누기</a><a class="" href="02_Planner-Worker-협업구조.html">02. Planner Worker 협업구조</a><a class="" href="03_Supervisor-vs-Planner-Worker.html">03. Supervisor vs Planner Worker</a><a class="" href="04_따라하기-Planner-작업-분해.html">04. 따라하기 Planner 작업 분해</a><a class="" href="05_따라하기-Worker-작업-실행.html">05. 따라하기 Worker 작업 실행</a><a class="" href="06_따라하기-오케스트레이터-취합.html">06. 따라하기 오케스트레이터 취합</a><a class="" href="07_Worker-실패-처리와-재시도.html">07. Worker 실패 처리와 재시도</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">무엇을 할지와 어떻게 할지 나누기</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>25강의 Supervisor는 질문을 <strong>한 명에게 위임</strong>했습니다. 하지만 현실 업무는 보통 <strong>여러 단계로 쪼개야</strong> 합니다. <strong>Planner(설계자)</strong> 가 "무엇을 할지"를 정해 할 일 목록을 만들고, <strong>Worker(실행자)</strong> 가 각 항목을 "어떻게 할지" 처리합니다. 백엔드의 "작업 큐 + 워커" 패턴과 같은 구조죠.</p>
+<hr/>
+<h2 id="1">1. 한 번에 다 시키면 어설퍼진다</h2>
+<p>마케팅 캠페인 하나를 준비한다고 합시다. 필요한 일은:</p>
+<pre><code class="language-text">1. 타깃 고객 분석
+2. 광고 카피 작성
+3. 채널/예산 배분 제안
+4. 셋을 합쳐 실행안으로 정리
+</code></pre>
+<p>이걸 한 번의 LLM 호출에 <strong>"캠페인 다 준비해줘"</strong> 라고 던지면?</p>
+<pre><code class="language-text">- 일부를 빠뜨림 (카피만 쓰고 예산 배분은 깜빡)
+- 각 부분의 품질이 들쭉날쭉 (한 번에 다 하려니 어설픔)
+- "왜 이렇게 했는지" 단계가 안 보임 (한 덩어리 출력)
+</code></pre>
+<p>백엔드로 치면 <strong>거대한 트랜잭션을 함수 하나에 다 욱여넣은 셈</strong>입니다. 한 번에 다 하려다 다 어설퍼지죠.</p>
+<hr/>
+<h2 id="2">2. "무엇을"과 "어떻게"를 나누기</h2>
+<p>해결책은 일을 <strong>두 역할로 나누는</strong> 것입니다.</p>
+<pre><code class="language-text">[Planner — 무엇을 할지]
+   캠페인 브리프를 보고 → "타깃 분석 / 카피 작성 / 예산 배분" 할 일 목록 생성
+   (실행은 안 함, 계획만)
+
+[Worker — 어떻게 할지]
+   할 일 하나씩 받아 → 각각 구체적으로 실행
+   (계획은 안 함, 실행만)
+</code></pre>
+<p><strong>캠페인 1건</strong> 이 세 단계를 거칩니다.</p>
+<ol>
+<li><strong>[Planner]</strong> "어떤 하위 작업이 필요한가?" → [타깃분석, 카피작성, 예산배분]</li>
+<li><strong>[Worker]</strong> (각 작업을 하나씩) 작업1 실행 → 작업2 실행 → 작업3 실행</li>
+<li><strong>[취합]</strong> 세 산출물을 모아 최종 실행안</li>
+</ol>
+<p>각자 <strong>자기 일에만 집중</strong>하니 품질이 올라갑니다. Planner는 빠짐없이 쪼개는 데, Worker는 한 작업을 깊이 하는 데 몰두하죠.</p>
+<hr/>
+<h2 id="3">3. 왜 나누면 좋은가</h2>
+<pre><code class="language-text">[한 LLM이 다 하기]              [Planner / Worker 분리]
+"계획도 세우고 실행도 해"    →   Planner는 계획만, Worker는 실행만
+- 둘 다 어설픔                   - 각자 잘하는 일에 몰두 → 품질 ↑
+- 빠뜨리기 쉬움                  - Planner가 빠짐없이 쪼갬
+- 단계 안 보임                  - 작업 단위로 추적·재시도 가능
+</code></pre>
+<p>이건 25강 <strong>역할 분리</strong>의 연장선입니다. 25강은 "추천 vs 정책"처럼 <strong>수평</strong>으로 나눴다면, 26강은 "계획 → 실행"처럼 <strong>수직(계층)</strong> 으로 나눕니다. 둘 다 "한 명에게 다 시키지 말고 역할을 나눠라"는 같은 정신이죠.</p>
+<hr/>
+<h2 id="4">4. 백엔드의 "작업 큐 + 워커" 패턴</h2>
+<p>이 구조는 백엔드 개발자에게 익숙합니다.</p>
+<pre><code class="language-text">[작업 큐 + 워커 패턴]
+   생산자(Planner): 할 일을 큐에 넣음 → [작업1, 작업2, 작업3]
+   소비자(Worker):  큐에서 하나씩 꺼내 처리
+   취합:           처리 결과를 모음
+</code></pre>
+<pre><code class="language-text">- 작업이 독립적 → 병렬 처리 가능 (Worker 여러 개)
+- 한 작업 실패 → 그 작업만 재시도 (07번)
+- 작업 추가 쉬움 → 큐에 넣기만
+</code></pre>
+<p>에이전트의 Planner/Worker가 정확히 이 패턴입니다. Planner가 작업을 만들고, Worker가 꺼내 처리하죠. 익숙한 백엔드 패턴을 LLM에 적용한 겁니다.</p>
+<hr/>
+<h2 id="5">5. 우리가 만들 것 — 캠페인 기획 자동화</h2>
+<p>이번 강에서는 <code>marketing_brief.csv</code>의 캠페인 1건으로 <strong>기획 자동화 파이프라인</strong>을 만듭니다.</p>
+<p><code>marketing_brief.csv</code>(campaign_id, title, category, target, budget, key_offer)에서 캠페인 1건(예: CMP02 신학기 전자기기 프로모션)을 선택해 처리합니다.</p>
+<ol>
+<li><strong>[Planner]</strong> 하위 작업 3~4개로 분해 (구조화 출력 JSON)</li>
+<li><strong>[Worker]</strong> 각 작업을 하나씩 실행 (타깃 분석·카피·예산)</li>
+<li><strong>[취합]</strong> 마크다운 캠페인 실행안</li>
+</ol>
+<p>그리고 신규 항목으로 <strong>Worker 실패 처리·재시도</strong>(07번)를 더해, 한 작업이 실패해도 나머지는 살리는 견고한 파이프라인을 만듭니다.</p>
+<hr/>
+<h2 id="6">6. 이번 강에서 배울 것</h2>
+<pre><code class="language-text">1. Planner/Worker 협업 구조 (02번)
+2. Supervisor vs Planner/Worker 비교 (03번)
+3. Planner — 작업을 JSON으로 분해 (04번)
+4. Worker — 한 작업씩 실행 (05번)
+5. 오케스트레이터 — 계획→실행→취합 (06번)
+6. [신규] Worker 실패 처리와 재시도 (07번)
+</code></pre>
+<p>25강에서 "역할을 수평으로 나누기"를 배웠다면, 26강에서는 "계획과 실행을 수직으로 나누기"를 배웁니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>복잡한 업무를 한 번에 다 시키면 <strong>빠뜨리고 품질이 어설퍼짐</strong>.</li>
+<li><strong>Planner</strong>("무엇을")가 할 일 목록을 만들고, <strong>Worker</strong>("어떻게")가 각각 실행.</li>
+<li>각자 <strong>자기 일에 집중</strong>해 품질 ↑, 단계별 <strong>추적·재시도</strong> 가능.</li>
+<li>25강 수평 분리(역할별) → 26강 <strong>수직 분리</strong>(계획→실행).</li>
+<li>백엔드의 <strong>"작업 큐 + 워커"</strong> 패턴과 동일(독립·병렬·재시도).</li>
+<li>다음 절에서 Planner/Worker 구조를 자세히 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><span class="prv off"><span class="lbl"> </span> </span><a class="nxt" href="02_Planner-Worker-협업구조.html"><span class="lbl">다음 절 →</span>02. Planner Worker 협업구조</a></div>
+</div>
+</body></html>

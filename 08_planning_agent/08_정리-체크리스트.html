@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제8강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제8강 · planning agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제8강 · planning agent — 세부 목차</b><a class="" href="01_목표를-단계로-쪼개기.html">01. 목표를 단계로 쪼개기</a><a class="" href="02_Plan-and-Execute란.html">02. Plan and Execute란</a><a class="" href="03_ReAct-vs-Plan-and-Execute.html">03. ReAct vs Plan and Execute</a><a class="" href="04_구조화-출력-Pydantic-스키마.html">04. 구조화 출력 Pydantic 스키마</a><a class="" href="05_따라하기-목표를-하위작업으로-분해.html">05. 따라하기 목표를 하위작업으로 분해</a><a class="" href="06_따라하기-실행-에이전트-구성.html">06. 따라하기 실행 에이전트 구성</a><a class="" href="07_계획이-잘못됐을때-대응.html">07. 계획이 잘못됐을때 대응</a><a class="cur" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="8">8강에서 배운 것</h2>
+<p>8강에서는 큰 목표를 다루는 <strong>Planning Agent</strong>와, 현업 프레임워크 <strong>LangChain</strong>을 처음 도입했습니다.</p>
+<ul>
+<li><strong>Plan-and-Execute</strong>: 큰 목표는 ① 계획 세우고 → ② 실행. ReAct(즉흥형)와 대비.</li>
+<li><strong>구조화 출력</strong>: Pydantic 클래스 + <code>with_structured_output</code>으로 답을 객체로 받기(3강 JSON의 발전형).</li>
+<li><strong>create_agent</strong>: 7강의 <code>while</code> 루프를 LangChain이 한 줄로 대신해 줌.</li>
+<li><strong>계획 검증·재계획</strong>: 계획도 틀릴 수 있어 검증하고, 실패하면 피드백 주고 다시 짠다.</li>
+</ul>
+<hr/>
+<h2 id="_2">한눈에 보는 핵심 코드</h2>
+<pre><code class="language-python">from pydantic import BaseModel, Field
+from langchain_core.tools import tool
+from langchain.agents import create_agent
+from common import get_chat, DATA
+
+llm = get_chat(provider="gemini")
+
+# (1) Planner — 구조화 출력으로 목표 분해
+class Plan(BaseModel):
+    goal: str = Field(description="원래 목표")
+    steps: list[str] = Field(description="순서대로 실행할 하위 작업(4~7개)")
+
+plan = llm.with_structured_output(Plan).invoke("가을 패딩 출시를 분해하라")
+print(plan.steps)                          # ['시장조사', '콘셉트확정', ...]
+
+# (2) Executor — create_agent로 ReAct 에이전트 한 줄
+@tool
+def list_tasks(status: str = "전체") -&gt; str:
+    """프로젝트 작업을 상태별로 조회한다."""
+    ...
+
+agent = create_agent(llm, tools=[list_tasks], system_prompt="너는 PM이다 ...")
+result = agent.invoke({"messages": [{"role": "user", "content": "다음 할 일 추천"}]})
+print(result["messages"][-1].content)
+</code></pre>
+<hr/>
+<h2 id="_3">이 강에서 설치한 라이브러리</h2>
+<pre><code class="language-bash">pip install langchain langchain-google-genai langgraph pydantic
+</code></pre>
+<p>8강부터 LangChain 세계로 들어왔습니다. 이후 강의는 대부분 이 라이브러리들을 씁니다.</p>
+<hr/>
+<h2 id="raw-sdk-langchain">raw SDK → LangChain 대응표</h2>
+<p>7강까지의 raw SDK와 8강부터의 LangChain을 비교하면 이해가 쉽습니다.</p>
+<table>
+<thead>
+<tr>
+<th>하는 일</th>
+<th>raw SDK (1~7강)</th>
+<th>LangChain (8강~)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>모델 가져오기</td>
+<td><code>get_genai_client()</code></td>
+<td><code>get_chat(provider="gemini")</code></td>
+</tr>
+<tr>
+<td>도구 만들기</td>
+<td>평범한 함수</td>
+<td><code>@tool</code> 데코레이터</td>
+</tr>
+<tr>
+<td>에이전트</td>
+<td><code>while</code> 루프 직접</td>
+<td><code>create_agent(...)</code> 한 줄</td>
+</tr>
+<tr>
+<td>구조화 출력</td>
+<td><code>response_mime_type</code> + <code>json.loads</code></td>
+<td><code>with_structured_output(Pydantic)</code></td>
+</tr>
+<tr>
+<td>호출</td>
+<td><code>generate_content(...)</code></td>
+<td><code>agent.invoke({"messages": [...]})</code></td>
+</tr>
+</tbody>
+</table>
+<p>원리는 같고, <strong>표현만 더 간결</strong>해졌습니다.</p>
+<hr/>
+<h2 id="_4">체크리스트</h2>
+<ul>
+<li>[ ] Plan-and-Execute가 ReAct와 어떻게 다른지 설명할 수 있다.</li>
+<li>[ ] <code>with_structured_output</code>으로 계획을 Pydantic 객체로 받을 수 있다.</li>
+<li>[ ] <code>@tool</code>과 <code>create_agent</code>로 LangChain 에이전트를 만들 수 있다.</li>
+<li>[ ] <code>agent.invoke({"messages": [...]})</code> 입출력 형식을 안다.</li>
+<li>[ ] 계획을 검증하고 실패 시 재계획하는 흐름을 구현했다.</li>
+</ul>
+<hr/>
+<h2 id="_5">한 줄 핵심</h2>
+<blockquote>
+<p><strong>큰 목표는 계획부터 세운다. LangChain의 with_structured_output(계획)과 create_agent(실행)로, 7강에서 손으로 짜던 걸 한 줄씩 자동화한다.</strong></p>
+</blockquote>
+<hr/>
+<h2 id="_6">다음 강 예고</h2>
+<p>9강에서는 <strong>Search Agent</strong>를 만듭니다. LLM은 학습한 시점 이후의 일(최신 트렌드, 어제 뉴스)을 모릅니다 — 이걸 <strong>지식 컷오프</strong>라 합니다. 웹 검색 도구를 붙여 LLM이 <strong>최신 정보</strong>로 답하게 만듭니다. <code>create_agent</code>에 검색 도구를 연결하는 실전입니다.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="07_계획이-잘못됐을때-대응.html"><span class="lbl">← 이전 절</span>07. 계획이 잘못됐을때 대응</a><a class="nxt" href="09_실습문제와-해답.html"><span class="lbl">다음 절 →</span>09. 실습문제와 해답</a></div>
+</div>
+</body></html>

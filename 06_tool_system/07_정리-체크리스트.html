@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제6강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제6강 · tool system</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제6강 · tool system — 세부 목차</b><a class="" href="01_도구가-많아지면-생기는-문제.html">01. 도구가 많아지면 생기는 문제</a><a class="" href="02_모델은-무엇을-보고-도구를-고르나.html">02. 모델은 무엇을 보고 도구를 고르나</a><a class="" href="03_좋은-도구-설계-원칙.html">03. 좋은 도구 설계 원칙</a><a class="" href="04_따라하기-도구-4개-등록하고-관찰.html">04. 따라하기 도구 4개 등록하고 관찰</a><a class="" href="05_따라하기-독스트링-망가뜨려보기.html">05. 따라하기 독스트링 망가뜨려보기</a><a class="" href="06_비슷한-도구-구분하기.html">06. 비슷한 도구 구분하기</a><a class="cur" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="6">6강에서 배운 것</h2>
+<p>6강에서는 도구가 <strong>여러 개</strong>일 때 모델이 올바른 도구를 고르게 만드는 법을 배웠습니다.</p>
+<ul>
+<li><strong>도구 선택 문제</strong>: 도구가 많아지면 "어떤 도구를 쓸지" 고르는 게 과제가 된다.</li>
+<li><strong>모델이 보는 것</strong>: 함수 본문이 아니라 <strong>이름 + 인자 + 독스트링</strong>.</li>
+<li><strong>5가지 설계 원칙</strong>: 한 가지 일·이름이 곧 기능·명확한 인자·구체적 설명·일관된 반환.</li>
+<li><strong>독스트링의 힘</strong>: 망가뜨리면 선택이 흔들린다 → "독스트링 = 도구 성능".</li>
+<li><strong>비슷한 도구 구분</strong>: 입력 형태·결과 건수·부정 조건을 명시해 경계를 못 박는다.</li>
+</ul>
+<hr/>
+<h2 id="_2">한눈에 보는 핵심 코드</h2>
+<pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
+from google.genai import types
+client = get_genai_client()
+
+# 설계 원칙을 지킨 도구 — "무엇을 + 언제"를 독스트링에
+def get_price(product_name: str) -&gt; str:
+    """상품명을 받아 판매가(원)를 반환한다. 가격/얼마 질문에 사용."""
+    ...
+
+TOOLS = [get_price, get_stock, get_order_status, search_product]
+
+# 자동: 모델이 알아서 고름
+resp = client.models.generate_content(
+    model=GEMINI_MODEL, contents="청바지 얼마야?",
+    config=types.GenerateContentConfig(tools=TOOLS, temperature=0))
+
+# 선택 관찰: 자동을 끄고 function_calls 확인
+def which_tool(q):
+    r = client.models.generate_content(
+        model=GEMINI_MODEL, contents=q,
+        config=types.GenerateContentConfig(
+            tools=TOOLS,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+            temperature=0))
+    for fc in (r.function_calls or []):
+        print(fc.name, dict(fc.args))
+</code></pre>
+<hr/>
+<h2 id="_3">이 강에서 설치한 라이브러리</h2>
+<pre><code class="language-bash">pip install google-genai python-dotenv pandas   # (앞 강에서 설치했다면 생략 가능)
+</code></pre>
+<p>새로 설치할 라이브러리는 없습니다.</p>
+<hr/>
+<h2 id="_4">체크리스트</h2>
+<ul>
+<li>[ ] 모델이 (이름+인자+설명)만 보고 도구를 고른다는 것을 안다.</li>
+<li>[ ] 도구 4개를 등록해 질문별로 다른 도구가 선택되는 것을 확인했다.</li>
+<li>[ ] 좋은 도구 설계 5원칙을 적용했다.</li>
+<li>[ ] 독스트링을 망가뜨리면 선택이 흔들린다는 것을 실험했다.</li>
+<li>[ ] 비슷한 도구를 입력 형태·결과 건수·부정 조건으로 구분할 수 있다.</li>
+</ul>
+<hr/>
+<h2 id="_5">한 줄 핵심</h2>
+<blockquote>
+<p><strong>"도구 설명은 모델을 위한 프롬프트다." 좋은 독스트링이 곧 정확한 도구 선택이고, 그게 곧 에이전트의 품질이다.</strong></p>
+</blockquote>
+<hr/>
+<h2 id="_6">다음 강 예고</h2>
+<p>7강에서는 드디어 <strong>Agent Loop</strong>를 만듭니다. 지금까지는 도구를 한 번 호출하고 끝이었지만, 진짜 에이전트는 "재고 확인 → 부족하면 재주문 기준 조회 → 판단"처럼 <strong>여러 단계를 스스로 반복</strong>합니다. 5·6강의 도구 호출을 <code>while</code> 루프로 감싸, 생각·행동·관찰을 반복하는 ReAct 패턴을 직접 구현합니다.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_비슷한-도구-구분하기.html"><span class="lbl">← 이전 절</span>06. 비슷한 도구 구분하기</a><a class="nxt" href="08_실습문제와-해답.html"><span class="lbl">다음 절 →</span>08. 실습문제와 해답</a></div>
+</div>
+</body></html>

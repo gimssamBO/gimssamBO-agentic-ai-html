@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제26강 — [신규] Worker 실패 처리와 재시도</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제26강 · role based agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제26강 · role based agent — 세부 목차</b><a class="" href="01_무엇을-할지와-어떻게-할지-나누기.html">01. 무엇을 할지와 어떻게 할지 나누기</a><a class="" href="02_Planner-Worker-협업구조.html">02. Planner Worker 협업구조</a><a class="" href="03_Supervisor-vs-Planner-Worker.html">03. Supervisor vs Planner Worker</a><a class="" href="04_따라하기-Planner-작업-분해.html">04. 따라하기 Planner 작업 분해</a><a class="" href="05_따라하기-Worker-작업-실행.html">05. 따라하기 Worker 작업 실행</a><a class="" href="06_따라하기-오케스트레이터-취합.html">06. 따라하기 오케스트레이터 취합</a><a class="cur" href="07_Worker-실패-처리와-재시도.html">07. Worker 실패 처리와 재시도</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="worker">[신규] Worker 실패 처리와 재시도</h1>
+<h2 id="_1">한 줄 요약</h2>
+<p>06번 <code>run_campaign</code>은 Worker가 <strong>한 번이라도 예외를 던지면 전체가 멈춥니다.</strong> 실무에선 일시적 오류(타임아웃 등)가 흔하죠. Worker 실패 시 <strong>최대 2회 재시도</strong>하고, 그래도 실패하면 <strong>스킵·기록</strong>하고 끝까지 진행하는 견고한 오케스트레이터를 만듭니다.</p>
+<hr/>
+<h2 id="1">1. 한 작업의 실패가 전체를 멈춘다</h2>
+<p>06번 코드의 약점을 봅시다.</p>
+<pre><code class="language-python">for i, t in enumerate(subtasks, 1):
+    outputs.append((t, work(llm_work, brief_text, t)))   # work()가 예외 던지면?
+</code></pre>
+<p><code>work()</code>가 작업 2에서 예외를 던지면(타임아웃·네트워크·rate limit), <strong>전체 for 루프가 죽습니다.</strong></p>
+<pre><code class="language-text">작업 1 성공 → 작업 2 실패(예외!) → 💥 전체 중단
+   → 작업 1의 산출물도 못 받고, 작업 3은 시작도 못 함
+</code></pre>
+<p>4개 작업 중 1개가 일시적으로 실패했다고 <strong>나머지 3개까지 버리는</strong> 건 아깝습니다. 실무에선 일시적 오류가 흔하니, <strong>부분 실패를 허용</strong>해야 하죠.</p>
+<hr/>
+<h2 id="2">2. 견고화 전략 — 재시도 → 스킵 → 계속</h2>
+<pre><code class="language-text">Worker 실패 시:
+   1. 재시도 (일시적 오류 흡수) — 최대 2회
+   2. 그래도 실패 → 스킵 + 기록
+   3. 다음 작업으로 계속 진행 (전체는 안 멈춤)
+</code></pre>
+<p>핵심 철학: <strong>한 작업의 실패가 전체를 멈추면 안 된다(부분 실패 허용).</strong> 23강 재귀 수정의 재시도, 24강 예외 처리의 정신을 Worker에 적용합니다.</p>
+<pre><code class="language-python">from ch26_role_agent import load_brief_text, plan, work   # 계획·실행 로직 재사용
+
+MAX_RETRY = 2   # 최초 1회 + 재시도 2회 = 최대 3번 시도
+</code></pre>
+<p>추가 설치 라이브러리는 <strong>없습니다</strong>(표준 try/except + 기존 함수 재사용).</p>
+<hr/>
+<h2 id="3-work_with_retry">3. 재시도 래퍼 — work_with_retry</h2>
+<p><code>work()</code>를 감싸 최대 <code>MAX_RETRY</code>회 재시도하는 래퍼입니다.</p>
+<pre><code class="language-python">def work_with_retry(llm, brief_text: str, subtask: str, idx: int, total: int):
+    """work() 를 감싸 최대 MAX_RETRY 회 재시도. (성공여부, 결과 or 오류메시지) 반환."""
+    for attempt in range(1, MAX_RETRY + 2):   # 1, 2, 3 (최초 + 재시도 2회)
+        try:
+            print(f"   작업 {idx}/{total} 수행 중 (시도 {attempt})...")
+            out = work(llm, brief_text, subtask)
+            return True, out                  # 성공 → (True, 산출물)
+        except Exception as e:                # 타임아웃·네트워크·파싱 등 모든 실패 흡수
+            print(f"     [실패] {type(e).__name__}: {e}")
+            if attempt &lt;= MAX_RETRY:
+                print(f"     → 재시도합니다 ({attempt}/{MAX_RETRY})")
+            else:
+                print(f"     → 최대 재시도 초과. 이 작업은 스킵합니다.")
+                return False, f"{type(e).__name__}: {e}"   # 실패 → (False, 오류메시지)
+</code></pre>
+<p><strong>설계 포인트</strong></p>
+<ul>
+<li><code>range(1, MAX_RETRY + 2)</code> → <code>1, 2, 3</code>: 최초 1회 + 재시도 2회 = <strong>최대 3번 시도</strong>.</li>
+<li>성공하면 즉시 <code>(True, 산출물)</code> 반환(더 재시도 안 함).</li>
+<li>모든 시도 실패하면 <code>(False, 오류메시지)</code> 반환 → 호출부가 <strong>스킵 처리</strong>.</li>
+<li><code>(성공여부, 결과)</code> 튜플 패턴 — 24강 <code>load_facts_safe</code>의 <code>ok</code> 플래그와 같은 정신.</li>
+</ul>
+<hr/>
+<h2 id="4">4. 견고한 오케스트레이터</h2>
+<p><code>run_campaign</code>을 재시도·스킵을 지원하게 개선합니다.</p>
+<pre><code class="language-python">def run_campaign_robust(brief_text: str, fail_indices=None) -&gt; str:
+    """계획 → (재시도 포함) 실행 → 취합. 실패 작업은 스킵하고 끝까지 진행한다."""
+    fail_indices = set(fail_indices or [])    # 시연용: 일부러 실패시킬 작업 번호
+    llm_plan = get_chat(temperature=0)
+    llm_work = get_chat(temperature=0.5)
+
+    subtasks = plan(llm_plan, brief_text)
+    total = len(subtasks)
+    outputs = []        # (작업, 산출물) — 성공한 것만
+    failed = []         # (번호, 작업, 오류) — 스킵한 것
+
+    for i, t in enumerate(subtasks, 1):
+        ok, info = work_with_retry(llm_work, brief_text, t, i, total)
+        if ok:
+            outputs.append((t, info))
+            print(f"   작업 {i}/{total} 완료")
+        else:
+            failed.append((i, t, info))       # 스킵하고 다음 작업으로 진행
+
+    # 취합 — 성공분 + 미완료 목록
+    print(f"\n   성공 {len(outputs)}개 / 실패(스킵) {len(failed)}개 / 전체 {total}개")
+    report = [f"# 캠페인 실행안\n\n&gt; {brief_text}\n"]
+    for i, (t, out) in enumerate(outputs, 1):
+        report.append(f"## {i}. {t}\n{out}\n")
+    if failed:
+        report.append("## ⚠️ 미완료(재시도 후 스킵된) 작업")
+        for i, t, err in failed:
+            report.append(f"- {t} — {err}")
+    return "\n".join(report)
+</code></pre>
+<p><strong>핵심</strong></p>
+<ul>
+<li><code>outputs</code>(성공)와 <code>failed</code>(스킵)를 <strong>따로 모음</strong>.</li>
+<li>실패해도 <code>continue</code>처럼 다음 작업으로 진행 → <strong>전체는 안 멈춤</strong>.</li>
+<li>취합 시 성공분은 정상 섹션으로, <strong>미완료 작업은 ⚠️ 목록</strong>으로 명시(투명성).</li>
+</ul>
+<hr/>
+<h2 id="5">5. 실행 — 일부러 실패시켜 시연</h2>
+<p>작업 2를 일부러 매번 실패시켜 <strong>재시도·스킵 흐름</strong>을 보여줍니다.</p>
+<pre><code class="language-python">if __name__ == "__main__":
+    brief_text = load_brief_text("CMP02")
+    print("(2번 작업은 일부러 매번 실패시켜 재시도·스킵을 보여줍니다)")
+    report = run_campaign_robust(brief_text, fail_indices=[2])
+    print(report)
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">(2번 작업은 일부러 매번 실패시켜 재시도·스킵을 보여줍니다)
+   작업 1/3 수행 중 (시도 1)...
+   작업 1/3 완료
+   작업 2/3 수행 중 (시도 1)...
+     [실패] TimeoutError: 모의 일시 오류
+     → 재시도합니다 (1/2)
+   작업 2/3 수행 중 (시도 2)...
+     [실패] TimeoutError: 모의 일시 오류
+     → 재시도합니다 (2/2)
+   작업 2/3 수행 중 (시도 3)...
+     [실패] TimeoutError: 모의 일시 오류
+     → 최대 재시도 초과. 이 작업은 스킵합니다.
+   작업 3/3 수행 중 (시도 1)...
+   작업 3/3 완료
+
+   성공 2개 / 실패(스킵) 1개 / 전체 3개
+
+# 캠페인 실행안
+...
+## 1. 대학생 타깃 분석
+...
+## 2. 800만원 예산 배분
+...
+## ⚠️ 미완료(재시도 후 스킵된) 작업
+- 광고 카피 3종을 작성하라 — TimeoutError: 모의 일시 오류
+</code></pre>
+<p><strong>관찰 포인트</strong></p>
+<ul>
+<li>작업 2가 3번 시도(최초+재시도 2회) 후 스킵됐지만, <strong>작업 1·3은 정상 완료</strong>됐습니다.</li>
+<li>한 작업이 죽어도 <strong>전체는 살아남아</strong> 부분 산출물(2개)을 확보했죠.</li>
+<li>실패한 작업은 ⚠️ 목록에 <strong>투명하게 기록</strong> — 나중에 사람이 그것만 다시 처리.</li>
+</ul>
+<hr/>
+<h2 id="6">6. 왜 부분 실패 허용이 중요한가</h2>
+<pre><code class="language-text">[전부 아니면 전무 (all-or-nothing)]
+   4개 작업 중 1개 실패 → 0개 산출물 (다 버림)
+
+[부분 실패 허용 (graceful degradation)]
+   4개 작업 중 1개 실패 → 3개 산출물 확보 + 1개는 추적
+</code></pre>
+<p>실무에선 <strong>"완벽한 0개보다 불완전한 3개"</strong> 가 낫습니다. 마케팅 실행안의 4개 섹션 중 3개라도 있으면 일을 시작할 수 있고, 빠진 1개만 따로 처리하면 되죠. 24강 폴백("불완전해도 결과"), 25강 견고성과 같은 정신입니다.</p>
+<p>Worker가 <strong>독립적</strong>이기에 이게 가능합니다(05번). 작업끼리 의존했다면 하나 실패가 연쇄로 무너졌겠죠. 독립성이 견고성의 기반입니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>06번은 Worker 한 번 실패에 <strong>전체가 멈춤</strong> → 일시적 오류에 취약.</li>
+<li>전략: <strong>재시도(일시 오류 흡수) → 스킵·기록 → 끝까지 진행</strong>.</li>
+<li><code>work_with_retry</code>: 최대 <code>MAX_RETRY</code>회 재시도, <code>(성공여부, 결과)</code> 반환.</li>
+<li>견고한 오케스트레이터: 성공/실패를 따로 모아 <strong>부분 산출물 확보</strong> + ⚠️ 기록.</li>
+<li><strong>"완벽한 0개보다 불완전한 3개"</strong>(graceful degradation, 24·25강 정신).</li>
+<li>Worker <strong>독립성</strong>이 부분 실패 허용의 기반.</li>
+<li>다음 절에서 26강을 정리합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_따라하기-오케스트레이터-취합.html"><span class="lbl">← 이전 절</span>06. 따라하기 오케스트레이터 취합</a><a class="nxt" href="08_정리-체크리스트.html"><span class="lbl">다음 절 →</span>08. 정리 체크리스트</a></div>
+</div>
+</body></html>

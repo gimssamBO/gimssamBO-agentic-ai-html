@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제17강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제17강 · knowledge agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제17강 · knowledge agent — 세부 목차</b><a class="" href="01_필요할때만-검색하게.html">01. 필요할때만 검색하게</a><a class="" href="02_항상검색-vs-필요할때검색.html">02. 항상검색 vs 필요할때검색</a><a class="" href="03_RAG를-도구로-만들기.html">03. RAG를 도구로 만들기</a><a class="" href="04_따라하기-retriever를-도구로.html">04. 따라하기 retriever를 도구로</a><a class="" href="05_따라하기-일상질문-vs-정책질문.html">05. 따라하기 일상질문 vs 정책질문</a><a class="" href="06_도구-선택-실패와-description-개선.html">06. 도구 선택 실패와 description 개선</a><a class="cur" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="17">17강에서 배운 것</h2>
+<p>17강에서는 RAG를 도구로 만들어 "필요할 때만 검색하는" Knowledge Agent를 만들었습니다.</p>
+<ul>
+<li><strong>항상 검색 vs 필요할 때</strong>: QA 체인은 무조건, 에이전트는 판단해서 검색.</li>
+<li><strong>create_retriever_tool</strong>: RAG를 LLM이 호출 가능한 검색 도구로 변환.</li>
+<li><strong>description = 라우팅 규칙</strong>: 에이전트가 "언제 검색할지" 판단하는 근거.</li>
+<li><strong>일상/정책 구분</strong>: 같은 에이전트가 질문에 따라 검색 여부를 스스로 결정.</li>
+<li><strong>description 개선</strong>: 구체적·부정 조건으로 오호출을 줄임.</li>
+</ul>
+<hr/>
+<h2 id="_2">한눈에 보는 핵심 코드</h2>
+<pre><code class="language-python">from langchain_core.tools.retriever import create_retriever_tool
+from langchain.agents import create_agent
+from common import get_chat
+
+# RAG retriever를 검색 도구로
+policy_tool = create_retriever_tool(
+    retriever,
+    name="company_policy_search",
+    description="환불/멤버십/직원 규정 등 사내 정책 질문에만 사용. 날씨·계산엔 사용 금지.")
+
+# 에이전트에 연결 — 필요할 때만 검색
+agent = create_agent(get_chat(temperature=0), tools=[policy_tool],
+                     system_prompt="너는 상담원이다. 규정은 반드시 도구로 검색해 답하라.")
+
+out = agent.invoke({"messages": [{"role": "user", "content": q}]})
+used = any(getattr(m, "tool_calls", None) for m in out["messages"])  # 검색 여부
+</code></pre>
+<hr/>
+<h2 id="_3">이 강에서 설치한 라이브러리</h2>
+<pre><code class="language-bash">pip install langchain langgraph langchain-community langchain-google-genai faiss-cpu pypdf
+</code></pre>
+<p>새로 설치할 라이브러리는 없습니다.</p>
+<hr/>
+<h2 id="_4">체크리스트</h2>
+<ul>
+<li>[ ] QA 체인(항상 검색)과 Knowledge Agent(필요할 때 검색)의 차이를 안다.</li>
+<li>[ ] <code>create_retriever_tool</code>로 RAG를 에이전트 도구로 만들었다.</li>
+<li>[ ] 도구 description이 "언제 검색할지"를 결정함을 이해했다.</li>
+<li>[ ] 일상 질문엔 검색 안 하고 정책 질문엔 검색하는 것을 확인했다.</li>
+<li>[ ] description을 구체화해 오호출을 줄일 수 있다.</li>
+</ul>
+<hr/>
+<h2 id="_5">한 줄 핵심</h2>
+<blockquote>
+<p><strong>RAG를 도구로 만들면 에이전트가 "필요할 때만" 검색한다. 핵심은 도구의 description — 이게 곧 "언제 검색할지"를 정하는 라우팅 규칙이다.</strong></p>
+</blockquote>
+<hr/>
+<h2 id="_6">다음 강 예고</h2>
+<p>17강은 검색 도구 <strong>하나</strong>만 다뤘습니다. 18강 <strong>RAG + Tool Agent</strong>에서는 17강의 정책 검색(문서)과 5~12강의 실시간 데이터 도구(주문·재고 조회)를 <strong>한 에이전트에</strong> 함께 넣습니다. "환불 정책 알려주고, 내 주문 환불 가능한지도 확인해줘" 같은 질문에서, 문서 검색과 DB 조회를 <strong>동시에</strong> 쓰는 RAG의 종착점입니다.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_도구-선택-실패와-description-개선.html"><span class="lbl">← 이전 절</span>06. 도구 선택 실패와 description 개선</a><a class="nxt" href="08_실습문제와-해답.html"><span class="lbl">다음 절 →</span>08. 실습문제와 해답</a></div>
+</div>
+</body></html>

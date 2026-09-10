@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제18강 — 도구 설계 원칙 (백엔드)</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제18강 · rag tool agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제18강 · rag tool agent — 세부 목차</b><a class="" href="01_문서검색과-실시간데이터를-한-에이전트에.html">01. 문서검색과 실시간데이터를 한 에이전트에</a><a class="" href="02_모든-능력을-도구로-통일.html">02. 모든 능력을 도구로 통일</a><a class="" href="03_멀티스텝-처리.html">03. 멀티스텝 처리</a><a class="cur" href="04_도구-설계-원칙.html">04. 도구 설계 원칙</a><a class="" href="05_따라하기-정책검색-도구.html">05. 따라하기 정책검색 도구</a><a class="" href="06_따라하기-실시간-데이터-도구.html">06. 따라하기 실시간 데이터 도구</a><a class="" href="07_따라하기-RAG와-도구-동시-사용.html">07. 따라하기 RAG와 도구 동시 사용</a><a class="" href="08_읽기-도구와-쓰기-도구의-차이.html">08. 읽기 도구와 쓰기 도구의 차이</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">도구 설계 원칙 (백엔드)</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>실전 도구는 네 가지 원칙을 지켜야 합니다: <strong>명확한 설명 · 입력 검증과 예외 처리 · 결정적 반환 · 부작용 최소화</strong>. 특히 "조회는 읽기 전용, 상태 변경은 신중히"가 안전한 에이전트의 핵심입니다.</p>
+<hr/>
+<h2 id="1">1. 네 가지 설계 원칙</h2>
+<table>
+<thead>
+<tr>
+<th>원칙</th>
+<th>이유</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>명확한 docstring/description</td>
+<td>에이전트가 도구 선택의 근거로 삼음</td>
+</tr>
+<tr>
+<td>입력 검증·예외 처리</td>
+<td>없는 주문번호·상품에도 안전한 메시지 반환</td>
+</tr>
+<tr>
+<td>결정적(deterministic) 반환</td>
+<td>같은 입력 → 같은 출력(재현성·디버깅)</td>
+</tr>
+<tr>
+<td>부작용 최소화</td>
+<td>조회는 읽기 전용. 상태 변경은 별도 권한·확인</td>
+</tr>
+</tbody>
+</table>
+<p>6강에서 배운 도구 설계 원칙의 <strong>실전 백엔드 버전</strong>입니다. 하나씩 봅시다.</p>
+<hr/>
+<h2 id="2-1-6">2. 원칙 ① — 명확한 설명 (6강 복습)</h2>
+<p>도구의 docstring/description은 에이전트가 도구를 고르는 근거입니다(6·17강).</p>
+<pre><code class="language-python">@tool
+def get_order_status(order_id: str) -&gt; str:
+    """주문번호(order_id)로 주문 상태/상품/날짜를 조회한다. 예: 'O000902'"""
+    # 독스트링에 '무엇을' + '입력 형식 예시'(예: 'O000902')까지 명확히 적는다.
+</code></pre>
+<p><code>"예: 'O000902'"</code> 처럼 <strong>입력 형식 예시</strong>를 주면, 에이전트가 인자를 올바르게 채웁니다. 여러 도구가 함께 있을 때(18강) 각 설명이 또렷이 구별돼야 라우팅이 정확하죠.</p>
+<hr/>
+<h2 id="3-2">3. 원칙 ② — 입력 검증·예외 처리</h2>
+<p>도구는 잘못된 입력에도 <strong>죽지 않고 안내</strong>해야 합니다(5·12강 복습).</p>
+<pre><code class="language-python">@tool
+def get_order_status(order_id: str) -&gt; str:
+    """주문번호로 주문 상태를 조회한다."""
+    row = orders[orders["order_id"] == order_id.strip()]
+    if row.empty:
+        return f"주문번호 {order_id} 를 찾을 수 없습니다."   # 없어도 안전한 메시지
+    ...
+</code></pre>
+<p>없는 주문번호여도 예외(<code>KeyError</code>)로 죽지 않고, 친절한 안내를 돌려줍니다. 에이전트가 그 안내를 받아 "주문번호를 다시 확인해 주세요"라고 폴백하죠(12강).</p>
+<hr/>
+<h2 id="4-3">4. 원칙 ③ — 결정적 반환</h2>
+<p>같은 입력에는 <strong>항상 같은 출력</strong>이 나와야 합니다. 이를 <strong>결정적(deterministic)</strong> 이라고 합니다.</p>
+<pre><code class="language-python">get_order_status("O000902")   # 항상 같은 결과 (DB가 안 바뀌면)
+</code></pre>
+<p>결정적이면 좋은 점:<br/>
+- <strong>재현성</strong>: 같은 질문에 같은 답 → 신뢰<br/>
+- <strong>디버깅</strong>: 문제가 생기면 재현해 추적 가능<br/>
+- <strong>테스트</strong>: 예상 결과를 미리 알 수 있음</p>
+<p>그래서 조회 도구는 보통 <code>temperature</code> 같은 무작위성이 없습니다. DB를 그대로 읽어 돌려주니 항상 같죠.</p>
+<hr/>
+<h2 id="5-4">5. 원칙 ④ — 부작용 최소화 (가장 중요)</h2>
+<p>가장 중요한 원칙입니다. <strong>조회(읽기)는 안전하지만, 상태 변경(쓰기)은 위험합니다.</strong></p>
+<pre><code class="language-python"># 읽기 도구 — 안전 (데이터를 안 바꿈)
+get_order_status("O000902")   # 조회만, 몇 번 호출해도 부작용 없음
+
+# 쓰기 도구 — 위험 (데이터를 바꿈)
+cancel_order("O000902")       # 주문을 취소! 되돌리기 어려움
+refund("O000902")             # 환불 실행! 돈이 나감
+</code></pre>
+<p>지금까지 우리 도구는 모두 <strong>읽기</strong>였습니다(조회). 그래서 안전했죠 — 잘못 호출해도 데이터가 안 바뀌니까요. 하지만 "환불 실행", "주문 취소" 같은 <strong>쓰기 도구</strong>는 신중해야 합니다. 잘못 실행하면 진짜 돈이 나가고, 되돌리기 어렵거든요.</p>
+<blockquote>
+<p>이 강의 도구(policy_search, get_order_status, get_stock)는 <strong>모두 읽기 전용</strong>입니다. 의도적으로요. 쓰기 도구의 위험성과 안전장치는 <strong>08번</strong>에서 따로 다룹니다.</p>
+</blockquote>
+<hr/>
+<h2 id="6-vs">6. 읽기 vs 쓰기 — 멱등성</h2>
+<p>읽기와 쓰기의 핵심 차이는 <strong>멱등성(idempotent)</strong> 입니다.</p>
+<pre><code class="language-text">읽기: 같은 호출을 여러 번 해도 결과·상태 동일 (멱등)
+      get_order_status("O") 10번 = 1번 (데이터 안 바뀜)
+
+쓰기: 호출할 때마다 상태가 바뀜 (비멱등)
+      cancel_order("O") 10번 = 위험 (중복 취소? 오류?)
+</code></pre>
+<p>읽기는 몇 번 호출해도 안전하지만, 쓰기는 한 번 한 번이 영향을 줍니다. 그래서 에이전트가 실수로 쓰기 도구를 여러 번 부르면 큰일이죠. 이 차이를 이해하는 게 안전한 에이전트 설계의 기본입니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>실전 도구 4원칙: <strong>명확한 설명 · 입력 검증 · 결정적 반환 · 부작용 최소화</strong>.</li>
+<li><strong>명확한 설명</strong>(입력 예시 포함)으로 라우팅 정확도 확보.</li>
+<li><strong>입력 검증·예외 처리</strong>로 잘못된 입력에도 안 죽게.</li>
+<li><strong>결정적 반환</strong>으로 재현성·디버깅·테스트 가능.</li>
+<li><strong>읽기는 안전(멱등), 쓰기는 위험(비멱등)</strong> — 상태 변경은 신중히(08번).</li>
+<li>다음 절에서 정책 검색 도구를 만듭니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="03_멀티스텝-처리.html"><span class="lbl">← 이전 절</span>03. 멀티스텝 처리</a><a class="nxt" href="05_따라하기-정책검색-도구.html"><span class="lbl">다음 절 →</span>05. 따라하기 정책검색 도구</a></div>
+</div>
+</body></html>

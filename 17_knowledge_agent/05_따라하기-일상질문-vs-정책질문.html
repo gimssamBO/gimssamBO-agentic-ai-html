@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제17강 — 따라하기 — 일상 질문 vs 정책 질문</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제17강 · knowledge agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제17강 · knowledge agent — 세부 목차</b><a class="" href="01_필요할때만-검색하게.html">01. 필요할때만 검색하게</a><a class="" href="02_항상검색-vs-필요할때검색.html">02. 항상검색 vs 필요할때검색</a><a class="" href="03_RAG를-도구로-만들기.html">03. RAG를 도구로 만들기</a><a class="" href="04_따라하기-retriever를-도구로.html">04. 따라하기 retriever를 도구로</a><a class="cur" href="05_따라하기-일상질문-vs-정책질문.html">05. 따라하기 일상질문 vs 정책질문</a><a class="" href="06_도구-선택-실패와-description-개선.html">06. 도구 선택 실패와 description 개선</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="vs">따라하기 — 일상 질문 vs 정책 질문</h1>
+<h2 id="_1">목표</h2>
+<p>같은 에이전트에 일상 질문과 정책 질문을 던져, 에이전트가 <strong>검색 여부를 스스로 판단</strong>하는 것을 확인합니다.</p>
+<hr/>
+<h2 id="1">1. 일상 질문 — 검색하지 않음</h2>
+<p>먼저 일상 인사를 던집니다.</p>
+<pre><code class="language-python">ans, used = ask("안녕하세요! 오늘 기분 어때요?")
+print("답변:", ans)
+print("검색 도구 사용?", used)
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">답변: 안녕하세요! 무엇을 도와드릴까요?
+검색 도구 사용? False
+</code></pre>
+<p><code>used</code>가 <strong>False</strong>입니다. 에이전트가 "이건 일상 인사라 정책 검색이 필요 없다"고 판단해, <strong>검색 도구를 안 쓰고</strong> 바로 답했습니다. 인사 한마디에 정책 PDF를 뒤지지 않은 거죠. 효율적입니다.</p>
+<hr/>
+<h2 id="2">2. 정책 질문 — 검색함</h2>
+<p>이번엔 정책 질문을 던집니다.</p>
+<pre><code class="language-python">ans, used = ask("단순 변심으로 반품하면 배송비는 누가 부담하나요?")
+print("답변:", ans)
+print("검색 도구 사용?", used)
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">답변: 단순 변심으로 인한 반품의 경우, 왕복 배송비는 고객님께서 부담하셔야 합니다.
+검색 도구 사용? True
+</code></pre>
+<p>이번엔 <code>used</code>가 <strong>True</strong>입니다. 에이전트가 "이건 정책 질문이라 문서를 찾아야 한다"고 판단해, <strong>검색 도구를 호출</strong>하고 그 근거로 답했습니다.</p>
+<hr/>
+<h2 id="3-stream">3. 과정 들여다보기 (stream)</h2>
+<p><code>pretty_print</code>로 정책 질문 처리 과정을 보면 ReAct 루프가 보입니다.</p>
+<pre><code class="language-python">out = agent.invoke({"messages": [{"role": "user", "content": "반품 배송비 누가 내요?"}]})
+for m in out["messages"]:
+    m.pretty_print()
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">================================ Human Message ===
+반품 배송비 누가 내요?
+
+================================== Ai Message ====
+Tool Calls: company_policy_search({'query': '단순 변심 반품 배송비'})   ← 검색 도구 호출!
+
+================================ Tool Message ====
+교환·반품 시 단순 변심의 경우 왕복 배송비는 고객이 부담합니다 ...   ← 검색 결과
+
+================================== Ai Message ====
+단순 변심으로 인한 반품의 경우, 왕복 배송비는 고객님께서 부담하셔야 합니다.   ← 근거로 답
+</code></pre>
+<p>7강에서 배운 ReAct 흐름 그대로입니다:<br/>
+1. <strong>생각</strong>: "정책 질문이네, 검색해야겠다"<br/>
+2. <strong>행동</strong>: <code>company_policy_search</code> 호출 (검색어도 스스로 생성)<br/>
+3. <strong>관찰</strong>: 검색 결과(반품 배송비 조항)<br/>
+4. <strong>답변</strong>: 근거로 정확히 답</p>
+<hr/>
+<h2 id="4">4. 같은 에이전트, 다른 판단</h2>
+<p>핵심은 <strong>같은 에이전트</strong>가 질문에 따라 다르게 행동한다는 것입니다.</p>
+<pre><code class="language-text">"안녕하세요" → 검색 안 함 (False) → 바로 답
+"반품 배송비?" → 검색함 (True) → 근거로 답
+</code></pre>
+<p>우리가 "이건 검색해, 저건 하지 마"라고 일일이 정하지 않았습니다. 에이전트가 도구의 description과 질문을 비교해 <strong>스스로</strong> 판단했죠. 이게 16강 고정 파이프라인(무조건 검색)과의 결정적 차이입니다.</p>
+<hr/>
+<h2 id="5">5. 왜 이게 더 나은가</h2>
+<p>Knowledge Agent의 장점을 정리하면:</p>
+<ul>
+<li><strong>효율</strong>: 일상 질문에 불필요한 검색·임베딩 비용 절감</li>
+<li><strong>자연스러움</strong>: 인사엔 인사로, 정책엔 근거로 — 사람 상담원처럼</li>
+<li><strong>유연성</strong>: 다양한 질문(일상+정책+계산 등)을 한 에이전트로 처리</li>
+</ul>
+<p>특히 종합 상담봇처럼 <strong>온갖 질문이 섞여</strong> 들어오는 경우, "필요할 때만 검색"이 빛을 발합니다. 모든 질문에 정책 문서를 뒤지는 건 낭비니까요.</p>
+<hr/>
+<h2 id="6">6. 판단이 틀릴 수도 있다</h2>
+<p>단, 에이전트의 판단이 <strong>항상 완벽하진 않습니다.</strong></p>
+<ul>
+<li>정책 질문인데 검색 안 함 → 환각 위험</li>
+<li>일상 질문인데 검색함 → 불필요한 비용</li>
+</ul>
+<p>이 판단 정확도는 <strong>도구의 description</strong>에 크게 좌우됩니다(다음 절). description이 모호하면 판단이 흔들리죠. 그래서 description을 잘 쓰는 게 Knowledge Agent의 핵심 기술입니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>일상 질문엔 <strong>검색 안 함</strong>(<code>used=False</code>), 정책 질문엔 <strong>검색함</strong>(<code>used=True</code>).</li>
+<li>정책 질문 처리는 7강 <strong>ReAct 루프</strong>(생각→검색→관찰→답) 그대로.</li>
+<li><strong>같은 에이전트</strong>가 질문에 따라 스스로 판단(우리가 안 정함).</li>
+<li>장점: 효율·자연스러움·유연성.</li>
+<li>판단 정확도는 <strong>도구 description</strong>에 좌우됨(다음 절).</li>
+<li>다음 절에서 description 개선으로 판단을 정확하게 합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="04_따라하기-retriever를-도구로.html"><span class="lbl">← 이전 절</span>04. 따라하기 retriever를 도구로</a><a class="nxt" href="06_도구-선택-실패와-description-개선.html"><span class="lbl">다음 절 →</span>06. 도구 선택 실패와 description 개선</a></div>
+</div>
+</body></html>

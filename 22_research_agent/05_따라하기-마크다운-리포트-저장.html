@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제22강 — 따라하기 — 마크다운 리포트 저장</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제22강 · research agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제22강 · research agent — 세부 목차</b><a class="" href="01_최신-시장동향을-매번-사람이.html">01. 최신 시장동향을 매번 사람이</a><a class="" href="02_리서치-에이전트-패턴.html">02. 리서치 에이전트 패턴</a><a class="" href="03_네트워크-의존성.html">03. 네트워크 의존성</a><a class="" href="04_따라하기-리서치-에이전트와-폴백.html">04. 따라하기 리서치 에이전트와 폴백</a><a class="cur" href="05_따라하기-마크다운-리포트-저장.html">05. 따라하기 마크다운 리포트 저장</a><a class="" href="06_복잡한-주제를-하위질의로-쪼개기.html">06. 복잡한 주제를 하위질의로 쪼개기</a><a class="" href="07_검색결과-교차검증.html">07. 검색결과 교차검증</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">따라하기 — 마크다운 리포트 저장</h1>
+<h2 id="_2">목표</h2>
+<p>04번에서 만든 리포트 본문을 <strong>헤더와 함께 <code>.md</code> 파일로 저장</strong>합니다. 조사(<code>research</code>)와 저장(<code>save_report</code>)을 분리해, 배치·API에서 재사용하기 쉬운 구조를 완성합니다.</p>
+<hr/>
+<h2 id="1">1. 저장 함수 만들기</h2>
+<p><code>code/ch22_research.py</code>에 <code>save_report</code>를 추가합니다.</p>
+<pre><code class="language-python">def save_report(topic: str, body: str) -&gt; pathlib.Path:
+    """리포트 본문을 헤더와 함께 reports/ 폴더에 .md로 저장하고 경로를 반환한다.
+
+    [왜 research/save 분리] 재사용·테스트를 쉽게 하려는 모듈화.
+    배치는 research→save 만 호출하면 되고, API는 research() 결과를 바로 응답할 수 있다.
+    """
+    out_dir = pathlib.Path(__file__).resolve().parent.parent / "reports"
+    out_dir.mkdir(exist_ok=True)        # reports/ 폴더가 없으면 생성
+    today = datetime.date.today().isoformat()
+    path = out_dir / f"research_{today}.md"
+    header = f"# 시장 조사 리포트 — {topic}\n\n&gt; 생성일: {today} (자동 생성)\n\n"
+    path.write_text(header + body, encoding="utf-8")   # 한글 깨짐 방지 위해 utf-8 명시
+    return path
+</code></pre>
+<p><strong>짚어 둘 점</strong></p>
+<ul>
+<li><code>out_dir.mkdir(exist_ok=True)</code> — <code>reports/</code> 폴더가 없으면 만들고, 있으면 그냥 둡니다(<code>exist_ok=True</code>라 에러 안 남).</li>
+<li><code>datetime.date.today().isoformat()</code> — <code>2026-06-07</code> 형태의 날짜 문자열. 파일명·헤더에 씁니다.</li>
+<li><code>header</code> — 본문 위에 제목·생성일을 붙여 <strong>누가 봐도 무슨 리포트인지</strong> 알게 합니다.</li>
+<li><code>encoding="utf-8"</code> — 한글이 깨지지 않게 인코딩을 명시합니다(매우 중요).</li>
+</ul>
+<hr/>
+<h2 id="2">2. 전체 실행 코드</h2>
+<p><code>research</code>(04번) → <code>save_report</code>(이번)를 이어 붙입니다.</p>
+<pre><code class="language-python">if __name__ == "__main__":
+    topic = "경쟁 무선이어버드 시장 동향"
+    print(f"[조사 시작] {topic}")
+    body = research(topic)              # 검색→요약(또는 폴백) → 리포트 본문
+    path = save_report(topic, body)     # .md 파일로 저장
+    print("=" * 60)
+    print(body[:600], "...")            # 미리보기
+    print("=" * 60)
+    print("[저장 완료]", path)
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[조사 시작] 경쟁 무선이어버드 시장 동향
+============================================================
+## 개요
+무선이어버드 시장은 ANC(능동소음제거)와 저지연 게이밍 모드를 ...
+## 핵심 동향
+- 프리미엄 ANC 보편화 ...
+## 시사점
+승승장구몰 자체 PB 이어버드는 ...
+============================================================
+[저장 완료] /Users/.../reports/research_2026-06-07.md
+</code></pre>
+<hr/>
+<h2 id="3">3. 저장된 파일 확인</h2>
+<p>생성된 <code>.md</code>를 열어 봅니다.</p>
+<pre><code class="language-bash">cat reports/research_2026-06-07.md
+</code></pre>
+<p><strong>파일 내용(예시)</strong></p>
+<pre><code class="language-markdown"># 시장 조사 리포트 — 경쟁 무선이어버드 시장 동향
+
+&gt; 생성일: 2026-06-07 (자동 생성)
+
+## 개요
+무선이어버드 시장은 ANC(능동소음제거)와 ...
+
+## 핵심 동향
+- 프리미엄 ANC 보편화, 중저가 모델로 확산
+- 멀티포인트 연결·공간음향 기능 경쟁 심화
+...
+
+## 시사점
+승승장구몰 자체 PB 이어버드는 ANC와 멀티포인트를 ... 강화 필요.
+</code></pre>
+<p>헤더(제목·생성일)와 본문(세 섹션)이 합쳐진 <strong>완성된 리포트</strong>가 저장됐습니다. 이 <code>.md</code>는 그대로 사내 위키에 올리거나, HTML/PDF로 변환하거나, 메일로 보낼 수 있죠.</p>
+<hr/>
+<h2 id="4-research-save">4. 왜 research와 save를 나눴나</h2>
+<p>함수를 둘로 나눈 건 <strong>재사용·테스트</strong> 때문입니다.</p>
+<pre><code class="language-text">[배치 스케줄러]  매주 월요일 → research(topic) → save_report(...) → 파일 저장
+[API 엔드포인트] GET /research?topic=... → research(topic) → JSON으로 바로 응답 (저장 안 함)
+[테스트]         research() 결과만 검증 (파일 I/O 없이 빠르게)
+</code></pre>
+<p><code>research()</code>는 "본문 문자열 생성"만, <code>save_report()</code>는 "저장"만 합니다. <strong>한 가지 일만 하는 함수</strong>로 나누면 상황별로 조합해 쓰기 쉽죠(단일 책임 원칙). 만약 한 함수에 다 넣었다면, API에서 "저장은 필요 없는데 저장 코드가 끼어 있는" 어색한 구조가 됩니다.</p>
+<hr/>
+<h2 id="5">5. 운영 모니터링 팁</h2>
+<p>리포트 생성을 배치로 돌릴 때, 다음을 로그로 남기면 좋습니다.</p>
+<pre><code class="language-text">- 검색 호출 수·소요 시간 (성능 추적)
+- 폴백 발생 여부 (검색이 자주 막히는지 모니터링)
+- 생성된 파일 경로·크기 (산출물 확인)
+</code></pre>
+<pre><code class="language-python">import time
+t0 = time.time()
+body = research(topic)
+elapsed = time.time() - t0
+fallback = body.startswith("&gt; ⚠️")     # 폴백 리포트인지 간단 판별
+path = save_report(topic, body)
+print(f"[로그] 소요={elapsed:.1f}s 폴백={fallback} 파일={path}")
+</code></pre>
+<p>이런 로그가 쌓이면 "검색이 자꾸 막히네 → 재시도/캐시 도입해야겠다" 같은 <strong>운영 판단</strong>을 데이터로 할 수 있습니다(29강 배포).</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li><code>save_report()</code>는 본문에 <strong>헤더(제목·생성일)</strong> 를 붙여 <code>reports/*.md</code>로 저장.</li>
+<li><code>mkdir(exist_ok=True)</code>로 폴더 자동 생성, <code>encoding="utf-8"</code>로 한글 보존.</li>
+<li><code>research</code>(생성)와 <code>save_report</code>(저장)를 <strong>분리</strong> → 배치·API·테스트에서 재사용.</li>
+<li>저장된 <code>.md</code>는 위키·HTML·메일 등으로 그대로 활용 가능.</li>
+<li>소요 시간·폴백 발생을 <strong>로깅</strong>하면 운영 모니터링이 쉬움.</li>
+<li>다음 절에서 복잡한 주제를 하위 질의로 쪼개 더 깊이 조사합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="04_따라하기-리서치-에이전트와-폴백.html"><span class="lbl">← 이전 절</span>04. 따라하기 리서치 에이전트와 폴백</a><a class="nxt" href="06_복잡한-주제를-하위질의로-쪼개기.html"><span class="lbl">다음 절 →</span>06. 복잡한 주제를 하위질의로 쪼개기</a></div>
+</div>
+</body></html>

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제5강 — 도구 실행 오류 처리</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제5강 · function calling</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제5강 · function calling — 세부 목차</b><a class="" href="01_왜-함수호출이-필요한가.html">01. 왜 함수호출이 필요한가</a><a class="" href="02_LLM은-함수를-직접-실행하지-못한다.html">02. LLM은 함수를 직접 실행하지 못한다</a><a class="" href="03_자동실행-vs-수동루프.html">03. 자동실행 vs 수동루프</a><a class="" href="04_따라하기-도구-함수-만들기.html">04. 따라하기 도구 함수 만들기</a><a class="" href="05_따라하기-자동-function-calling.html">05. 따라하기 자동 function calling</a><a class="" href="06_따라하기-수동-루프로-결정-관찰.html">06. 따라하기 수동 루프로 결정 관찰</a><a class="cur" href="07_도구-실행-오류-처리.html">07. 도구 실행 오류 처리</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">도구 실행 오류 처리</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>도구는 <strong>항상 성공하지 않습니다.</strong> 없는 상품, 없는 통화, 심지어 DB 다운까지 일어납니다. 오류를 <code>try/except</code>로 잡아 <strong>친절한 메시지</strong>로 바꿔 모델에 돌려주면, 에이전트가 멈추지 않고 사용자에게 자연스럽게 안내합니다.</p>
+<hr/>
+<h2 id="1">1. 도구는 왜 실패하는가</h2>
+<p>실제 운영에서 도구는 다양한 이유로 실패합니다.</p>
+<ul>
+<li><strong>없는 데이터</strong>: 고객이 "존재하지않는상품XYZ 재고 있어?"라고 물음 → 빈 결과</li>
+<li><strong>잘못된 입력</strong>: "ZZZ 환율 알려줘" → 지원하지 않는 통화</li>
+<li><strong>인프라 장애</strong>: 재고 DB가 다운됨 → 연결 실패 예외</li>
+</ul>
+<p>이때 도구 함수가 그냥 <strong>예외를 던지면</strong>, 에이전트 전체가 멈춰 버립니다. 고객은 아무 답도 못 받죠. 이건 서비스로서 실격입니다.</p>
+<blockquote>
+<p>비유: 콜센터 상담원(에이전트)이 재고 조회 단말기(도구)가 먹통이 됐다고 <strong>전화를 뚝 끊어 버리면</strong> 안 됩니다. "지금 시스템 점검 중이라 잠시 후 확인 가능합니다"라고 <strong>안내</strong>해야죠.</p>
+</blockquote>
+<hr/>
+<h2 id="2">2. 핵심 전략 — 예외를 친절한 문자열로</h2>
+<p>방법은 간단합니다. 도구 함수 안에서 <code>try/except</code>로 오류를 잡고, <strong>예외 대신 친절한 안내 문자열을 반환</strong>합니다. 그러면 모델이 그 문자열을 보고 사용자에게 안내합니다.</p>
+<blockquote>
+<p>참고: 이건 공식 문서도 권장하는 방식입니다 — <em>"예외를 던지는 대신, 모델이 처리하도록 둘 수 있다(instead of raising the exception, you can let the model handle it)"</em>.</p>
+</blockquote>
+<pre><code class="language-python">def get_stock(product_name: str) -&gt; str:
+    """상품명을 받아 현재 재고 수량을 반환한다."""
+    try:
+        row = inv[inv["product_name"].str.contains(product_name, na=False)]
+        if row.empty:
+            # 빈 결과를 '예외'가 아닌 '친절한 안내'로 바꿔 돌려준다
+            return f"'{product_name}' 상품을 찾을 수 없습니다. (상품명을 다시 확인해 주세요)"
+        r = row.iloc[0]
+        return f"{r['product_name']} 재고 {int(r['stock'])}개 ({r['warehouse']})"
+    except Exception as e:
+        # 장애는 사용자에게 숨기고, 모델이 안내할 수 있는 메시지로 변환
+        return f"일시적인 시스템 오류로 재고를 조회하지 못했습니다. 잠시 후 다시 시도해 주세요. (사유: {e})"
+</code></pre>
+<p>두 가지를 처리했습니다.</p>
+<ul>
+<li><strong>빈 결과</strong>(<code>row.empty</code>): "상품을 찾을 수 없습니다" 안내</li>
+<li><strong>예외</strong>(<code>except</code>): "일시적 오류, 잠시 후 다시" 안내</li>
+</ul>
+<hr/>
+<h2 id="3-db">3. DB 다운 시뮬레이션</h2>
+<p>인프라 장애를 흉내 내기 위해, 스위치 하나로 강제 예외를 던지게 해 봅니다. (실습 파일: <code>sections/05_function_calling/07_도구-실행-오류-처리.py</code>)</p>
+<pre><code class="language-python">DB_DOWN = False   # True 면 재고 조회가 강제로 예외를 던진다
+
+def get_stock(product_name: str) -&gt; str:
+    """상품명을 받아 현재 재고 수량을 반환한다."""
+    try:
+        if DB_DOWN:
+            raise ConnectionError("재고 DB 연결 실패(timeout)")   # 장애 흉내
+        # ... (정상 조회 로직)
+    except Exception as e:
+        return f"일시적인 시스템 오류로 재고를 조회하지 못했습니다. (사유: {e})"
+</code></pre>
+<hr/>
+<h2 id="4">4. 오류 결과를 모델에 돌려 최종 안내 만들기</h2>
+<p>06번의 수동 루프 구조를 그대로 쓰되, 도구가 <strong>오류 문자열</strong>을 반환해도 그걸 모델에 넘깁니다. 모델은 그 오류를 보고 <strong>사과하며 안내</strong>합니다.</p>
+<pre><code class="language-python">def run_turn(question: str) -&gt; str:
+    resp = client.models.generate_content(
+        model=GEMINI_MODEL, contents=question,
+        config=types.GenerateContentConfig(
+            tools=[get_stock, get_exchange_rate],
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+            temperature=0),
+    )
+    if not resp.function_calls:
+        return resp.text
+
+    history = [types.Content(role="user", parts=[types.Part(text=question)])]
+    for fc in resp.function_calls:
+        result = TOOLS[fc.name](**dict(fc.args))   # 오류는 함수 내부 try/except 가 흡수
+        history.append(types.Content(role="model", parts=[types.Part(function_call=fc)]))
+        history.append(types.Content(role="user", parts=[types.Part.from_function_response(
+            name=fc.name, response={"result": result})]))
+
+    # 오류 메시지를 포함한 결과를 모델에 되돌려 최종 안내문을 만든다
+    followup = client.models.generate_content(
+        model=GEMINI_MODEL, contents=history,
+        config=types.GenerateContentConfig(
+            system_instruction="너는 승승장구몰 CS 상담원이다. 도구 결과가 오류면 "
+                               "사과하고 다음 행동을 정중히 안내하라.",
+            temperature=0.3),
+    )
+    return followup.text
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[1] 없는 상품 조회
+A: 죄송합니다, '존재하지않는상품XYZ' 상품을 찾을 수 없습니다. 정확한 상품명을 알려주시면 다시 확인해 드리겠습니다.
+
+[3] DB 다운 시뮬레이션
+A: 죄송합니다. 일시적인 시스템 오류로 재고를 조회하지 못했습니다. 잠시 후 다시 시도해 주시거나, 잠시 뒤 문의 주시면 빠르게 도와드리겠습니다.
+</code></pre>
+<p>에이전트가 <strong>멈추지 않고</strong> 정중하게 안내합니다. 오류가 났는데도 서비스가 살아 있죠.</p>
+<hr/>
+<h2 id="5">5. 왜 이게 중요한가</h2>
+<p>해피 패스(happy path, 모든 게 잘 되는 경우)만 처리하는 에이전트는 <strong>장난감</strong>입니다. 실제 서비스는 <strong>실패를 우아하게 다뤄야</strong> 합니다. 이 "예외를 친절한 메시지로 변환" 패턴은 앞으로 모든 도구·에이전트에서 반복됩니다(12강 폴백, 29강 재시도).</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>도구는 <strong>빈 결과·잘못된 입력·인프라 장애</strong>로 실패할 수 있다.</li>
+<li><code>try/except</code>로 잡아 <strong>예외 대신 친절한 문자열</strong>을 반환한다(공식 권장 방식).</li>
+<li>모델은 그 오류 문자열을 보고 <strong>사과·안내</strong>한다 → 에이전트가 멈추지 않는다.</li>
+<li>해피 패스만이 아니라 <strong>실패 처리</strong>가 진짜 서비스의 조건이다.</li>
+<li>다음 절에서 5강을 정리합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_따라하기-수동-루프로-결정-관찰.html"><span class="lbl">← 이전 절</span>06. 따라하기 수동 루프로 결정 관찰</a><a class="nxt" href="08_정리-체크리스트.html"><span class="lbl">다음 절 →</span>08. 정리 체크리스트</a></div>
+</div>
+</body></html>

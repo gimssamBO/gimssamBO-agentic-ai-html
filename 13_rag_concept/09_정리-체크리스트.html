@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제13강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제13강 · rag concept</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제13강 · rag concept — 세부 목차</b><a class="" href="01_검색으로-근거를-찾아-답하기.html">01. 검색으로 근거를 찾아 답하기</a><a class="" href="02_LLM의-세가지-한계.html">02. LLM의 세가지 한계</a><a class="" href="03_RAG-파이프라인-5단계.html">03. RAG 파이프라인 5단계</a><a class="" href="04_왜-청킹하는가.html">04. 왜 청킹하는가</a><a class="" href="05_따라하기-PDF-로드하기.html">05. 따라하기 PDF 로드하기</a><a class="" href="06_따라하기-청킹하기.html">06. 따라하기 청킹하기</a><a class="" href="07_청크-크기와-오버랩-튜닝.html">07. 청크 크기와 오버랩 튜닝</a><a class="" href="08_다양한-문서-로더.html">08. 다양한 문서 로더</a><a class="cur" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="13">13강에서 배운 것</h2>
+<p>13강에서는 RAG의 개념과 첫 두 단계(로드·청킹)를 배웠습니다.</p>
+<ul>
+<li><strong>RAG</strong>: 답이 있는 문서를 검색해 근거로 삼아 답을 생성하는 기법.</li>
+<li><strong>LLM의 세 한계</strong>: 지식 컷오프·환각·사내 문서 모름 → RAG가 모두 보완.</li>
+<li><strong>5단계 파이프라인</strong>: 로드 → 청킹 → 임베딩 → 저장/검색 → 생성.</li>
+<li><strong>청킹</strong>: 긴 문서를 작은 조각으로 — <code>chunk_size</code>, <code>chunk_overlap</code>.</li>
+<li><strong>다양한 로더</strong>: PDF·CSV·텍스트·마크다운 모두 같은 <code>Document</code> 구조.</li>
+</ul>
+<hr/>
+<h2 id="_2">한눈에 보는 핵심 코드</h2>
+<pre><code class="language-python">from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from common import DOCS
+
+# ① 로드 — PDF를 페이지 단위 Document로
+docs = PyPDFLoader(str(DOCS / "환불교환정책.pdf")).load()
+
+# ② 청킹 — 작은 조각으로 (metadata 보존)
+splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+chunks = splitter.split_documents(docs)
+
+print(f"{len(docs)}페이지 → {len(chunks)}개 청크")
+print(chunks[0].page_content)        # 본문
+print(chunks[0].metadata)            # {'source': ..., 'page': 0}
+</code></pre>
+<hr/>
+<h2 id="_3">이 강에서 설치한 라이브러리</h2>
+<pre><code class="language-bash">pip install langchain langchain-community langchain-text-splitters pypdf
+</code></pre>
+<hr/>
+<h2 id="rag-5">RAG 5단계 진행 상황</h2>
+<pre><code class="language-text">✓ ① 로드      (13강 — 이번 강)
+✓ ② 청킹      (13강 — 이번 강)
+  ③ 임베딩    (14강 — 다음 강)
+  ④ 저장/검색  (15강)
+  ⑤ 생성      (16강)
+</code></pre>
+<hr/>
+<h2 id="_4">체크리스트</h2>
+<ul>
+<li>[ ] RAG가 LLM의 세 한계를 어떻게 보완하는지 설명할 수 있다.</li>
+<li>[ ] RAG 파이프라인 5단계를 순서대로 말할 수 있다.</li>
+<li>[ ] 인덱싱(사전 배치)과 질의(매 요청)의 차이를 안다.</li>
+<li>[ ] <code>PyPDFLoader</code>로 PDF를 로드하고 <code>RecursiveCharacterTextSplitter</code>로 청킹했다.</li>
+<li>[ ] 청킹하는 이유(토큰·비용·검색 정확도)를 설명할 수 있다.</li>
+</ul>
+<hr/>
+<h2 id="_5">한 줄 핵심</h2>
+<blockquote>
+<p><strong>RAG는 외부 문서를 검색해 근거로 답한다. 그 첫걸음은 문서를 로드하고, 검색하기 좋은 작은 조각(청크)으로 나누는 것이다.</strong></p>
+</blockquote>
+<hr/>
+<h2 id="_6">다음 강 예고</h2>
+<p>13강에서 청크가 "단어 매칭"으로만 검색된다는 한계를 봤습니다. "돈 돌려받기"로는 "환불"을 못 찾았죠. 14강 <strong>임베딩</strong>에서 이 한계를 풉니다. 텍스트를 <strong>벡터(숫자)</strong> 로 바꾸면, 단어가 달라도 <strong>의미가 비슷하면</strong> 찾을 수 있습니다. RAG의 심장인 "의미 기반 검색"의 원리를 배웁니다.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="08_다양한-문서-로더.html"><span class="lbl">← 이전 절</span>08. 다양한 문서 로더</a><a class="nxt" href="10_실습문제와-해답.html"><span class="lbl">다음 절 →</span>10. 실습문제와 해답</a></div>
+</div>
+</body></html>

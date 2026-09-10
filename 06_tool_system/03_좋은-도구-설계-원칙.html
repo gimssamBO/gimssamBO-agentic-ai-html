@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제6강 — 좋은 도구 설계 원칙</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제6강 · tool system</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제6강 · tool system — 세부 목차</b><a class="" href="01_도구가-많아지면-생기는-문제.html">01. 도구가 많아지면 생기는 문제</a><a class="" href="02_모델은-무엇을-보고-도구를-고르나.html">02. 모델은 무엇을 보고 도구를 고르나</a><a class="cur" href="03_좋은-도구-설계-원칙.html">03. 좋은 도구 설계 원칙</a><a class="" href="04_따라하기-도구-4개-등록하고-관찰.html">04. 따라하기 도구 4개 등록하고 관찰</a><a class="" href="05_따라하기-독스트링-망가뜨려보기.html">05. 따라하기 독스트링 망가뜨려보기</a><a class="" href="06_비슷한-도구-구분하기.html">06. 비슷한 도구 구분하기</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">좋은 도구 설계 원칙</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>좋은 도구는 다섯 가지 원칙을 지킵니다: <strong>한 도구는 한 가지 일 · 이름이 곧 기능 · 인자가 명확 · 설명이 구체적 · 반환이 일관</strong>. 이 원칙들은 모두 "모델이 도구를 정확히 고르고 올바르게 쓰게" 하기 위한 것입니다.</p>
+<hr/>
+<h2 id="1">1. 다섯 가지 원칙</h2>
+<table>
+<thead>
+<tr>
+<th>원칙</th>
+<th>나쁜 예</th>
+<th>좋은 예</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>한 도구는 한 가지 일</td>
+<td><code>do_everything()</code></td>
+<td><code>get_price</code>, <code>get_stock</code> 분리</td>
+</tr>
+<tr>
+<td>이름이 곧 기능</td>
+<td><code>func1</code>, <code>helper</code></td>
+<td><code>get_order_status</code></td>
+</tr>
+<tr>
+<td>인자가 명확</td>
+<td><code>q: str</code>("뭐든 넣어")</td>
+<td><code>product_name: str</code></td>
+</tr>
+<tr>
+<td>설명이 구체적</td>
+<td>"정보를 준다"</td>
+<td>"상품명을 받아 판매가(원)를 반환한다"</td>
+</tr>
+<tr>
+<td>반환이 일관</td>
+<td>때론 dict, 때론 None</td>
+<td>항상 사람이 읽는 문자열</td>
+</tr>
+</tbody>
+</table>
+<p>하나씩 봅시다.</p>
+<hr/>
+<h2 id="2-1">2. 원칙 ① — 한 도구는 한 가지 일</h2>
+<p>도구 하나가 여러 일을 하면, 모델은 "이 도구를 언제 써야 하지?"를 판단하기 어렵습니다.</p>
+<pre><code class="language-python"># 나쁨 — 한 도구가 가격·재고·주문을 다 처리
+def product_tool(query: str, mode: str) -&gt; str:
+    """mode에 따라 가격/재고/주문을 처리한다."""   # 모델이 mode를 잘못 줄 수 있음
+    ...
+
+# 좋음 — 일마다 도구를 나눔
+def get_price(product_name: str) -&gt; str: ...
+def get_stock(product_name: str) -&gt; str: ...
+def get_order_status(order_id: str) -&gt; str: ...
+</code></pre>
+<p>도구를 나누면 각 도구의 역할이 또렷해져, 모델이 고르기 쉽습니다.</p>
+<hr/>
+<h2 id="3-2">3. 원칙 ② — 이름이 곧 기능</h2>
+<p>함수 이름만 봐도 무슨 일을 하는지 알 수 있어야 합니다. 모델은 이름도 선택 근거로 씁니다.</p>
+<pre><code class="language-python">def func1(x): ...          # 나쁨 — 이름에 정보가 없음
+def get_order_status(order_id): ...   # 좋음 — 이름이 곧 설명
+</code></pre>
+<p><code>get_</code>(조회), <code>search_</code>(검색), <code>update_</code>(수정) 같은 <strong>동사 접두사</strong>를 일관되게 쓰면 더 명확합니다.</p>
+<hr/>
+<h2 id="4-3">4. 원칙 ③ — 인자가 명확</h2>
+<p>인자 이름과 타입이 명확해야 모델이 올바른 값을 채웁니다.</p>
+<pre><code class="language-python">def lookup(q: str): ...                    # 나쁨 — q가 뭘 넣는 건지 모름
+def get_price(product_name: str): ...      # 좋음 — '상품명'을 넣으라고 명확
+def get_order_status(order_id: str): ...   # 좋음 — '주문번호'를 넣으라고 명확
+</code></pre>
+<p>인자 이름이 <code>product_name</code>이면 모델은 질문에서 상품명을 뽑아 넣고, <code>order_id</code>면 주문번호를 뽑아 넣습니다.</p>
+<hr/>
+<h2 id="5-4">5. 원칙 ④ — 설명이 구체적</h2>
+<p>가장 중요한 원칙입니다(02번에서 강조). 설명은 <strong>무엇을 + 언제</strong>를 담습니다.</p>
+<pre><code class="language-python">def get_price(product_name: str) -&gt; str:
+    """상품명(일부만 입력해도 됨)을 받아 판매가(원)를 반환한다. 가격/얼마 질문에 사용."""
+    # 독스트링 = '무엇을'(상품명→판매가) + '언제'(가격/얼마 질문)
+</code></pre>
+<p>"정보를 반환한다" 같은 모호한 설명은 모델을 헷갈리게 합니다.</p>
+<hr/>
+<h2 id="6-5">6. 원칙 ⑤ — 반환이 일관</h2>
+<p>도구는 <strong>항상 같은 형태</strong>로 결과를 돌려줘야 합니다. 이 과정에서는 <strong>사람이 읽는 문자열</strong>로 통일합니다.</p>
+<pre><code class="language-python"># 나쁨 — 때론 dict, 때론 None, 때론 숫자
+def get_price(name):
+    if found: return {"price": 59000}   # dict
+    else: return None                    # None ← 모델이 처리하기 곤란
+
+# 좋음 — 항상 문자열 (없을 때도 안내 문자열)
+def get_price(name):
+    if found: return "승승 슬림핏 청바지 판매가 59,000원"
+    else: return "'슬림핏 청바지' 가격 정보를 찾지 못했습니다."   # 없어도 문자열
+</code></pre>
+<p>모델은 문자열을 읽고 답을 만듭니다. 반환이 일관되면 모델이 결과를 안정적으로 다룰 수 있습니다.</p>
+<hr/>
+<h2 id="7">7. 한 줄로 외우는 원칙</h2>
+<blockquote>
+<p><strong>"도구 설명은 모델을 위한 프롬프트다."</strong> 동료 개발자가 아니라 <strong>모델이 읽는다</strong>고 생각하고, 이름·인자·설명·반환을 모두 또렷하게 만드세요.</p>
+</blockquote>
+<p>이 원칙들은 raw SDK든 LangChain이든 똑같이 적용됩니다. <strong>"설명을 잘 쓰는 사람"</strong> 이 좋은 도구를 만듭니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>다섯 원칙: <strong>한 가지 일 · 이름이 곧 기능 · 명확한 인자 · 구체적 설명 · 일관된 반환</strong>.</li>
+<li>모두 "모델이 도구를 잘 고르고 올바르게 쓰게" 하기 위한 것이다.</li>
+<li>반환은 <strong>항상 사람이 읽는 문자열</strong>(없을 때도 안내 문자열)로 통일한다.</li>
+<li>다음 절에서 이 원칙대로 도구 4개를 만들어 등록하고 관찰합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="02_모델은-무엇을-보고-도구를-고르나.html"><span class="lbl">← 이전 절</span>02. 모델은 무엇을 보고 도구를 고르나</a><a class="nxt" href="04_따라하기-도구-4개-등록하고-관찰.html"><span class="lbl">다음 절 →</span>04. 따라하기 도구 4개 등록하고 관찰</a></div>
+</div>
+</body></html>

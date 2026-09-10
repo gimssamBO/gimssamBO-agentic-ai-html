@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제12강 — 따라하기 — 도구 3종 정의</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제12강 · multi tool agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제12강 · multi tool agent — 세부 목차</b><a class="" href="01_여러-도구를-통합하다.html">01. 여러 도구를 통합하다</a><a class="" href="02_도구-라우팅.html">02. 도구 라우팅</a><a class="cur" href="03_따라하기-도구-3종-정의.html">03. 따라하기 도구 3종 정의</a><a class="" href="04_따라하기-하나의-에이전트로-통합.html">04. 따라하기 하나의 에이전트로 통합</a><a class="" href="05_따라하기-연쇄-호출-질문.html">05. 따라하기 연쇄 호출 질문</a><a class="" href="06_도구-실패시-폴백-처리.html">06. 도구 실패시 폴백 처리</a><a class="" href="07_도구-입력-검증.html">07. 도구 입력 검증</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="3">따라하기 — 도구 3종 정의</h1>
+<h2 id="_1">목표</h2>
+<p>주문 조회·재고 조회·매출 분석, 세 가지 도구를 만듭니다. 실제 파일은 <code>code/ch12_multi_tool.py</code> 입니다.</p>
+<hr/>
+<h2 id="0">0. 실습 준비 (설치)</h2>
+<pre><code class="language-bash">conda activate agentic
+
+# 12강에 필요한 라이브러리 (앞 강에서 설치했다면 생략 가능)
+pip install langchain langchain-google-genai langgraph pandas
+</code></pre>
+<p>이번 강은 <code>data/orders.csv</code>(주문)와 <code>data/inventory.csv</code>(재고)를 씁니다.</p>
+<hr/>
+<h2 id="1">1. 공통 시작부 + 데이터 로드</h2>
+<pre><code class="language-python"># 실행: python code/ch12_multi_tool.py
+import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+import pandas as pd
+from langchain_core.tools import tool
+from langchain.agents import create_agent
+from common import get_chat, DATA
+
+llm = get_chat(provider="gemini")
+
+# 데이터는 모듈 로드 시 1회만 읽는다 (도구 호출마다 read_csv 하면 느려진다)
+orders = pd.read_csv(DATA / "orders.csv")
+inventory = pd.read_csv(DATA / "inventory.csv")
+orders["order_date"] = pd.to_datetime(orders["order_date"])
+orders["month"] = orders["order_date"].dt.strftime("%Y-%m")
+</code></pre>
+<blockquote>
+<p>성능 팁: 데이터를 <strong>모듈 로드 시 한 번만</strong> 읽습니다. 도구가 호출될 때마다 <code>read_csv</code>를 하면 매번 디스크를 읽어 느려집니다. 한 번 읽어 메모리에 두고 재사용하는 게 정석입니다.</p>
+</blockquote>
+<hr/>
+<h2 id="2-1">2. 도구 ① — 주문 상태 조회</h2>
+<pre><code class="language-python">@tool
+def get_order_status(customer_id: str) -&gt; str:
+    """고객 ID(예: 'C0001')의 가장 최근 주문 1건의 상태를 조회한다.
+    상품명, product_id, 주문일, 상태('배송완료'/'배송중'/'결제완료'/'취소'/'환불')를 반환한다."""
+    df = orders[orders["customer_id"] == customer_id]   # 해당 고객의 주문만 필터
+    if df.empty:
+        return f"{customer_id} 고객의 주문 내역이 없습니다."
+    latest = df.sort_values("order_date").iloc[-1]      # 가장 최근 1건
+    return (
+        f"최근 주문: {latest['product_name']}(product_id={latest['product_id']}), "
+        f"주문일 {latest['order_date'].date()}, 상태 '{latest['status']}'"
+    )
+</code></pre>
+<p><strong>중요 포인트</strong>: 반환값에 <strong><code>product_id</code>를 포함</strong>시켰습니다. 이게 연쇄 호출의 비결입니다. 다음 도구(재고 조회)가 이 product_id를 입력으로 받거든요.</p>
+<hr/>
+<h2 id="3-2">3. 도구 ② — 재고 조회</h2>
+<pre><code class="language-python">@tool
+def get_stock(product_id: str) -&gt; str:
+    """product_id(예: 'P0001')의 현재 재고 수량, 창고, 재주문 기준을 조회한다."""
+    # [연쇄] 앞 도구가 돌려준 product_id를 이 도구의 입력으로 이어 쓰는 것이 멀티툴의 핵심
+    df = inventory[inventory["product_id"] == product_id]
+    if df.empty:
+        return f"{product_id} 의 재고 정보가 없습니다."
+    r = df.iloc[0]
+    # 재고가 재주문기준 이하면 경고 문구를 덧붙인다
+    warn = " (재주문 필요!)" if int(r["stock"]) &lt;= int(r["reorder_level"]) else ""
+    return f"{r['product_name']}({product_id}) 재고 {r['stock']}개, 창고 {r['warehouse']}{warn}"
+</code></pre>
+<p>이 도구의 입력은 <code>product_id</code>입니다. 주문 조회 도구가 돌려준 그 product_id를 받아 재고를 찾습니다.</p>
+<hr/>
+<h2 id="4-3">4. 도구 ③ — 매출 분석</h2>
+<p>10·11강에서 만든 <code>run_pandas</code>를 그대로 씁니다.</p>
+<pre><code class="language-python">@tool
+def run_pandas(expr: str) -&gt; str:
+    """주문 데이터(orders)로 매출 등을 분석하는 pandas 식을 실행한다.
+    사용 가능: orders(컬럼: month, category, amount, status 등), pd.
+    매출 집계 시 status가 '취소','환불'인 건은 제외한다.
+    예: "orders[(orders['status']=='배송완료')&amp;(orders['month']=='2026-05')]['amount'].sum()" """
+    try:
+        result = eval(expr, {"__builtins__": {}}, {"orders": orders, "pd": pd})
+    except Exception as e:
+        return f"실행 오류: {e}"
+    return str(result)
+</code></pre>
+<hr/>
+<h2 id="5">5. 세 도구의 역할 분담</h2>
+<table>
+<thead>
+<tr>
+<th>도구</th>
+<th>입력</th>
+<th>출력</th>
+<th>데이터</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>get_order_status</code></td>
+<td>고객ID</td>
+<td>주문 상태 + product_id</td>
+<td>orders.csv</td>
+</tr>
+<tr>
+<td><code>get_stock</code></td>
+<td>product_id</td>
+<td>재고 수량</td>
+<td>inventory.csv</td>
+</tr>
+<tr>
+<td><code>run_pandas</code></td>
+<td>pandas 식</td>
+<td>분석 결과</td>
+<td>orders.csv</td>
+</tr>
+</tbody>
+</table>
+<p>세 도구가 <strong>역할이 또렷이 구분</strong>됩니다(6강 도구 설계 원칙). 그래야 LLM이 라우팅을 잘하죠. 그리고 <code>get_order_status</code>의 출력(product_id)이 <code>get_stock</code>의 입력으로 <strong>이어지게</strong> 설계했습니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>데이터는 <strong>모듈 로드 시 1회만</strong> 읽는다(성능).</li>
+<li><code>get_order_status</code>는 반환에 <strong>product_id를 포함</strong>(연쇄용).</li>
+<li><code>get_stock</code>은 그 <strong>product_id를 입력</strong>으로 받음.</li>
+<li>세 도구의 <strong>역할이 또렷이 구분</strong>되어야 라우팅이 정확.</li>
+<li>다음 절에서 세 도구를 하나의 에이전트로 통합합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="02_도구-라우팅.html"><span class="lbl">← 이전 절</span>02. 도구 라우팅</a><a class="nxt" href="04_따라하기-하나의-에이전트로-통합.html"><span class="lbl">다음 절 →</span>04. 따라하기 하나의 에이전트로 통합</a></div>
+</div>
+</body></html>

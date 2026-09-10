@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제28강 — 따라하기 — 설계를 코드 스켈레톤으로</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제28강 · project design</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제28강 · project design — 세부 목차</b><a class="" href="01_바로-코딩이-망하는-이유.html">01. 바로 코딩이 망하는 이유</a><a class="" href="02_요구사항-정의와-기능-분해.html">02. 요구사항 정의와 기능 분해</a><a class="" href="03_구성요소-필요성-판단.html">03. 구성요소 필요성 판단</a><a class="" href="04_아키텍처와-인터페이스-설계.html">04. 아키텍처와 인터페이스 설계</a><a class="cur" href="05_따라하기-설계를-코드-스켈레톤으로.html">05. 따라하기 설계를 코드 스켈레톤으로</a><a class="" href="06_트레이드오프-판단-RAG-멀티에이전트.html">06. 트레이드오프 판단 RAG 멀티에이전트</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">따라하기 — 설계를 코드 스켈레톤으로</h1>
+<h2 id="_2">목표</h2>
+<p>지금까지의 설계를 <strong>코드 스켈레톤</strong>(함수 시그니처 + TODO 주석)으로 박제합니다. 실제 구현은 30강에서 채우고, 이번엔 <strong>실행하면 설계 요약을 출력하는</strong> "살아있는 설계 문서"를 만듭니다. 실제 파일은 <code>code/ch28_design.py</code> 입니다.</p>
+<hr/>
+<h2 id="0">0. 실습 준비</h2>
+<pre><code class="language-bash">conda activate agentic
+
+# 이번 강은 LLM을 호출하지 않습니다. 설계를 코드로 박제만 합니다.
+pip install pyyaml          # (30강 config 로드 대비, 표준 dataclass만 써도 됨)
+</code></pre>
+<blockquote>
+<p>이번 실습은 <strong>LLM 호출이 없습니다.</strong> <code>dataclass</code>와 함수 시그니처로 설계를 고정하고, 실행하면 설계 요약을 출력하는 게 전부입니다.</p>
+</blockquote>
+<hr/>
+<h2 id="1">1. 시작부 &amp; 설계 명세</h2>
+<p><code>code/ch28_design.py</code>를 만듭니다.</p>
+<pre><code class="language-python"># -*- coding: utf-8 -*-
+# 실행: python code/ch28_design.py
+import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))  # code/ 를 import 경로에
+from common import DATA, DOCS
+
+from dataclasses import dataclass
+
+# [왜 설계 먼저] 30강에서 RAG+도구+메모리를 한꺼번에 구현하기 전에, 이 파일로
+#   '무엇을 만들지'를 코드 스켈레톤(시그니처+TODO)으로 못 박는다. 함수 이름·시그니처를
+#   먼저 합의해두면 구현 단계에서 설계가 흔들리지 않는다('살아있는 설계 문서').
+
+
+@dataclass
+class AgentSpec:
+    """통합 CS 에이전트의 설계 명세(요약). dataclass 로 설정값을 한눈에 본다."""
+    name: str = "승승장구몰 통합 CS 에이전트"
+    tools: tuple = ("get_order_status", "get_stock", "search_faq", "policy_search")
+    use_rag: bool = True          # 정책/멤버십 PDF 검색에 RAG 사용
+    use_memory: bool = True       # 단기 기억(thread 별 대화 세션)
+    use_multi_agent: bool = False # [왜 단일] 도구가 4개뿐이라 역할 분리 불필요 → 단일로 시작
+</code></pre>
+<p><code>AgentSpec</code>은 3단계의 <strong>판단 결과를 코드로</strong> 옮긴 것입니다. "RAG 쓴다(True), 멀티에이전트 안 쓴다(False)"가 <strong>한 곳에 박제</strong>돼, 나중에 "왜 이렇게 정했지?"의 답이 코드에 남습니다.</p>
+<hr/>
+<h2 id="2-30-todo">2. 도구 시그니처 (구현은 30강 TODO)</h2>
+<p>2단계에서 분해한 함수들을 <strong>시그니처 + TODO</strong> 로 적습니다.</p>
+<pre><code class="language-python">def get_order_status(order_id: str) -&gt; str:
+    """[R2] 주문번호로 주문 상태를 반환. (30강: orders.csv 조회)"""
+    raise NotImplementedError("30강에서 구현")  # TODO
+
+
+def get_stock(product_name: str) -&gt; str:
+    """[R3] 상품명으로 재고 수량을 반환. (30강: inventory.csv 조회)"""
+    raise NotImplementedError("30강에서 구현")  # TODO
+
+
+def search_faq(keyword: str) -&gt; str:
+    """[R4] 키워드로 FAQ 답변을 반환. (30강: faq.csv 조회)"""
+    raise NotImplementedError("30강에서 구현")  # TODO
+
+
+def policy_search(query: str) -&gt; str:
+    """[R1] 정책/멤버십 문서를 RAG로 검색. (30강: FAISS retriever)"""
+    raise NotImplementedError("30강에서 구현")  # TODO
+</code></pre>
+<p><strong>핵심 기법</strong>:</p>
+<ul>
+<li><strong>독스트링에 요구사항 번호([R1]~[R4])</strong> 를 적어, 함수가 어떤 요구사항을 푸는지 추적 가능.</li>
+<li>본문은 <code>raise NotImplementedError("30강에서 구현")</code> — <strong>"아직 안 만들었다"를 명시적으로</strong> 표시. 실수로 호출하면 바로 에러로 알려줍니다.</li>
+<li>시그니처(이름·입력·출력)는 <strong>확정</strong> — 30강에서 본문만 채우면 됩니다.</li>
+</ul>
+<hr/>
+<h2 id="3">3. 에이전트 빌더 &amp; 진입 함수 시그니처</h2>
+<p>5단계 인터페이스(<code>answer</code>)와 빌더를 적습니다.</p>
+<pre><code class="language-python">def build_agent():
+    """설정+도구+RAG+메모리를 결합해 create_agent를 만든다. (30강)"""
+    # TODO(30강): config 로드 → llm → tools=[...] → checkpointer=InMemorySaver()
+    #   [설계 의도] InMemorySaver(단기 메모리) + thread_id 로 대화 세션을 구분한다.
+    raise NotImplementedError("30강에서 구현")
+
+
+def answer(message: str, thread_id: str = "demo") -&gt; str:
+    """외부에 노출되는 단일 진입점. thread_id로 대화 세션을 구분한다.
+
+    [왜 단일 진입점] FastAPI 같은 외부 호출은 이 함수 하나만 부르면 되게 만든다(29강 운영 계약).
+    같은 thread_id = 같은 대화로 묶여 '아까 그 정책' 같은 맥락이 이어진다.
+    """
+    # TODO(30강): agent.invoke({"messages":[...]}, {"configurable":{"thread_id":...}})
+    raise NotImplementedError("30강에서 구현")
+</code></pre>
+<p>TODO 주석에 <strong>"무엇을 어떻게 구현할지"</strong> 까지 적어둡니다(<code>config 로드 → llm → tools → checkpointer</code>). 30강의 나에게 <strong>자세한 메모를 남기는</strong> 거죠.</p>
+<hr/>
+<h2 id="4">4. 설계 요약 출력 — 살아있는 문서</h2>
+<p>실행하면 설계가 보이게 만듭니다.</p>
+<pre><code class="language-python">def print_design():
+    spec = AgentSpec()
+    print("=" * 60)
+    print(f"[설계] {spec.name}")
+    print("=" * 60)
+    print("요구사항:")
+    print("  R1 정책 안내(RAG) / R2 주문상태 / R3 재고 / R4 FAQ / R5 대화기억")
+    print(f"\n도구 목록: {', '.join(spec.tools)}")
+    print(f"RAG 사용 : {spec.use_rag}  (대상: 정책/멤버십 PDF @ {DOCS})")
+    print(f"메모리   : {spec.use_memory} (단기, thread_id 별)")
+    print(f"멀티에이전트: {spec.use_multi_agent} (도구 4개 → 단일 에이전트로 시작)")
+    print("\n데이터 흐름:")
+    print("  사용자 → answer(message, thread_id) → create_agent")
+    print("         → [도구/RAG 선택 실행] → [InMemorySaver 기록] → 답변")
+    print(f"\n데이터 소스: {DATA}")
+    print("운영 계약 : POST /chat {thread_id, message} (FastAPI, 29강)")
+
+
+if __name__ == "__main__":
+    print_design()
+</code></pre>
+<p><strong>실행 결과</strong></p>
+<pre><code class="language-text">============================================================
+[설계] 승승장구몰 통합 CS 에이전트
+============================================================
+요구사항:
+  R1 정책 안내(RAG) / R2 주문상태 / R3 재고 / R4 FAQ / R5 대화기억
+
+도구 목록: get_order_status, get_stock, search_faq, policy_search
+RAG 사용 : True  (대상: 정책/멤버십 PDF @ .../data/docs)
+메모리   : True (단기, thread_id 별)
+멀티에이전트: False (도구 4개 → 단일 에이전트로 시작)
+
+데이터 흐름:
+  사용자 → answer(message, thread_id) → create_agent
+         → [도구/RAG 선택 실행] → [InMemorySaver 기록] → 답변
+
+데이터 소스: .../data
+운영 계약 : POST /chat {thread_id, message} (FastAPI, 29강)
+</code></pre>
+<hr/>
+<h2 id="5">5. "살아있는 설계 문서"의 가치</h2>
+<p>이 스켈레톤이 그냥 메모와 다른 점:</p>
+<pre><code class="language-text">[죽은 문서]   워드/노션에 적은 설계 → 코드와 따로 놂 → 점점 안 맞아짐
+[살아있는 문서] 코드 자체가 설계 → 실행하면 요약 출력 → 30강에서 TODO만 채움
+              → 설계와 구현이 '같은 파일'에서 이어짐
+</code></pre>
+<p><strong>관찰 포인트</strong></p>
+<ul>
+<li>설계가 <strong>코드로 박제</strong>돼, 30강에서 시그니처를 그대로 채우면 됩니다.</li>
+<li><code>AgentSpec</code> 한 곳에 "무엇을 쓰는지"가 모여, <strong>의사결정 근거</strong>가 남습니다.</li>
+<li>실행만 해도 <strong>설계 요약</strong>이 나오니, 팀원에게 공유하기 좋습니다.</li>
+<li>다음 절(06번)에서는 이 "구성요소 판단"을 <strong>규칙으로 자동화한 도우미</strong>를 만들어, 다른 프로젝트에도 적용해 봅니다.</li>
+</ul>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>설계를 <strong>코드 스켈레톤</strong>(<code>@dataclass AgentSpec</code> + 함수 시그니처 + TODO)으로 박제.</li>
+<li>도구 본문은 <code>raise NotImplementedError("30강에서 구현")</code> — "아직 안 만듦"을 명시.</li>
+<li>독스트링에 <strong>요구사항 번호([R1]~)</strong>, TODO에 <strong>구현 방법 메모</strong> → 30강의 나를 위한 안내.</li>
+<li><code>print_design()</code>으로 <strong>실행하면 설계 요약 출력</strong> = 살아있는 설계 문서.</li>
+<li>설계와 구현이 <strong>같은 파일에서 이어져</strong>, 30강에선 TODO만 채우면 됨.</li>
+<li>다음 절에서 구성요소 판단을 <strong>규칙으로 자동화</strong>합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="04_아키텍처와-인터페이스-설계.html"><span class="lbl">← 이전 절</span>04. 아키텍처와 인터페이스 설계</a><a class="nxt" href="06_트레이드오프-판단-RAG-멀티에이전트.html"><span class="lbl">다음 절 →</span>06. 트레이드오프 판단 RAG 멀티에이전트</a></div>
+</div>
+</body></html>

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제23강 — 이 스크립트 왜 안 돌지?</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제23강 · coding agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제23강 · coding agent — 세부 목차</b><a class="cur" href="01_이-스크립트-왜-안돌지.html">01. 이 스크립트 왜 안돌지</a><a class="" href="02_코딩-에이전트의-핵심-루프.html">02. 코딩 에이전트의 핵심 루프</a><a class="" href="03_안전과-책임.html">03. 안전과 책임</a><a class="" href="04_따라하기-버그-읽고-수정-요청.html">04. 따라하기 버그 읽고 수정 요청</a><a class="" href="05_따라하기-저장하고-실행해-검증.html">05. 따라하기 저장하고 실행해 검증</a><a class="" href="06_재귀적-버그수정-오류-피드백-루프.html">06. 재귀적 버그수정 오류 피드백 루프</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">이 스크립트 왜 안 돌지?</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>승승장구몰 데이터팀이 넘겨준 매출 스크립트 <code>data/buggy_script.py</code>가 에러를 뱉습니다. 한글 인코딩 누락, 문자열을 숫자처럼 더하기, 숫자를 문자열로 비교 — 흔한 버그 3종이 섞여 있죠. 이번 강에서는 <strong>LLM이 코드를 읽고 버그를 찾아 고치는</strong> 코딩 에이전트를 만듭니다.</p>
+<hr/>
+<h2 id="1">1. 흔한 버그가 섞인 스크립트</h2>
+<p>데이터팀에서 받은 스크립트를 그냥 실행해 봅니다.</p>
+<pre><code class="language-bash">python data/buggy_script.py
+</code></pre>
+<p><strong>예상 출력(에러)</strong></p>
+<pre><code class="language-text">Traceback (most recent call last):
+  ...
+TypeError: unsupported operand type(s) for +=: 'int' and 'str'
+</code></pre>
+<p>코드를 들여다보면 흔한 실수가 보입니다.</p>
+<pre><code class="language-python"># buggy_script.py (버그가 섞인 원본)
+with open("data/sales_daily.csv") as f:        # 버그1: encoding 미지정 → 한글 깨짐/에러
+    rows = list(csv.DictReader(f))
+
+total = 0
+for r in rows:
+    total += r["sales"]                         # 버그2: 문자열을 정수처럼 더함 (TypeError)
+
+best = rows[0]
+for r in rows:
+    if r["sales"] &gt; best["sales"]:              # 버그3: 숫자를 '문자열'로 비교 → 최댓값 틀림
+        best = r
+</code></pre>
+<p>세 가지 모두 <strong>파이썬을 막 배운 사람도, 숙련자도 흔히 저지르는</strong> 정형적 버그입니다.</p>
+<hr/>
+<h2 id="2">2. 세 가지 버그의 정체</h2>
+<table>
+<thead>
+<tr>
+<th>버그</th>
+<th>증상</th>
+<th>원인</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>인코딩 누락</td>
+<td>한글 깨짐 또는 <code>UnicodeDecodeError</code></td>
+<td><code>open()</code>에 <code>encoding="utf-8-sig"</code> 안 줌</td>
+</tr>
+<tr>
+<td>문자열 합산</td>
+<td><code>TypeError: int + str</code></td>
+<td>CSV 값은 항상 <strong>문자열</strong> → <code>int()</code> 변환 필요</td>
+</tr>
+<tr>
+<td>문자열 비교</td>
+<td>최댓값이 엉뚱하게 나옴</td>
+<td><code>"9" &gt; "100"</code>이 참(사전식 비교)</td>
+</tr>
+</tbody>
+</table>
+<p>특히 <strong>버그 3</strong>이 무섭습니다. 에러가 안 나고 <strong>조용히 틀린 답</strong>을 주거든요. <code>"9" &gt; "100"</code>은 문자열 비교라 첫 글자 <code>'9' &gt; '1'</code>로 참이 됩니다. 에러 없이 잘못된 최댓값이 나오니, 사람이 눈치채기 어렵죠.</p>
+<pre><code class="language-python"># 문자열 비교의 함정
+print("9" &gt; "100")     # True (사전식: '9' &gt; '1') — 숫자로는 9 &lt; 100인데!
+print(int("9") &gt; int("100"))   # False (올바른 숫자 비교)
+</code></pre>
+<hr/>
+<h2 id="3">3. 사람이 디버깅해도 되지만...</h2>
+<p>물론 사람이 고칠 수 있습니다. 하지만:</p>
+<pre><code class="language-text">- 코드가 길면 버그 찾는 데 시간이 걸림
+- 비슷한 스크립트가 수십 개면 반복 작업
+- 정형적 버그(인코딩·타입·비교)는 패턴이 뻔함
+</code></pre>
+<p>이런 <strong>정형적 버그는 LLM이 빠르게 잡아냅니다.</strong> 학습 데이터에 수많은 파이썬 코드와 버그 수정 사례가 있으니까요. 사람은 더 어려운 문제에 집중하고, 뻔한 버그는 에이전트에게 맡기는 게 효율적이죠.</p>
+<hr/>
+<h2 id="4">4. 코딩 에이전트 — 읽고, 고치고, 검증</h2>
+<p>이번 강에서 만들 코딩 에이전트는 이렇게 동작합니다.</p>
+<p><code>data/buggy_script.py</code>(버그 3개)를 네 단계로 처리합니다.</p>
+<ol>
+<li><strong>읽기</strong> — 소스코드를 문자열로 로드</li>
+<li><strong>수정</strong> — LLM이 버그 찾아 고친 전체 코드 생성</li>
+<li><strong>저장</strong> — 새 파일(<code>fixed_script.py</code>)에 저장 — 원본은 보존!</li>
+<li><strong>검증</strong> — 실제로 실행 → 종료코드 0이면 성공</li>
+</ol>
+<p>핵심은 <strong>"고쳤다는 말만 믿지 않고 실제로 돌려 본다"</strong> 입니다. LLM이 만든 코드는 그럴듯해 보여도 틀릴 수 있으니, 진짜 실행해서 정상 동작(종료코드 0)을 확인하죠. 이게 코딩 에이전트의 <strong>자가 검증(self-verification)</strong> 입니다.</p>
+<hr/>
+<h2 id="5">5. 백엔드 관점 — 자동 코드리뷰 보조</h2>
+<p>코딩 에이전트는 실무에서 <strong>코드리뷰/리팩터 보조 도구</strong>로 직접 쓸 수 있습니다.</p>
+<pre><code class="language-text">- CI에 붙여: PR마다 "버그 의심 지점 + 수정안"을 코멘트로
+- 내부 CLI: "이 스크립트 고쳐줘" → 수정본 새 파일 생성
+- 레거시 정리: 오래된 스크립트의 인코딩·타입 버그 일괄 점검
+</code></pre>
+<p>단, 중요한 원칙이 있습니다(03번에서 자세히). <strong>자동 수정은 "제안"으로 두고 사람이 검토 후 머지</strong>합니다. 원본을 절대 덮어쓰지 않고 새 파일/브랜치에 산출하죠. AI가 고친 코드를 검증 없이 바로 배포하는 건 위험하니까요.</p>
+<hr/>
+<h2 id="6">6. 이번 강에서 배울 것</h2>
+<pre><code class="language-text">1. 코딩 에이전트의 핵심 루프 — 읽기→수정→실행→검증 (02번)
+2. 안전과 책임 — 원본 보존·타임아웃·사람 검토 (03번)
+3. 버그 읽고 수정 요청하기 (04번)
+4. 저장하고 실행해 검증하기 (05번)
+5. [신규] 재귀적 버그 수정 — 오류를 다시 피드백하는 루프 (06번)
+</code></pre>
+<p>특히 06번의 <strong>재귀적 버그 수정</strong>이 백미입니다. 한 번 고쳐서 안 되면, 그 <strong>오류 메시지를 다시 LLM에 먹여</strong> 고치는 self-debugging 루프죠.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li><code>buggy_script.py</code>에는 흔한 버그 3종: <strong>인코딩 누락·문자열 합산·문자열 비교</strong>.</li>
+<li>특히 문자열 비교(<code>"9" &gt; "100"</code>)는 <strong>에러 없이 조용히 틀린 답</strong>을 줘 위험.</li>
+<li>정형적 버그는 <strong>LLM이 빠르게</strong> 잡아냄 → 코딩 에이전트로 자동화.</li>
+<li>핵심은 "고쳤다는 말만 믿지 않고 <strong>실제로 실행해 검증</strong>"(자가 검증).</li>
+<li>백엔드로는 <strong>코드리뷰 보조</strong>(CI 코멘트·내부 CLI) — 단, 사람 검토 후 머지.</li>
+<li>다음 절에서 코딩 에이전트의 핵심 루프를 자세히 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><span class="prv off"><span class="lbl"> </span> </span><a class="nxt" href="02_코딩-에이전트의-핵심-루프.html"><span class="lbl">다음 절 →</span>02. 코딩 에이전트의 핵심 루프</a></div>
+</div>
+</body></html>

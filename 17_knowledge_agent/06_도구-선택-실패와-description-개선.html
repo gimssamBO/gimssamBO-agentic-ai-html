@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제17강 — 도구 선택 실패와 description 개선</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제17강 · knowledge agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제17강 · knowledge agent — 세부 목차</b><a class="" href="01_필요할때만-검색하게.html">01. 필요할때만 검색하게</a><a class="" href="02_항상검색-vs-필요할때검색.html">02. 항상검색 vs 필요할때검색</a><a class="" href="03_RAG를-도구로-만들기.html">03. RAG를 도구로 만들기</a><a class="" href="04_따라하기-retriever를-도구로.html">04. 따라하기 retriever를 도구로</a><a class="" href="05_따라하기-일상질문-vs-정책질문.html">05. 따라하기 일상질문 vs 정책질문</a><a class="cur" href="06_도구-선택-실패와-description-개선.html">06. 도구 선택 실패와 description 개선</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="description">도구 선택 실패와 description 개선</h1>
+<h2 id="_1">한 줄 요약</h2>
+<p>검색 도구의 <code>description</code>은 에이전트의 <strong>라우팅 규칙</strong>입니다. 모호한 설명("문서 검색")은 일상 질문("오늘 날씨 어때?")에도 검색을 호출하는 <strong>실패</strong>를 부릅니다. description을 <strong>"무엇을, 언제 쓰는지"</strong> 구체적으로 못 박으면 오호출이 줄어듭니다.</p>
+<hr/>
+<h2 id="1-description">1. 모호한 description의 실패</h2>
+<p>description을 대충 쓰면 에이전트가 헷갈립니다. (실습 파일: <code>sections/17_knowledge_agent/06_도구-선택-실패와-description-개선.py</code>)</p>
+<pre><code class="language-python"># 나쁨 — 모호한 description
+policy_tool = create_retriever_tool(
+    retriever,
+    name="company_policy_search",
+    description="문서 검색",   # ← 너무 모호! "무슨 문서? 언제 쓰는데?"
+)
+</code></pre>
+<p><code>"문서 검색"</code> 이라고만 하면, 에이전트는 "아무 질문이나 문서 검색해야 하나?"라고 헷갈립니다. 그래서 일상 질문에도 검색을 남발하죠.</p>
+<hr/>
+<h2 id="2">2. 실패 사례 — 오호출</h2>
+<p>모호한 description으로 여러 질문을 던져 봅니다.</p>
+<pre><code class="language-python">QUESTIONS = [
+    "오늘 날씨 어때?",                    # 일상 — 검색하면 안 됨
+    "단순 변심 반품하면 배송비 누가 내요?",  # 정책 — 검색해야 함
+    "VIP 등급 조건이 뭐예요?",            # 정책 — 검색해야 함
+    "2 더하기 3은?",                      # 계산 — 검색하면 안 됨
+]
+</code></pre>
+<p><strong>예상 출력 (모호한 description "문서 검색")</strong></p>
+<pre><code class="language-text">[실패 사례 — 모호한 description]
+[1] (검색함)   오늘 날씨 어때?           ← 잘못! 날씨에 정책 검색?
+[2] (검색함)   단순 변심 반품 배송비?     ← 맞음
+[3] (검색함)   VIP 등급 조건?            ← 맞음
+[4] (검색함)   2 더하기 3은?             ← 잘못! 계산에 정책 검색?
+</code></pre>
+<p>일상 질문(날씨)과 계산(2+3)에도 <strong>검색을 호출</strong>했습니다(오호출). description이 모호해서 "언제 안 써야 하는지"를 몰랐던 거죠.</p>
+<hr/>
+<h2 id="3-description">3. 개선 — 구체적 description</h2>
+<p>description에 <strong>"무엇을, 언제, 그리고 언제 쓰지 말지"</strong> 를 명확히 적습니다.</p>
+<pre><code class="language-python"># 좋음 — 구체적 description
+description = (
+    "승승장구몰의 환불/교환/멤버십 등급/직원 규정 등 '사내 정책' 질문에만 사용한다. "
+    "날씨·잡담·계산처럼 사내 문서와 무관한 질문에는 절대 사용하지 마라."
+)
+</code></pre>
+<p>세 가지를 담았습니다.</p>
+<ul>
+<li><strong>무엇을</strong>: "환불/교환/멤버십/직원 규정 사내 정책"</li>
+<li><strong>언제</strong>: "정책 질문에만"</li>
+<li><strong>언제 쓰지 말지</strong>: "날씨·잡담·계산엔 절대 사용 금지" ← 핵심!</li>
+</ul>
+<p>특히 <strong>부정 조건</strong>("~엔 사용하지 마라")이 강력합니다(6강 복습). "언제 안 써야 하는지"를 명시하면 오호출이 크게 줍니다.</p>
+<p><strong>예상 출력 (구체적 description)</strong></p>
+<pre><code class="language-text">[개선 사례 — 구체적 description]
+[1] (검색안함)  오늘 날씨 어때?           ← 맞음! 검색 안 함
+[2] (검색함)    단순 변심 반품 배송비?     ← 맞음
+[3] (검색함)    VIP 등급 조건?            ← 맞음
+[4] (검색안함)  2 더하기 3은?             ← 맞음! 검색 안 함
+</code></pre>
+<p>이제 정확합니다 — 정책 질문에만 검색하고, 일상·계산엔 검색 안 합니다.</p>
+<hr/>
+<h2 id="4-description">4. description = 라우팅 규칙</h2>
+<p>이 실험이 주는 교훈:</p>
+<blockquote>
+<p><strong>description은 단순한 설명이 아니라 에이전트의 "라우팅 규칙"이다.</strong></p>
+</blockquote>
+<p>같은 retriever인데 description 문구만 바꿨더니 에이전트의 행동이 완전히 달라졌습니다. description이 "이 도구를 언제 쓸지"를 결정하니까요. 6강의 "독스트링 = 도구 성능"이 retriever 도구에서도 그대로입니다.</p>
+<hr/>
+<h2 id="5-description">5. 좋은 description 작성법</h2>
+<p>retriever 도구의 description을 쓸 때 체크리스트:</p>
+<ul>
+<li>[ ] <strong>무엇을</strong> 검색하는가? ("환불/멤버십 정책 문서")</li>
+<li>[ ] <strong>언제</strong> 쓰는가? ("정책·규정 질문에")</li>
+<li>[ ] <strong>언제 쓰지 말지</strong>? ("날씨·계산엔 사용 금지") ← 강력</li>
+<li>[ ] 다른 도구와 <strong>구별</strong>되는가? (18강에서 도구가 늘어남)</li>
+</ul>
+<p>특히 세 번째(부정 조건)를 빠뜨리기 쉬운데, 이게 오호출을 막는 핵심입니다. "언제 안 써야 하는지"를 명시하세요.</p>
+<hr/>
+<h2 id="6-18">6. 18강 예고 — 도구가 늘어나면</h2>
+<p>이 강은 도구가 <strong>하나</strong>(정책 검색)뿐이라 description 하나만 신경 쓰면 됐습니다. 하지만 18강에서는 <strong>정책 검색 + 실시간 데이터 도구들</strong>이 함께 있게 됩니다. 그러면 각 도구의 description이 <strong>서로 구별</strong>되게 써야 합니다(6강 "비슷한 도구 구분"). 도구가 많아질수록 description의 중요성이 커지죠.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>검색 도구의 <strong>description = 라우팅 규칙</strong>.</li>
+<li>모호한 description("문서 검색")은 <strong>오호출</strong>(일상·계산에도 검색).</li>
+<li>개선: <strong>무엇을 + 언제 + 언제 쓰지 말지</strong>(부정 조건) 명시.</li>
+<li><strong>부정 조건</strong>("~엔 사용 금지")이 오호출을 크게 줄인다.</li>
+<li>같은 retriever라도 description으로 <strong>행동이 완전히</strong> 바뀐다.</li>
+<li>다음 절에서 17강을 정리합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="05_따라하기-일상질문-vs-정책질문.html"><span class="lbl">← 이전 절</span>05. 따라하기 일상질문 vs 정책질문</a><a class="nxt" href="07_정리-체크리스트.html"><span class="lbl">다음 절 →</span>07. 정리 체크리스트</a></div>
+</div>
+</body></html>

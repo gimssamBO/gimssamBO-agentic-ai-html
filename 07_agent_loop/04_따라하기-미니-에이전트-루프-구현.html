@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제7강 — 따라하기 — 미니 에이전트 루프 구현</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제7강 · agent loop</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제7강 · agent loop — 세부 목차</b><a class="" href="01_한번-묻고-끝나지-않는-일.html">01. 한번 묻고 끝나지 않는 일</a><a class="" href="02_ReAct-패턴-생각-행동-관찰.html">02. ReAct 패턴 생각 행동 관찰</a><a class="" href="03_직접-돌리는-루프와-종료조건.html">03. 직접 돌리는 루프와 종료조건</a><a class="cur" href="04_따라하기-미니-에이전트-루프-구현.html">04. 따라하기 미니 에이전트 루프 구현</a><a class="" href="05_따라하기-2-3스텝-작업-실행.html">05. 따라하기 2 3스텝 작업 실행</a><a class="" href="06_무한루프와-반복호출-방지.html">06. 무한루프와 반복호출 방지</a><a class="" href="07_대화기록-누적과-토큰-관리.html">07. 대화기록 누적과 토큰 관리</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">따라하기 — 미니 에이전트 루프 구현</h1>
+<h2 id="_2">목표</h2>
+<p>프레임워크 없이 <code>for</code> 루프로 ReAct 에이전트를 직접 만듭니다. 실제 파일은 <code>code/ch07_agent_loop.py</code> 입니다.</p>
+<hr/>
+<h2 id="0">0. 실습 준비 (설치)</h2>
+<pre><code class="language-bash">conda activate agentic
+
+# 7강에 필요한 라이브러리 (앞 강에서 설치했다면 생략 가능)
+pip install google-genai python-dotenv pandas
+</code></pre>
+<p>이번 강은 <code>data/inventory.csv</code>(재고 <code>stock</code>, 재주문 기준 <code>reorder_level</code>)를 씁니다.</p>
+<hr/>
+<h2 id="1">1. 공통 시작부 + 도구 정의 (둘로 분리)</h2>
+<p>다단계 루프가 되도록 도구를 <strong>둘로 나눕니다</strong>(재고 / 재주문 기준).</p>
+<pre><code class="language-python"># 실행: python code/ch07_agent_loop.py
+import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_genai_client, GEMINI_MODEL, DATA
+from google.genai import types
+import pandas as pd
+
+client = get_genai_client()
+inv = pd.read_csv(DATA / "inventory.csv")
+
+def get_stock(product_name: str) -&gt; str:
+    """상품명(일부만 입력해도 됨)을 받아 현재 재고 수량을 반환한다."""
+    row = inv[inv["product_name"].str.contains(product_name, na=False)]
+    if row.empty:
+        return f"'{product_name}' 재고 정보 없음"
+    r = row.iloc[0]
+    return f"{r['product_name']} 현재 재고 {int(r['stock'])}개"
+
+def get_reorder_level(product_name: str) -&gt; str:
+    """상품명을 받아 재주문 기준 수량(reorder_level)을 반환한다. 재고가 이 값 이하이면 재주문이 필요하다."""
+    row = inv[inv["product_name"].str.contains(product_name, na=False)]
+    if row.empty:
+        return f"'{product_name}' 재주문 기준 정보 없음"
+    r = row.iloc[0]
+    return f"{r['product_name']} 재주문 기준 {int(r['reorder_level'])}개"
+
+# 이름 → 함수 매핑 (모델이 고른 이름으로 진짜 함수를 찾기 위함, 5강 복습)
+TOOLS = {"get_stock": get_stock, "get_reorder_level": get_reorder_level}
+</code></pre>
+<hr/>
+<h2 id="2-react">2. ReAct 루프 본체</h2>
+<p>이게 이 강의 <strong>핵심 코드</strong>입니다. 한 줄씩 뜯어봅니다.</p>
+<pre><code class="language-python">def run_agent(question: str, max_steps: int = 6):
+    """질문을 받아 도구를 반복 호출하며 목표를 끝낼 때까지 도는 ReAct 루프."""
+    config = types.GenerateContentConfig(
+        tools=list(TOOLS.values()),
+        # 자동 실행을 꺼서 '결정 → 우리가 실행 → 결과 전달'을 직접 돌린다
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+        system_instruction=(
+            "너는 승승장구몰 재고 관리 에이전트다. 도구로 재고와 재주문 기준을 확인하고, "
+            "재고가 재주문 기준 이하이면 재주문을 권유하라. 한국어로 답하라."
+        ),
+        temperature=0,
+    )
+    # 대화 기록(누적): 모델 호출마다 관찰 결과를 덧붙인다 → 모델이 '방금 본 결과'를 근거로 판단
+    history = [types.Content(role="user", parts=[types.Part(text=question)])]
+
+    for step in range(1, max_steps + 1):
+        resp = client.models.generate_content(
+            model=GEMINI_MODEL, contents=history, config=config)
+
+        if not resp.function_calls:                 # 종료 ①: 더 부를 도구 없음 → 최종 답
+            print(f"[STEP {step}] 최종 답변")
+            return resp.text
+
+        # 모델이 부른 도구(Action)를 history에 기록
+        history.append(resp.candidates[0].content)
+
+        # 부른 도구를 우리가 실행(Observation) → history에 결과 추가
+        for fc in resp.function_calls:
+            print(f"[STEP {step}] 호출:", fc.name, dict(fc.args))
+            result = TOOLS[fc.name](**dict(fc.args))   # 우리가 실행
+            print("           관찰:", result)
+            history.append(types.Content(role="user", parts=[
+                types.Part.from_function_response(name=fc.name, response={"result": result})
+            ]))
+
+    print("[종료] 최대 스텝 도달 — 안전장치 작동")   # 종료 ②: max_steps 초과
+    return None
+</code></pre>
+<hr/>
+<h2 id="3">3. 루프의 세 가지 핵심 장치</h2>
+<p>이 코드에서 꼭 이해해야 할 세 가지입니다.</p>
+<h3 id="1-history">① 대화 기록(history)을 누적한다</h3>
+<pre><code class="language-python">history = [types.Content(role="user", parts=[types.Part(text=question)])]
+# ... 매 스텝마다 history.append(...) 로 모델의 호출 + 우리의 결과를 쌓는다
+</code></pre>
+<p>매번 모델을 호출할 때 <code>history</code> 전체를 넘깁니다. 그래서 모델이 <strong>이전 스텝의 관찰</strong>을 보고 판단할 수 있습니다(02번의 "관찰 되돌리기").</p>
+<h3 id="2-from_function_response">② 관찰을 from_function_response로 되돌린다</h3>
+<pre><code class="language-python">history.append(types.Content(role="user", parts=[
+    types.Part.from_function_response(name=fc.name, response={"result": result})
+]))
+</code></pre>
+<p>도구 실행 결과를 <strong>모델이 읽을 수 있는 형식</strong>(<code>function_response</code>)으로 만들어 history에 넣습니다. 이게 5강 4-4에서 본 그 패턴입니다.</p>
+<h3 id="3_1">③ 두 종료 조건</h3>
+<pre><code class="language-python">if not resp.function_calls:   # 종료 ①: 모델이 답하기로 함
+    return resp.text
+# ...
+print("[종료] 최대 스텝 도달")  # 종료 ②: for 루프가 max_steps에서 끝남
+</code></pre>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>ReAct 루프 = <code>for step in range(max_steps)</code> 안에서 <strong>모델 호출 → 도구 실행 → 결과 되돌리기</strong>.</li>
+<li>세 핵심: <strong>history 누적 · <code>from_function_response</code>로 관찰 되돌리기 · 두 종료 조건</strong>.</li>
+<li><code>disable=True</code>로 자동 실행을 꺼야 우리가 루프를 제어할 수 있다.</li>
+<li>다음 절에서 이 루프를 실제로 돌려 2~3스텝 작업을 시킵니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="03_직접-돌리는-루프와-종료조건.html"><span class="lbl">← 이전 절</span>03. 직접 돌리는 루프와 종료조건</a><a class="nxt" href="05_따라하기-2-3스텝-작업-실행.html"><span class="lbl">다음 절 →</span>05. 따라하기 2 3스텝 작업 실행</a></div>
+</div>
+</body></html>

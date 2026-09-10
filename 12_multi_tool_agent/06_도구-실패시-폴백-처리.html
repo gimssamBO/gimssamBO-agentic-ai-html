@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제12강 — 도구 실패 시 폴백(fallback) 처리</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제12강 · multi tool agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제12강 · multi tool agent — 세부 목차</b><a class="" href="01_여러-도구를-통합하다.html">01. 여러 도구를 통합하다</a><a class="" href="02_도구-라우팅.html">02. 도구 라우팅</a><a class="" href="03_따라하기-도구-3종-정의.html">03. 따라하기 도구 3종 정의</a><a class="" href="04_따라하기-하나의-에이전트로-통합.html">04. 따라하기 하나의 에이전트로 통합</a><a class="" href="05_따라하기-연쇄-호출-질문.html">05. 따라하기 연쇄 호출 질문</a><a class="cur" href="06_도구-실패시-폴백-처리.html">06. 도구 실패시 폴백 처리</a><a class="" href="07_도구-입력-검증.html">07. 도구 입력 검증</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="fallback">도구 실패 시 폴백(fallback) 처리</h1>
+<h2 id="_1">한 줄 요약</h2>
+<p>현실의 도구는 데이터가 없거나 예외를 던지며 <strong>빈손으로 돌아올 때</strong>가 있습니다. 이때 에이전트가 멈추면 안 됩니다. 도구가 <strong>에러/빈 결과를 친절한 문자열로</strong> 돌려주고, 시스템 프롬프트로 모델이 <strong>대체 안내(폴백)</strong> 를 하도록 유도합니다.</p>
+<hr/>
+<h2 id="1">1. 폴백이란?</h2>
+<p><strong>폴백(fallback)</strong> 은 "원래 하려던 게 안 될 때의 대비책"입니다. 도구가 실패해도 에이전트가 <strong>멈추지 않고</strong> 다른 안내를 하는 거죠.</p>
+<pre><code class="language-text">정상: 주문 조회 성공 → 주문 상태 안내
+폴백: 주문 조회 실패(없는 고객) → "고객ID를 다시 확인해 주세요" 안내 + 고객센터 연결
+</code></pre>
+<p>5강에서 단일 도구의 오류 처리를 배웠는데, 멀티툴에서는 이게 더 중요합니다. 도구가 많을수록 <strong>하나가 실패할 확률</strong>이 높아지니까요.</p>
+<hr/>
+<h2 id="2">2. 두 단계 폴백</h2>
+<p>폴백은 두 단계로 만듭니다.</p>
+<h3 id="1_1">① 도구: 실패를 '신호 문자열'로 반환</h3>
+<p>예외를 던지지 않고, 모델이 읽을 수 있는 <strong>명확한 실패 신호</strong>를 돌려줍니다. (실습 파일: <code>sections/12_multi_tool_agent/06_도구-실패시-폴백-처리.py</code>)</p>
+<pre><code class="language-python">@tool
+def get_order_status(customer_id: str) -&gt; str:
+    """고객 ID의 가장 최근 주문 1건의 상태를 조회한다."""
+    df = orders[orders["customer_id"] == customer_id]
+    if df.empty:
+        # 예외를 던지지 않고, 모델이 읽고 폴백할 수 있는 명확한 문자열을 반환
+        return f"[조회실패] {customer_id} 고객의 주문 내역이 없습니다. 고객ID를 다시 확인해 주세요."
+    ...
+
+@tool
+def get_stock(product_id: str) -&gt; str:
+    """product_id의 현재 재고 수량을 조회한다."""
+    try:
+        df = inventory[inventory["product_id"] == product_id]
+        if df.empty:
+            return f"[조회실패] {product_id} 의 재고 정보가 없습니다."
+        ...
+    except Exception as e:
+        # 도구 내부 예외도 밖으로 던지지 않고 문자열로 → 루프가 죽지 않는다
+        return f"[도구오류] 재고 조회 중 문제가 발생했습니다: {e}"
+</code></pre>
+<p><code>[조회실패]</code>, <code>[도구오류]</code> 같은 <strong>태그</strong>를 붙이는 게 포인트입니다. 모델이 "아, 이건 실패한 결과구나"를 알아챌 수 있게요.</p>
+<h3 id="2_1">② 시스템 프롬프트: 실패 시 행동 지시</h3>
+<p>모델에게 "실패 신호를 받으면 이렇게 행동하라"고 가르칩니다.</p>
+<pre><code class="language-python">SYSTEM = (
+    "너는 승승장구몰의 운영 비서다. 도구를 사용해 답하라.\n"
+    "도구 결과가 '[조회실패]' 또는 '[도구오류]'로 시작하면, 그 사실을 사용자에게\n"
+    "솔직히 알리고 멈추지 말고 대체 안내를 하라. 예: 올바른 입력 형식 안내,\n"
+    "다른 식별 정보 요청, 고객센터(1588-0000) 연결 안내. 답은 한국어로 한다."
+)
+</code></pre>
+<p>이 지시 덕분에 모델이 <code>[조회실패]</code>를 보면 <strong>사과 + 대체 안내</strong>를 합니다.</p>
+<hr/>
+<h2 id="3-vs">3. 정상 vs 폴백 비교</h2>
+<pre><code class="language-python">questions = [
+    "C0001 고객의 최근 주문 상태를 알려줘.",   # 정상 (존재하는 고객)
+    "C9999 고객의 최근 주문 상태를 알려줘.",   # 폴백 (없는 고객)
+]
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">Q: C0001 고객의 최근 주문 상태를 알려줘.
+A: C0001 고객의 최근 주문은 '현미 잡곡'이며 배송완료 상태입니다.
+
+Q: C9999 고객의 최근 주문 상태를 알려줘.
+A: 죄송합니다. C9999 고객님의 주문 내역을 찾을 수 없습니다. 고객ID를 다시 확인해
+   주시거나, 도움이 필요하시면 고객센터(1588-0000)로 문의해 주세요.
+</code></pre>
+<p>없는 고객(C9999)에 대해 에이전트가 <strong>멈추지 않고</strong> 정중히 안내했습니다. "주문 내역이 없다"는 사실을 알리고, "고객ID 확인" + "고객센터 연결"이라는 대체 경로를 제시했죠.</p>
+<hr/>
+<h2 id="4">4. 왜 예외를 안 던지나</h2>
+<p>핵심 원칙: <strong>도구는 예외를 던지지 말고 문자열을 반환한다.</strong></p>
+<pre><code class="language-python"># 나쁨 — 예외를 던지면 에이전트 전체가 멈춤
+if df.empty:
+    raise ValueError("주문 없음")    # 💥 루프 중단
+
+# 좋음 — 문자열로 돌려주면 모델이 읽고 대응
+if df.empty:
+    return "[조회실패] 주문 내역이 없습니다."   # ✓ 모델이 폴백
+</code></pre>
+<p>예외를 던지면 LangChain 루프가 멈추거나 에러로 끝납니다. 반면 문자열을 돌려주면 모델이 그걸 <strong>관찰(Observation)</strong> 로 받아 다음 행동(폴백 안내)을 정할 수 있죠. 7강의 "관찰을 되돌리기"가 여기서도 작동합니다.</p>
+<hr/>
+<h2 id="5">5. 폴백이 만드는 차이</h2>
+<p>폴백이 있고 없고는 <strong>서비스 품질</strong>을 가릅니다.</p>
+<ul>
+<li><strong>폴백 없음</strong>: 없는 고객ID → 에러로 중단 → 사용자는 아무 답도 못 받음 (나쁨)</li>
+<li><strong>폴백 있음</strong>: 없는 고객ID → "다시 확인해 주세요" 안내 → 사용자가 다음 행동을 앎 (좋음)</li>
+</ul>
+<p>콜센터 상담원이 "그런 고객 없습니다" 하고 전화를 끊으면 안 되죠. "고객님, 혹시 다른 번호로 가입하셨을까요?"라고 <strong>이어가야</strong> 합니다. 폴백이 그 역할입니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li><strong>폴백</strong> = 도구가 실패해도 에이전트가 멈추지 않고 대체 안내하는 것.</li>
+<li>① 도구는 <strong><code>[조회실패]</code> 같은 신호 문자열</strong>을 반환(예외 금지).</li>
+<li>② 시스템 프롬프트로 <strong>"실패 신호 받으면 대체 안내하라"</strong> 지시.</li>
+<li>예외를 던지면 루프가 멈추지만, <strong>문자열은 모델이 관찰</strong>해 대응한다.</li>
+<li>폴백이 <strong>장난감과 진짜 서비스</strong>를 가른다.</li>
+<li>다음 절에서 잘못된 <strong>입력을 검증</strong>하는 법을 배웁니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="05_따라하기-연쇄-호출-질문.html"><span class="lbl">← 이전 절</span>05. 따라하기 연쇄 호출 질문</a><a class="nxt" href="07_도구-입력-검증.html"><span class="lbl">다음 절 →</span>07. 도구 입력 검증</a></div>
+</div>
+</body></html>

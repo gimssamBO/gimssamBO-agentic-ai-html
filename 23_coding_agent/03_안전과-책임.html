@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제23강 — 안전과 책임</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제23강 · coding agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제23강 · coding agent — 세부 목차</b><a class="" href="01_이-스크립트-왜-안돌지.html">01. 이 스크립트 왜 안돌지</a><a class="" href="02_코딩-에이전트의-핵심-루프.html">02. 코딩 에이전트의 핵심 루프</a><a class="cur" href="03_안전과-책임.html">03. 안전과 책임</a><a class="" href="04_따라하기-버그-읽고-수정-요청.html">04. 따라하기 버그 읽고 수정 요청</a><a class="" href="05_따라하기-저장하고-실행해-검증.html">05. 따라하기 저장하고 실행해 검증</a><a class="" href="06_재귀적-버그수정-오류-피드백-루프.html">06. 재귀적 버그수정 오류 피드백 루프</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">안전과 책임</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>코딩 에이전트는 <strong>코드를 만들고 실행</strong>하므로, 다른 어떤 에이전트보다 안전이 중요합니다. 원본 보존(새 파일에 저장), 타임아웃(무한루프 차단), 신뢰된 코드만 실행, 그리고 <strong>자동 수정은 제안일 뿐 사람이 최종 검토</strong>한다는 원칙을 지켜야 합니다.</p>
+<hr/>
+<h2 id="1">1. 코드를 실행한다는 위험</h2>
+<p>코딩 에이전트는 <strong>LLM이 만든 코드를 실제로 돌립니다.</strong> 이건 강력하지만 동시에 위험합니다.</p>
+<pre><code class="language-text">LLM이 만든 코드가...
+- 무한루프라면? → 프로그램이 멈춤
+- 파일을 지우는 코드라면? → 데이터 손실
+- 원본을 덮어쓴다면? → 되돌릴 수 없음
+- 끝없이 메모리를 먹는다면? → 시스템 다운
+</code></pre>
+<p>자연어 챗봇은 "이상한 말"을 해도 사람이 안 따르면 그만이지만, <strong>코드는 실행되면 실제로 일어납니다.</strong> 그래서 안전장치가 필수죠.</p>
+<hr/>
+<h2 id="2-3-1">2. 안전장치 3종 + 1원칙</h2>
+<table>
+<thead>
+<tr>
+<th>위험</th>
+<th>대응</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LLM 코드의 부작용</td>
+<td><strong>원본 보존</strong> — 새 파일에 저장, 원본은 비교 기준으로 그대로</td>
+</tr>
+<tr>
+<td>무한 실행/위험 명령</td>
+<td><strong>타임아웃</strong> — <code>timeout=60</code>, 신뢰된 코드만 실행</td>
+</tr>
+<tr>
+<td>사람 검토 생략</td>
+<td><strong>제안 형태</strong> — 자동 수정은 제안, 사람이 검토 후 머지</td>
+</tr>
+</tbody>
+</table>
+<h3 id="2-1">2-1. 원본 보존 — 새 파일에 저장</h3>
+<p>가장 중요한 원칙입니다. <strong>원본을 절대 덮어쓰지 않습니다.</strong></p>
+<pre><code class="language-python">TARGET = DATA / "buggy_script.py"     # 고칠 대상 (원본, 절대 건드리지 않음)
+FIXED = DATA / "fixed_script.py"      # 수정 결과는 '새 파일'에 저장
+
+# 수정 코드는 FIXED에 쓴다 — TARGET은 그대로
+FIXED.write_text(fixed_code, encoding="utf-8")
+</code></pre>
+<p>왜 원본을 보존할까요?</p>
+<pre><code class="language-text">- 잘못 고쳤을 때 되돌릴 수 있음 (원본이 살아 있으니)
+- 원본 vs 수정본을 비교(diff)할 수 있음
+- "AI가 뭘 바꿨는지" 사람이 검토 가능
+</code></pre>
+<p>원본을 덮어썼는데 수정이 잘못됐다면? <strong>복구 불가능</strong>입니다. 새 파일 원칙은 "되돌릴 수 있음"을 보장하는 안전망이죠.</p>
+<h3 id="2-2">2-2. 타임아웃 — 무한루프 차단</h3>
+<pre><code class="language-python">proc = subprocess.run([sys.executable, str(FIXED)],
+                      timeout=60)        # 60초 넘으면 강제 종료
+</code></pre>
+<p>LLM이 실수로 <code>while True:</code> 같은 무한루프를 만들어도, 60초 후 자동 종료됩니다. 타임아웃 없이 실행하면 <strong>무한루프 코드 하나가 전체를 멈춥니다.</strong></p>
+<h3 id="2-3">2-3. 신뢰된 코드만 실행</h3>
+<p>이번 강은 "우리가 만든 버그 스크립트"를 고치는 거라 안전하지만, 실무에서는 <strong>출처가 불분명한 코드를 함부로 실행하면 안 됩니다.</strong></p>
+<pre><code class="language-text">- 우리 레포의 스크립트 → 실행 OK
+- 사용자가 던진 임의 코드 → 샌드박스/컨테이너에서 (10강 보안 참고)
+</code></pre>
+<hr/>
+<h2 id="3">3. 가장 중요한 원칙 — 사람이 최종 책임</h2>
+<p>기술적 안전장치보다 더 중요한 건 <strong>책임의 위치</strong>입니다.</p>
+<pre><code class="language-text">[나쁜 흐름]  에이전트가 고침 → 검토 없이 바로 배포 → 사고
+[좋은 흐름]  에이전트가 고침 → 사람이 검토 → 승인 → 머지/배포
+</code></pre>
+<p><strong>자동 수정은 "제안(suggestion)"입니다.</strong> 최종 책임은 사람에게 있죠. AI가 고친 코드를 검증 없이 프로덕션에 올리는 건, 신입에게 코드리뷰 없이 main 브랜치 푸시 권한을 주는 것과 같습니다.</p>
+<blockquote>
+<p><strong>백엔드 관점:</strong> 코딩 에이전트를 <strong>CI 보조</strong>로 붙이면, PR에 대해 "버그 의심 지점 + 수정안"을 <strong>코멘트</strong>로 달게 할 수 있습니다. 단, 자동 수정 결과를 바로 배포하지 말고 <strong>사람 리뷰를 거치는 제안 형태</strong>로 두세요. 원본을 절대 덮어쓰지 말고 항상 <strong>새 파일/브랜치</strong>에 산출하세요.</p>
+</blockquote>
+<hr/>
+<h2 id="4">4. 실무 적용 패턴</h2>
+<p>안전 원칙을 지키면서 코딩 에이전트를 쓰는 현실적 방법들입니다.</p>
+<pre><code class="language-text">[CI 봇]      PR 열리면 → 에이전트가 수정안 생성 → PR 코멘트로 제안
+             → 개발자가 보고 채택 여부 결정
+
+[로컬 CLI]   "fix this script" → 새 파일로 수정본 생성
+             → 개발자가 diff 확인 후 적용
+
+[배치 점검]  레거시 스크립트 일괄 스캔 → 버그 의심 목록 리포트
+             → 사람이 우선순위 정해 처리
+</code></pre>
+<p>공통점: <strong>에이전트는 제안하고, 사람이 결정합니다.</strong> 이 구조를 지키면 코딩 에이전트는 강력한 보조 도구가 되죠.</p>
+<hr/>
+<h2 id="5">5. 책임 있는 자동화의 가치</h2>
+<p>"왜 이렇게 조심하나, 그냥 자동으로 다 하면 안 되나?" 싶을 수 있습니다. 하지만:</p>
+<pre><code class="language-text">빠르지만 위험한 자동화  → 한 번의 사고로 신뢰 붕괴
+느려도 안전한 자동화    → 꾸준히 가치를 쌓음
+</code></pre>
+<p>코딩 에이전트의 목표는 <strong>사람을 대체</strong>하는 게 아니라 <strong>사람을 돕는</strong> 것입니다. 뻔한 버그는 빠르게 잡아 주고, 최종 판단은 사람이 — 이 협업 구조가 책임 있는 AI 활용의 핵심이죠. 29강(배포)에서 이 운영 원칙을 더 다룹니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>코딩 에이전트는 <strong>코드를 실행</strong>하므로 안전이 특히 중요.</li>
+<li><strong>원본 보존</strong>: 새 파일에 저장 → 되돌리기·비교·검토 가능.</li>
+<li><strong>타임아웃</strong>: <code>timeout=60</code>으로 무한루프 차단.</li>
+<li><strong>신뢰된 코드만</strong> 실행(임의 코드는 샌드박스).</li>
+<li>가장 중요: <strong>자동 수정은 "제안", 최종 책임은 사람</strong> — 검토 후 머지.</li>
+<li>실무는 <strong>CI 코멘트·로컬 CLI·배치 점검</strong>으로 "제안하고 사람이 결정".</li>
+<li>다음 절부터 코딩 에이전트를 코드로 만듭니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="02_코딩-에이전트의-핵심-루프.html"><span class="lbl">← 이전 절</span>02. 코딩 에이전트의 핵심 루프</a><a class="nxt" href="04_따라하기-버그-읽고-수정-요청.html"><span class="lbl">다음 절 →</span>04. 따라하기 버그 읽고 수정 요청</a></div>
+</div>
+</body></html>

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제23강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제23강 · coding agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제23강 · coding agent — 세부 목차</b><a class="" href="01_이-스크립트-왜-안돌지.html">01. 이 스크립트 왜 안돌지</a><a class="" href="02_코딩-에이전트의-핵심-루프.html">02. 코딩 에이전트의 핵심 루프</a><a class="" href="03_안전과-책임.html">03. 안전과 책임</a><a class="" href="04_따라하기-버그-읽고-수정-요청.html">04. 따라하기 버그 읽고 수정 요청</a><a class="" href="05_따라하기-저장하고-실행해-검증.html">05. 따라하기 저장하고 실행해 검증</a><a class="" href="06_재귀적-버그수정-오류-피드백-루프.html">06. 재귀적 버그수정 오류 피드백 루프</a><a class="cur" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="23">23강에서 배운 것</h2>
+<p>23강에서는 LLM이 코드를 읽고 버그를 고치는 <strong>코딩 에이전트</strong>를 만들었습니다.</p>
+<ul>
+<li><strong>핵심 루프</strong>: 읽기 → 수정 → 실행 → 오류 확인.</li>
+<li><strong>실행 검증</strong>: "고쳤다는 말"이 아니라 <strong>실제 실행 + 종료코드</strong>로 객관적 판정.</li>
+<li><strong>코드 추출</strong>: LLM 응답에서 정규식으로 코드블록만 뽑아 SyntaxError 방지.</li>
+<li><strong>격리 실행</strong>: <code>subprocess</code> + <code>timeout</code>으로 무한루프·부작용 차단.</li>
+<li><strong>원본 보존</strong>: 수정은 새 파일에, 원본은 비교·복구 기준으로 그대로.</li>
+<li><strong>[신규] 재귀적 버그 수정</strong>: 오류를 다시 피드백해 자동 재수정(self-debugging, 상한 필수).</li>
+</ul>
+<hr/>
+<h2 id="_2">한눈에 보는 핵심 코드</h2>
+<pre><code class="language-python">import sys, subprocess, re
+
+def extract_code(text):                          # LLM 응답에서 코드블록만 추출
+    m = re.search(r"```(?:python)?\s*(.*?)```", text, re.DOTALL)
+    return (m.group(1) if m else text).strip()
+
+def ask_fix(source, error=""):                   # 버그 수정 요청(오류 있으면 피드백)
+    llm = get_chat(temperature=0)                # 코드 수정은 일관·정확 → 0
+    fb = f"\n[직전 오류]\n{error[:1500]}" if error else ""
+    return extract_code(llm.invoke(
+        f"버그를 고친 전체 코드만 코드블록으로 출력하라.{fb}\n```python\n{source}\n```").content)
+
+def run_code(code):                              # 새 파일 저장 → 격리 실행 → 종료코드
+    FIXED.write_text(code, encoding="utf-8")
+    p = subprocess.run([sys.executable, str(FIXED)],
+                       cwd=str(ROOT), capture_output=True, text=True, timeout=60)
+    return p.returncode, p.stdout + p.stderr
+
+# 재귀 루프 (self-debugging)
+source, error = read_code(TARGET), ""
+for i in range(MAX_TRIES):                        # 상한 필수!
+    fixed = ask_fix(source, error)
+    code, out = run_code(fixed)
+    if code == 0: break                           # 성공
+    error, source = out, fixed                    # 오류 피드백 + 수정본 누적
+</code></pre>
+<hr/>
+<h2 id="_3">이 강에서 설치한 라이브러리</h2>
+<pre><code class="language-bash"># 추가 설치 없음 — 모두 표준 라이브러리 또는 앞 강에서 설치한 것 사용
+#   subprocess, re, pathlib, sys : 파이썬 표준 라이브러리
+#   get_chat (Gemini)           : 2강에서 설치한 langchain-google-genai
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>모듈</th>
+<th>용도</th>
+<th>비고</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>subprocess</code></td>
+<td>수정 코드 격리 실행</td>
+<td>표준 라이브러리</td>
+</tr>
+<tr>
+<td><code>re</code></td>
+<td>코드블록 추출</td>
+<td>표준 라이브러리</td>
+</tr>
+<tr>
+<td><code>pathlib</code></td>
+<td>파일 경로·읽기·쓰기</td>
+<td>표준 라이브러리</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>23강은 <strong>새로 설치할 라이브러리가 없습니다.</strong> LLM 호출(<code>get_chat</code>) 외에는 전부 파이썬 표준 라이브러리로 구현됩니다.</p>
+</blockquote>
+<hr/>
+<h2 id="_4">체크리스트</h2>
+<ul>
+<li>[ ] 코딩 에이전트의 <strong>생성→실행→오류확인</strong> 루프를 설명할 수 있다.</li>
+<li>[ ] LLM 응답에서 <strong>코드블록만 추출</strong>해 새 파일로 저장했다.</li>
+<li>[ ] <strong>subprocess</strong>로 실행해 <strong>종료코드</strong>로 성공을 검증했다.</li>
+<li>[ ] <strong>원본 보존·타임아웃</strong> 등 안전장치의 필요성을 안다.</li>
+<li>[ ] 오류를 다시 피드백하는 <strong>재귀적 버그 수정</strong>을 구현했다.</li>
+<li>[ ] 무한 재시도를 막는 <strong>횟수 상한</strong>(<code>MAX_TRIES</code>)의 필요성을 안다.</li>
+</ul>
+<hr/>
+<h2 id="_5">한 줄 핵심</h2>
+<blockquote>
+<p><strong>코딩 에이전트는 "만들고 끝"이 아니라 "만들고 실행해 검증"한다. 원본은 보존하고, 실패하면 오류를 피드백해 재수정하되, 반드시 시도 횟수에 상한을 둔다.</strong></p>
+</blockquote>
+<hr/>
+<h2 id="_6">다음 강 예고</h2>
+<p>24강 <strong>Business Agent</strong>에서는 "숫자는 있는데 보고서가 없다" 문제를 풉니다. <strong>계산은 코드, 서술은 LLM</strong>으로 나눠, 매출 데이터를 집계하고 LLM이 경영 리포트를 작성하게 합니다. 데이터 누락·컬럼 변경 같은 예외 처리와 차트 시각화도 더합니다.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_재귀적-버그수정-오류-피드백-루프.html"><span class="lbl">← 이전 절</span>06. 재귀적 버그수정 오류 피드백 루프</a><a class="nxt" href="08_실습문제와-해답.html"><span class="lbl">다음 절 →</span>08. 실습문제와 해답</a></div>
+</div>
+</body></html>

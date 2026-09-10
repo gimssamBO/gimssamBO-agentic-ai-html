@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제13강 — 다양한 문서 로더</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제13강 · rag concept</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제13강 · rag concept — 세부 목차</b><a class="" href="01_검색으로-근거를-찾아-답하기.html">01. 검색으로 근거를 찾아 답하기</a><a class="" href="02_LLM의-세가지-한계.html">02. LLM의 세가지 한계</a><a class="" href="03_RAG-파이프라인-5단계.html">03. RAG 파이프라인 5단계</a><a class="" href="04_왜-청킹하는가.html">04. 왜 청킹하는가</a><a class="" href="05_따라하기-PDF-로드하기.html">05. 따라하기 PDF 로드하기</a><a class="" href="06_따라하기-청킹하기.html">06. 따라하기 청킹하기</a><a class="" href="07_청크-크기와-오버랩-튜닝.html">07. 청크 크기와 오버랩 튜닝</a><a class="cur" href="08_다양한-문서-로더.html">08. 다양한 문서 로더</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">다양한 문서 로더</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>RAG의 소스는 PDF만이 아닙니다. <strong>CSV(FAQ), 텍스트, 마크다운</strong> 등도 똑같이 <code>Document</code>로 바꿔야 청킹·임베딩 파이프라인에 태울 수 있습니다. 핵심은 <strong>로더가 무엇이든 결과는 항상 같은 <code>Document</code> 구조</strong>라는 것입니다.</p>
+<hr/>
+<h2 id="1-pdf">1. 문서는 PDF만 있는 게 아니다</h2>
+<p>승승장구몰의 지식은 여러 형태로 흩어져 있습니다.</p>
+<ul>
+<li><strong>PDF</strong>: 환불 정책, 제품 매뉴얼 (05번에서 다룸)</li>
+<li><strong>CSV</strong>: FAQ 목록 (<code>faq.csv</code>)</li>
+<li><strong>텍스트</strong>: 사내 공지, 메모</li>
+<li><strong>마크다운</strong>: 위키, 문서</li>
+</ul>
+<p>이 모든 걸 RAG에 쓰려면, 각각을 <strong><code>Document</code> 형식</strong>으로 변환해야 합니다. LangChain은 형식마다 전용 <strong>로더</strong>를 제공합니다.</p>
+<hr/>
+<h2 id="2-csvloader-document">2. CSVLoader — 한 행 = 한 Document</h2>
+<p><code>CSVLoader</code>는 CSV의 <strong>각 행을 Document 하나</strong>로 만듭니다. FAQ 같은 "한 문답 = 한 검색 단위" 데이터에 딱이죠. (실습 파일: <code>sections/13_rag_concept/08_다양한-문서-로더.py</code>)</p>
+<pre><code class="language-python">from langchain_community.document_loaders import CSVLoader
+
+loader = CSVLoader(file_path=str(DATA / "faq.csv"), encoding="utf-8-sig")
+csv_docs = loader.load()
+# faq.csv의 각 행(faq_id, question, answer)이 Document 하나가 된다
+</code></pre>
+<p>FAQ는 이미 "질문-답변"으로 잘게 나뉘어 있으니, 행 하나가 자연스러운 검색 단위입니다. 따로 청킹할 필요도 별로 없죠.</p>
+<hr/>
+<h2 id="3-textloader">3. TextLoader — 일반 텍스트</h2>
+<p><code>TextLoader</code>는 <code>.txt</code> 파일을 통째로 읽어 Document 하나로 만듭니다.</p>
+<pre><code class="language-python">from langchain_community.document_loaders import TextLoader
+
+text_docs = TextLoader("notice.txt", encoding="utf-8").load()
+</code></pre>
+<p>사내 공지, 메모 같은 단순 텍스트에 씁니다. 길면 청킹해서 나눠 쓰고요.</p>
+<hr/>
+<h2 id="4-markdownheadertextsplitter">4. MarkdownHeaderTextSplitter — 마크다운</h2>
+<p>마크다운은 <strong>헤더(#) 단위</strong>로 나누면 의미 경계가 또렷합니다. <code>MarkdownHeaderTextSplitter</code>가 헤더 기준으로 나눠 줍니다.</p>
+<pre><code class="language-python">from langchain_text_splitters import MarkdownHeaderTextSplitter
+
+markdown = (
+    "# 환불 정책\n구매 후 7일 이내 단순 변심 환불이 가능합니다.\n"
+    "# 교환 정책\n상품 불량 시 무상 교환해 드립니다."
+)
+splitter = MarkdownHeaderTextSplitter(headers_to_split_on=[("#", "섹션")])
+md_docs = splitter.split_text(markdown)
+# "# 환불 정책" 섹션과 "# 교환 정책" 섹션이 각각 Document가 된다
+</code></pre>
+<p>마크다운은 이미 헤더로 구조가 나뉘어 있으니, 그 구조를 살려 나누면 <strong>의미 단위로 깔끔하게</strong> 청킹됩니다.</p>
+<hr/>
+<h2 id="5-document">5. 핵심 — 모두 같은 Document 구조</h2>
+<p>가장 중요한 점입니다. <strong>로더가 무엇이든, 결과는 항상 같은 <code>Document</code> 구조</strong>입니다.</p>
+<pre><code class="language-python">def show_docs(title, docs):
+    for d in docs[:2]:
+        print("page_content:", d.page_content[:80])
+        print("metadata    :", d.metadata)
+
+# PDF, CSV, 텍스트, 마크다운 — 모두 page_content + metadata!
+show_docs("CSV", csv_docs)
+show_docs("텍스트", text_docs)
+show_docs("마크다운", md_docs)
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[CSV] page_content: faq_id: F01 / question: 배송 얼마나 걸려요? / answer: 평균 1~3일 ...
+      metadata    : {'source': '.../faq.csv', 'row': 0}
+[텍스트] page_content: 승승장구몰 사내 공지 여름 정기 휴무는 ...
+      metadata    : {'source': '.../notice.txt'}
+[마크다운] page_content: 구매 후 7일 이내 단순 변심 환불이 ...
+      metadata    : {'섹션': '환불 정책'}
+</code></pre>
+<p>소스는 제각각이지만 모두 <strong><code>page_content</code> + <code>metadata</code></strong> 구조죠. 이게 13강 05번에서 말한 "공통 화폐"입니다.</p>
+<hr/>
+<h2 id="6">6. 왜 이게 강력한가</h2>
+<p>모든 소스가 같은 <code>Document</code> 형식으로 통일되니, <strong>이후 파이프라인을 재사용</strong>할 수 있습니다.</p>
+<p><strong>PDF · CSV · 텍스트 · 마크다운</strong> → (각 로더로) → <strong>Document</strong> → <strong>청킹 → 임베딩 → 저장 → 검색</strong></p>
+<p>뒷부분(청킹~검색)은 소스 종류와 무관하게 동일하므로, <strong>한 번만 만들면 모든 소스에 재사용</strong>됩니다.</p>
+<p>로더만 소스에 맞게 바꾸면, 청킹·임베딩·검색 코드는 <strong>그대로</strong> 씁니다. 새 문서 형식이 추가돼도 로더만 추가하면 되죠. 이게 잘 설계된 파이프라인의 힘입니다.</p>
+<blockquote>
+<p>비유: 다양한 나라 화폐(PDF·CSV·텍스트)를 <strong>공항 환전소(로더)</strong> 에서 모두 같은 통화(Document)로 바꾸면, 그 다음부터는 화폐 종류를 신경 쓸 필요가 없습니다. 한 가지 통화로만 거래하면 되니까요.</p>
+</blockquote>
+<hr/>
+<h2 id="7">7. 미설치 대비</h2>
+<p>여러 로더는 추가 패키지가 필요할 수 있습니다. 실무 코드는 <code>try/except</code>로 감쌉니다.</p>
+<pre><code class="language-python">try:
+    from langchain_community.document_loaders import CSVLoader
+    csv_docs = CSVLoader(file_path="...", encoding="utf-8-sig").load()
+except Exception as e:
+    print("CSVLoader 사용 불가:", e)   # 데모가 죽지 않게
+</code></pre>
+<p>로더 하나가 안 돼도 전체 데모가 멈추지 않게 하는 거죠(12강 폴백 정신).</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>RAG 소스는 PDF뿐 아니라 <strong>CSV·텍스트·마크다운</strong> 등 다양하다.</li>
+<li><code>CSVLoader</code>(행 단위), <code>TextLoader</code>(텍스트), <code>MarkdownHeaderTextSplitter</code>(헤더 단위).</li>
+<li>로더가 무엇이든 결과는 <strong>항상 같은 <code>Document</code> 구조</strong>(page_content + metadata).</li>
+<li>그 덕에 <strong>청킹·임베딩·검색 파이프라인을 재사용</strong>할 수 있다.</li>
+<li>다음 절에서 13강을 정리합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="07_청크-크기와-오버랩-튜닝.html"><span class="lbl">← 이전 절</span>07. 청크 크기와 오버랩 튜닝</a><a class="nxt" href="09_정리-체크리스트.html"><span class="lbl">다음 절 →</span>09. 정리 체크리스트</a></div>
+</div>
+</body></html>

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제19강 — 긴 대화 메시지 관리</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제19강 · agent memory</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제19강 · agent memory — 세부 목차</b><a class="" href="01_방금-말한걸-또-묻는-봇.html">01. 방금 말한걸 또 묻는 봇</a><a class="" href="02_LLM은-stateless다.html">02. LLM은 stateless다</a><a class="" href="03_InMemorySaver와-thread_id.html">03. InMemorySaver와 thread_id</a><a class="" href="04_따라하기-기억하는-상담봇.html">04. 따라하기 기억하는 상담봇</a><a class="" href="05_따라하기-같은세션-vs-다른세션.html">05. 따라하기 같은세션 vs 다른세션</a><a class="cur" href="06_긴-대화-메시지-관리.html">06. 긴 대화 메시지 관리</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">긴 대화 메시지 관리</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>대화가 길어지면 메시지가 무한히 쌓여 <strong>토큰·비용·지연이 폭발</strong>합니다. 두 해법이 있습니다 — <strong>(a) 트리밍</strong>: 최근 N개만 남기기, <strong>(b) 요약 압축</strong>: 오래된 대화를 한 줄로 요약. 둘 다 "입력을 줄여 비용을 통제"하는 기법입니다.</p>
+<hr/>
+<h2 id="1">1. 대화가 길어지면 생기는 문제</h2>
+<p>02번에서 배웠듯, 기억은 "이전 대화를 매번 누적 주입"하는 것입니다. 그래서 대화가 길어지면:</p>
+<pre><code class="language-text">1턴: 메시지 1개 보냄
+10턴: 메시지 19개 보냄
+100턴: 메시지 199개 보냄!  → 토큰 폭발, 비용·지연 증가
+</code></pre>
+<p>매 호출에 <strong>전체 대화</strong>를 보내니, 대화가 길수록 입력 토큰이 선형으로 증가합니다(7강 토큰 관리와 같은 문제). 100턴쯤 가면 인사 한마디에도 199개 메시지를 보내야 하죠. 비효율적이고 비쌉니다.</p>
+<hr/>
+<h2 id="2">2. 두 가지 해법</h2>
+<p>이 문제를 푸는 두 방법이 있습니다. (실습 파일: <code>sections/19_agent_memory/06_긴-대화-메시지-관리.py</code>)</p>
+<pre><code class="language-text">(a) 트리밍(trimming): 오래된 메시지를 잘라 버린다 — "버리기"
+(b) 요약(summarization): 오래된 대화를 한 줄로 압축한다 — "압축하기"
+</code></pre>
+<p>7강에서 본 <code>trim_history</code>의 발전된 버전입니다.</p>
+<hr/>
+<h2 id="3-a">3. 해법 (a) — 트리밍</h2>
+<p><strong>최근 N개 메시지만 남기고</strong> 나머지는 버립니다. LangChain의 <code>trim_messages</code>를 씁니다.</p>
+<pre><code class="language-python">from langchain_core.messages import trim_messages
+
+def trim_recent(messages, keep=4):
+    """최근 메시지만 남긴다(시스템 메시지는 항상 유지)."""
+    return trim_messages(
+        messages,
+        max_tokens=keep,          # 여기선 '개수'로 해석(token_counter=len)
+        strategy="last",          # 최근(last) 우선 보존
+        token_counter=len,        # 메시지 '개수' 기준
+        include_system=True,      # 시스템 메시지는 항상 유지
+        start_on="human",         # 사람 메시지에서 시작하도록 경계 정리
+    )
+</code></pre>
+<p>핵심 옵션:<br/>
+- <strong><code>strategy="last"</code></strong>: 최근 것을 우선 보존<br/>
+- <strong><code>include_system=True</code></strong>: 시스템 메시지(역할 지침)는 항상 유지 — 이게 사라지면 봇이 정체성을 잃음<br/>
+- <strong><code>token_counter=len</code></strong>: 토큰 대신 메시지 <strong>개수</strong>로 자름(간단)</p>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[원본] 메시지 13개 → [트리밍] 5개 (시스템 1 + 최근 4)
+</code></pre>
+<p>13개가 5개로 줄었습니다. 다음 호출부터 입력이 줄어 비용·지연이 감소하죠.</p>
+<hr/>
+<h2 id="4-b">4. 해법 (b) — 요약 압축</h2>
+<p>트리밍은 오래된 정보를 <strong>완전히 버립니다.</strong> 하지만 그 안에 중요한 게 있었다면? 그래서 <strong>요약</strong>으로 압축하는 방법이 있습니다.</p>
+<pre><code class="language-python">def summarize_old(messages, keep_recent=4):
+    """최근 keep_recent개는 그대로, 그 이전 대화를 LLM으로 한 줄 요약해 치환."""
+    sys_msgs = [m for m in messages if isinstance(m, SystemMessage)]
+    convo = [m for m in messages if not isinstance(m, SystemMessage)]
+    if len(convo) &lt;= keep_recent:
+        return messages
+
+    old, recent = convo[:-keep_recent], convo[-keep_recent:]
+    # 오래된 대화를 텍스트로 합쳐 LLM에 요약 요청
+    transcript = "\n".join(f"{'사용자' if isinstance(m, HumanMessage) else '상담원'}: {m.content}"
+                           for m in old)
+    summary = get_chat(temperature=0).invoke(
+        "다음 상담 대화를 한국어 한 문장으로 요약하라.\n\n" + transcript).content
+    # 오래된 N개를 '요약 1개'로 치환 → 길이는 줄고 맥락은 유지
+    압축 = SystemMessage(content=f"[이전 대화 요약] {summary}")
+    return sys_msgs + [압축] + recent
+</code></pre>
+<p>오래된 대화를 LLM이 <strong>한 문장으로 요약</strong>해, 그 요약 한 줄로 대체합니다. 최근 대화는 그대로 두고요.</p>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[압축] 메시지 13개 → 6개
+  - SystemMessage: 너는 승승장구몰 CS 상담원이다.
+  - SystemMessage: [이전 대화 요약] 고객이 배송·환불·멤버십·쿠폰에 대해 문의함.
+  - HumanMessage: (최근 4개)
+  ...
+</code></pre>
+<p>오래된 6턴이 "[이전 대화 요약] 배송·환불·멤버십 문의" 한 줄로 압축됐습니다. 길이는 줄었지만 <strong>맥락은 유지</strong>되죠.</p>
+<hr/>
+<h2 id="5-vs">5. 트리밍 vs 요약</h2>
+<table>
+<thead>
+<tr>
+<th>방법</th>
+<th>하는 일</th>
+<th>장점</th>
+<th>단점</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>트리밍</td>
+<td>오래된 것 <strong>버리기</strong></td>
+<td>간단·빠름·공짜</td>
+<td>정보 손실</td>
+</tr>
+<tr>
+<td>요약</td>
+<td>오래된 것 <strong>압축</strong></td>
+<td>맥락 보존</td>
+<td>LLM 호출 비용</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>트리밍</strong>: 최근 대화만 중요할 때(예: 단순 Q&amp;A). 간단하고 공짜.</li>
+<li><strong>요약</strong>: 오래된 맥락도 중요할 때(예: 긴 상담). 맥락 보존하지만 요약에 LLM 호출 비용.</li>
+</ul>
+<p>상황에 맞게 고릅니다. 보통 "최근 N개는 그대로 + 그 이전은 요약"을 섞어 쓰면 균형이 좋죠.</p>
+<hr/>
+<h2 id="6-inmemorysaver">6. InMemorySaver와의 관계</h2>
+<p>이 강의 InMemorySaver는 대화를 <strong>자동 누적</strong>합니다. 편하지만, 길어지면 위 문제가 생기죠. 실무에서는:</p>
+<pre><code class="language-text">InMemorySaver로 자동 누적 (편함)
+  + 일정 길이 넘으면 트리밍/요약 적용 (비용 통제)
+</code></pre>
+<p>자동 누적의 편리함을 쓰되, 길어지면 트리밍·요약으로 입력을 줄입니다. 7강(반복 방지·토큰 관리), 19강(메모리)의 교훈이 합쳐지는 거죠 — <strong>"기억하되, 비용을 통제한다."</strong></p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>대화가 길어지면 <strong>토큰·비용·지연 폭발</strong>(매번 전체 전송).</li>
+<li><strong>(a) 트리밍</strong>: 최근 N개만 남기기(<code>trim_messages</code>, 시스템 메시지는 유지).</li>
+<li><strong>(b) 요약</strong>: 오래된 대화를 LLM이 한 줄로 압축(맥락 보존).</li>
+<li>트리밍은 간단·공짜(정보 손실), 요약은 맥락 보존(LLM 비용).</li>
+<li>실무: 자동 누적 + 길어지면 트리밍/요약(비용 통제).</li>
+<li>다음 절에서 19강을 정리합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="05_따라하기-같은세션-vs-다른세션.html"><span class="lbl">← 이전 절</span>05. 따라하기 같은세션 vs 다른세션</a><a class="nxt" href="07_정리-체크리스트.html"><span class="lbl">다음 절 →</span>07. 정리 체크리스트</a></div>
+</div>
+</body></html>

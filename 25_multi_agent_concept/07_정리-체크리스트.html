@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제25강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제25강 · multi agent concept</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제25강 · multi agent concept — 세부 목차</b><a class="" href="01_만능-한명-vs-전문가-팀.html">01. 만능 한명 vs 전문가 팀</a><a class="" href="02_단일-에이전트의-한계.html">02. 단일 에이전트의 한계</a><a class="" href="03_Supervisor-vs-Handoff.html">03. Supervisor vs Handoff</a><a class="" href="04_따라하기-역할별-에이전트-2개.html">04. 따라하기 역할별 에이전트 2개</a><a class="" href="05_따라하기-Supervisor-라우터.html">05. 따라하기 Supervisor 라우터</a><a class="" href="06_규칙라우터-vs-LLM라우터-비교.html">06. 규칙라우터 vs LLM라우터 비교</a><a class="cur" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="25">25강에서 배운 것</h2>
+<p>25강에서는 단일 에이전트를 <strong>역할별 전문 에이전트 + Supervisor 라우터</strong>로 재구성하는 멀티에이전트 개념을 배웠습니다.</p>
+<ul>
+<li><strong>단일의 한계</strong>: 프롬프트 비대·도구 과다 → 도구 선택 혼동·수정 위험.</li>
+<li><strong>멀티에이전트</strong>: 역할별 프롬프트·도구 분리 + 흐름(라우팅) 설계.</li>
+<li><strong>Supervisor vs Handoff</strong>: 중앙 라우터(API Gateway) vs 에이전트 간 인계.</li>
+<li><strong>역할별 에이전트</strong>: 추천(sales)·정책(policy), 각자 다른 프롬프트·도구.</li>
+<li><strong>두 라우터</strong>: 규칙(키워드, 공짜)·LLM(의미 이해, 비용).</li>
+<li><strong>[신규] 라우터 비교</strong>: 정확도·호출 횟수 측정 → 하이브리드 2단계 전략.</li>
+</ul>
+<hr/>
+<h2 id="_2">한눈에 보는 핵심 코드</h2>
+<pre><code class="language-python">from langchain_core.tools import tool
+from langchain.agents import create_agent
+
+# 1) 역할별 도구·에이전트
+@tool
+def search_products(category: str) -&gt; str: ...   # 추천 도구
+@tool
+def search_faq(keyword: str) -&gt; str: ...         # 정책 도구
+
+sales_agent  = create_agent(llm, tools=[search_products], system_prompt="상품 추천 전문")
+policy_agent = create_agent(llm, tools=[search_faq],      system_prompt="정책/FAQ 전문")
+
+# 2) 라우터 (규칙 / LLM)
+POLICY_WORDS = ["환불", "교환", "배송", "취소", "적립", ...]
+def route_rule(q):  return "policy" if any(w in q for w in POLICY_WORDS) else "sales"
+def route_llm(llm, q):  return "policy" if "policy" in llm.invoke(f"분류:{q}").content.lower() else "sales"
+
+# 3) Supervisor — 분류 후 위임
+def supervisor(llm, sales, policy, q, use_llm=False):
+    target = route_llm(llm, q) if use_llm else route_rule(q)
+    agent = policy if target == "policy" else sales
+    return agent.invoke({"messages": [{"role": "user", "content": q}]})["messages"][-1].content
+</code></pre>
+<hr/>
+<h2 id="_3">이 강에서 설치한 라이브러리</h2>
+<pre><code class="language-bash"># 추가 설치 없음 — 모두 앞 강에서 설치한 것 사용
+pip install -U langgraph langchain langchain-google-genai pandas
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>패키지</th>
+<th>용도</th>
+<th>처음 등장</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>langchain</code></td>
+<td><code>create_agent</code>, <code>@tool</code></td>
+<td>6·7강</td>
+</tr>
+<tr>
+<td><code>langgraph</code></td>
+<td>에이전트 실행 엔진</td>
+<td>7강</td>
+</tr>
+<tr>
+<td><code>pandas</code></td>
+<td>CSV 도구(상품·FAQ)</td>
+<td>11강</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>25강은 <strong>새로 설치할 라이브러리가 없습니다.</strong> 6·7강의 <code>create_agent</code>/<code>@tool</code>을 멀티에이전트로 재조합할 뿐입니다.</p>
+</blockquote>
+<hr/>
+<h2 id="_4">체크리스트</h2>
+<ul>
+<li>[ ] 단일 에이전트의 한계(프롬프트 비대·도구 과다)를 설명할 수 있다.</li>
+<li>[ ] <strong>Supervisor와 Handoff</strong> 패턴의 차이를 안다.</li>
+<li>[ ] 역할별로 <strong>프롬프트·도구를 분리</strong>해 에이전트를 만들 수 있다.</li>
+<li>[ ] <strong>규칙/LLM 두 가지 라우팅</strong>을 구현하고 장단점을 안다.</li>
+<li>[ ] 라우터 정확도·비용을 <strong>측정</strong>해 하이브리드 전략을 설명할 수 있다.</li>
+</ul>
+<hr/>
+<h2 id="_5">한 줄 핵심</h2>
+<blockquote>
+<p><strong>멀티에이전트는 역할별로 프롬프트·도구를 나누고 라우터로 잇는 것이다. 명확한 질문은 규칙(공짜)으로, 애매한 질문만 LLM(비용)으로 분류해 정확도와 비용을 둘 다 잡는다.</strong></p>
+</blockquote>
+<hr/>
+<h2 id="_6">다음 강 예고</h2>
+<p>26강 <strong>역할 기반 에이전트(Planner/Worker)</strong> 에서는 "무엇을 할지(Planner)와 어떻게 할지(Worker)를 나누는" 협업 구조를 배웁니다. Planner가 작업을 분해하면 Worker들이 실행하고, 오케스트레이터가 취합하죠. Worker 실패 처리와 재시도도 다룹니다.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_규칙라우터-vs-LLM라우터-비교.html"><span class="lbl">← 이전 절</span>06. 규칙라우터 vs LLM라우터 비교</a><a class="nxt" href="08_실습문제와-해답.html"><span class="lbl">다음 절 →</span>08. 실습문제와 해답</a></div>
+</div>
+</body></html>

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제9강 — 따라하기 — 웹 검색 도구 붙이기</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제9강 · search agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제9강 · search agent — 세부 목차</b><a class="" href="01_지식-컷오프-문제.html">01. 지식 컷오프 문제</a><a class="" href="02_검색으로-보강하기.html">02. 검색으로 보강하기</a><a class="cur" href="03_따라하기-웹검색-도구-붙이기.html">03. 따라하기 웹검색 도구 붙이기</a><a class="" href="04_따라하기-검색-과정-관찰하기.html">04. 따라하기 검색 과정 관찰하기</a><a class="" href="05_검색결과-신뢰성과-재검증.html">05. 검색결과 신뢰성과 재검증</a><a class="" href="06_네트워크-오류-처리와-재시도.html">06. 네트워크 오류 처리와 재시도</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">따라하기 — 웹 검색 도구 붙이기</h1>
+<h2 id="_2">목표</h2>
+<p><code>DuckDuckGoSearchResults</code> 검색 도구를 <code>create_agent</code>에 붙여 검색 에이전트를 만듭니다. 실제 파일은 <code>code/ch09_search.py</code> 입니다.</p>
+<hr/>
+<h2 id="0">0. 실습 준비 (설치)</h2>
+<p>검색 라이브러리를 설치합니다. <code>DuckDuckGoSearchResults</code>는 내부적으로 <code>ddgs</code> 패키지를 씁니다.</p>
+<pre><code class="language-bash">conda activate agentic
+
+# 9강에서 처음 쓰는 라이브러리
+#  - langchain-community : DuckDuckGoSearchResults 등 커뮤니티 도구 모음
+#  - ddgs                : DuckDuckGo 검색 실제 엔진 (키 불필요)
+pip install langchain-community ddgs
+</code></pre>
+<blockquote>
+<p>설치하지 않으면 <code>from langchain_community.tools import DuckDuckGoSearchResults</code> 사용 시 에러가 납니다. 또한 이 실습은 <strong>인터넷 연결</strong>이 필요합니다.</p>
+</blockquote>
+<hr/>
+<h2 id="1">1. 공통 시작부 + 검색 도구</h2>
+<p><code>DuckDuckGoSearchResults</code>는 그 자체로 LangChain 도구이므로, 별도 <code>@tool</code> 작성 없이 바로 씁니다.</p>
+<pre><code class="language-python"># 실행: python code/ch09_search.py
+import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from langchain.agents import create_agent
+# DuckDuckGoSearchResults = 무료·키 불필요 웹 검색 도구(내부적으로 ddgs 패키지 사용)
+from langchain_community.tools import DuckDuckGoSearchResults
+from common import get_chat
+
+llm = get_chat(provider="gemini")
+# DuckDuckGoSearchResults 는 그 자체로 LangChain 도구라 @tool 작성 없이 바로 쓴다
+search = DuckDuckGoSearchResults()
+</code></pre>
+<p>8강의 <code>@tool</code>로 함수를 감싸던 것과 비교해 보세요. 이미 LangChain 도구로 만들어진 것(<code>DuckDuckGoSearchResults</code>)은 <strong>그대로 가져다 쓰면</strong> 됩니다. 실무에서는 이런 기성 도구를 조합해 쓰는 일이 많습니다.</p>
+<hr/>
+<h2 id="2">2. 검색 도구 단독 테스트</h2>
+<p>에이전트에 붙이기 전에, 도구가 잘 도는지 직접 호출해 봅니다(5강에서 배운 디버깅 습관).</p>
+<pre><code class="language-python">print(search.invoke("무선 이어버드 트렌드"))
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[snippet: 2026년 무선 이어버드는 ANC(노이즈 캔슬링) 성능 강화가 ...,
+ title: 올해 주목할 이어버드 트렌드, link: https://...]
+[snippet: 멀티포인트 연결과 공간음향이 ..., title: ..., link: ...]
+</code></pre>
+<p>제목·스니펫(요약)·링크가 담긴 검색 결과가 나옵니다. 이걸 LLM이 읽고 요약하게 됩니다.</p>
+<hr/>
+<h2 id="3">3. 검색 에이전트 구성</h2>
+<p><code>create_agent</code>에 검색 도구를 연결합니다(8강과 똑같은 방식).</p>
+<pre><code class="language-python">search_agent = create_agent(
+    llm,
+    tools=[search],   # 검색 도구 하나
+    system_prompt="너는 승승장구몰의 시장조사 담당자다. 필요하면 검색 도구로 최신 정보를 찾아 한국어로 요약하라.",
+)
+</code></pre>
+<p>8강의 <code>planning_agent</code>와 형태가 똑같죠? <code>create_agent(llm, tools=[...], system_prompt=...)</code>. <strong>도구만 검색 도구로 바뀌었을 뿐</strong>입니다. 한 번 익힌 패턴이 계속 재사용됩니다.</p>
+<p>시스템 프롬프트에 <strong>"필요하면 검색 도구로 최신 정보를 찾아"</strong> 라고 적은 게 포인트입니다. 이게 에이전트에게 "최신 정보가 필요한 질문엔 검색을 써라"라고 알려 주는 거죠.</p>
+<hr/>
+<h2 id="4">4. 간단 실행</h2>
+<pre><code class="language-python">q = "요즘 인기 있는 무선 이어버드 트렌드를 조사해서 핵심만 3가지로 요약해줘."
+result = search_agent.invoke({"messages": [{"role": "user", "content": q}]})
+print(result["messages"][-1].content)
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">무선 이어버드 트렌드 핵심 3가지:
+1) 능동 소음 차단(ANC) 성능 경쟁 심화
+2) 멀티포인트 동시 연결 등 편의 기능 보편화
+3) 공간음향·저지연 게이밍 모드 확대
+</code></pre>
+<p>에이전트가 스스로 검색어를 만들고, 검색하고, 결과를 읽어 <strong>3가지로 요약</strong>했습니다. 우리는 검색어도, 요약 방법도 지정하지 않았죠.</p>
+<blockquote>
+<p>실제 결과는 시점·네트워크 상황에 따라 달라집니다. 핵심은 <strong>"에이전트가 스스로 검색하고 답을 구성한다"</strong> 는 흐름입니다.</p>
+</blockquote>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>9강 설치: <code>pip install langchain-community ddgs</code>.</li>
+<li><code>DuckDuckGoSearchResults</code>는 그 자체로 도구라 <code>@tool</code> 없이 바로 쓴다.</li>
+<li>에이전트에 붙이기 전 <code>search.invoke(...)</code>로 <strong>단독 테스트</strong>한다.</li>
+<li><code>create_agent(llm, tools=[search], ...)</code> — 8강과 똑같은 패턴, 도구만 교체.</li>
+<li>다음 절에서 검색 <strong>과정을 단계별로</strong> 관찰합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="02_검색으로-보강하기.html"><span class="lbl">← 이전 절</span>02. 검색으로 보강하기</a><a class="nxt" href="04_따라하기-검색-과정-관찰하기.html"><span class="lbl">다음 절 →</span>04. 따라하기 검색 과정 관찰하기</a></div>
+</div>
+</body></html>

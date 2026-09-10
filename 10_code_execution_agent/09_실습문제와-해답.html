@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제10강 — 실습문제와 해답</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제10강 · code execution agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제10강 · code execution agent — 세부 목차</b><a class="" href="01_LLM은-계산기가-아니다.html">01. LLM은 계산기가 아니다</a><a class="" href="02_코드-생성-실행-루프.html">02. 코드 생성 실행 루프</a><a class="" href="03_안전한-실행-네임스페이스-제한.html">03. 안전한 실행 네임스페이스 제한</a><a class="" href="04_따라하기-pandas-식-실행-도구.html">04. 따라하기 pandas 식 실행 도구</a><a class="" href="05_따라하기-자연어로-집계-질문.html">05. 따라하기 자연어로 집계 질문</a><a class="" href="06_코드-실행-실패시-재시도.html">06. 코드 실행 실패시 재시도</a><a class="" href="07_보안-주의사항과-실무-대안.html">07. 보안 주의사항과 실무 대안</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="cur" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">실습문제와 해답</h1>
+<p>직접 코드를 고쳐 보며 10강 내용을 손에 익힙니다. 먼저 <strong>스스로 풀어 본 뒤</strong> 해답을 펼쳐 보세요.</p>
+<hr/>
+<h2 id="1">문제 1 — 월별 매출 + 생성된 식 관찰</h2>
+<p><code>agent.invoke(...)</code>를 <code>agent.stream(..., stream_mode="values")</code> 루프로 바꿔 <code>pretty_print()</code>로 출력하고, <code>"2024년 11월 매출 합계는?"</code>을 질문하세요.</p>
+<ul>
+<li>사용 파일: <code>data/sales_daily.csv</code> (컬럼: date, sales)</li>
+<li>기대 결과: 에이전트가 <code>run_pandas</code>에 넘긴 식(예: <code>df[df['date'].str.startswith('2024-11')]['sales'].sum()</code>)이 도구 호출 로그로 보이고, 그 합계가 천단위 콤마로 출력되면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+import pandas as pd
+from langchain_core.tools import tool
+from langchain.agents import create_agent
+from common import get_chat, DATA
+
+llm = get_chat(provider="gemini")
+df = pd.read_csv(DATA / "sales_daily.csv")
+
+@tool
+def run_pandas(expr: str) -&gt; str:
+    """일별 매출 df(컬럼: date 'YYYY-MM-DD', sales)에 pandas 식을 실행한다. df, pd 만 사용."""
+    try:
+        return str(eval(expr, {"__builtins__": {}}, {"df": df, "pd": pd}))
+    except Exception as e:
+        return f"실행 오류: {e}"
+
+agent = create_agent(llm, tools=[run_pandas],
+    system_prompt="너는 데이터 분석가다. 계산은 반드시 run_pandas로 하고 천단위 콤마로 한국어 설명하라.")
+
+q = "2024년 11월 매출 합계는?"
+for step in agent.stream({"messages": [{"role": "user", "content": q}]}, stream_mode="values"):
+    step["messages"][-1].pretty_print()
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">================================== Ai Message ==================================
+Tool Calls:
+  run_pandas
+   Args:
+     expr: df[df['date'].str.startswith('2024-11')]['sales'].sum()    ← LLM이 만든 식!
+================================= Tool Message =================================
+12345670
+================================== Ai Message ==================================
+2024년 11월 매출 합계는 12,345,670원입니다.
+</code></pre>
+
+
+**해설**: `stream`으로 보면 LLM이 만든 식이 `Tool Calls`에 그대로 보입니다. "11월만 필터링하려면 `str.startswith('2024-11')`을 써야지"라는 LLM의 판단이 코드로 드러나죠. 날짜 문자열을 다루는 영리한 식을 LLM이 스스로 만들었습니다. 이렇게 `stream`은 에이전트의 "생각"을 들여다보는 창입니다.
+
+</details>
+<hr/>
+<h2 id="2">문제 2 — 샌드박스 안전장치 검증</h2>
+<p><code>run_pandas</code>를 직접 호출하는 테스트 코드를 추가해, 위험한 식은 막히고 정상 식은 되는지 확인하세요.</p>
+<ul>
+<li><code>run_pandas.invoke({"expr": "__import__('os').listdir('.')"})</code> (위험)</li>
+<li><code>run_pandas.invoke({"expr": "df['sales'].sum()"})</code> (정상)</li>
+<li>기대 결과: 위험한 식은 <code>실행 오류: ...</code>, 정상 식은 합계 숫자가 나오면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+import pandas as pd
+from langchain_core.tools import tool
+from common import get_chat, DATA
+
+df = pd.read_csv(DATA / "sales_daily.csv")
+
+@tool
+def run_pandas(expr: str) -&gt; str:
+    """일별 매출 df에 pandas 식을 실행한다. df, pd 만 사용."""
+    try:
+        return str(eval(expr, {"__builtins__": {}}, {"df": df, "pd": pd}))
+    except Exception as e:
+        return f"실행 오류: {e}"
+
+if __name__ == "__main__":
+    print("위험한 식 (파일 목록 조회 시도):")
+    print(" ", run_pandas.invoke({"expr": "__import__('os').listdir('.')"}))
+
+    print("\n정상 식 (매출 합계):")
+    print(" ", run_pandas.invoke({"expr": "df['sales'].sum()"}))
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">위험한 식 (파일 목록 조회 시도):
+  실행 오류: __import__ is not defined        ← 빌트인 차단으로 막힘!
+
+정상 식 (매출 합계):
+  324286050                                   ← 정상 작동
+</code></pre>
+
+
+**해설**: 위험한 식 `__import__('os').listdir('.')`는 **막혔습니다.** `{"__builtins__": {}}`로 빌트인을 차단했기 때문에 `__import__`라는 이름이 정의되지 않아서죠("not defined"). 반면 정상 pandas 식은 잘 실행됩니다. 화이트리스트 방어가 작동하는 증거입니다.
+
+⚠️ 단, 07번에서 배웠듯 이 방어가 **완벽하지는 않습니다.** 외부 공개 서비스라면 샌드박스가 필요합니다. 이 테스트는 "기본 방어가 작동한다"를 확인하는 것이지, "완전히 안전하다"를 보장하는 게 아닙니다.
+
+</details>
+<hr/>
+<h2 id="_2">정리</h2>
+<ul>
+<li>문제 1로 <strong><code>stream</code>으로 LLM이 만든 식</strong>을 관찰했습니다.</li>
+<li>문제 2로 <strong>화이트리스트 방어가 위험한 코드를 막는</strong> 것을 확인했습니다.</li>
+</ul>
+<p>이것으로 10강과 1부를 마칩니다. 다음 11강부터 2부 — 실전 데이터 분석으로 들어갑니다!</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="08_정리-체크리스트.html"><span class="lbl">← 이전 절</span>08. 정리 체크리스트</a><span class="nxt off"><span class="lbl"> </span> </span></div>
+</div>
+</body></html>

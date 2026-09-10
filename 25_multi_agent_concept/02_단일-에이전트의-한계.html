@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제25강 — 단일 에이전트의 한계</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제25강 · multi agent concept</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제25강 · multi agent concept — 세부 목차</b><a class="" href="01_만능-한명-vs-전문가-팀.html">01. 만능 한명 vs 전문가 팀</a><a class="cur" href="02_단일-에이전트의-한계.html">02. 단일 에이전트의 한계</a><a class="" href="03_Supervisor-vs-Handoff.html">03. Supervisor vs Handoff</a><a class="" href="04_따라하기-역할별-에이전트-2개.html">04. 따라하기 역할별 에이전트 2개</a><a class="" href="05_따라하기-Supervisor-라우터.html">05. 따라하기 Supervisor 라우터</a><a class="" href="06_규칙라우터-vs-LLM라우터-비교.html">06. 규칙라우터 vs LLM라우터 비교</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">단일 에이전트의 한계</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>단일(거대) 에이전트와 멀티에이전트를 항목별로 비교하면 차이가 분명합니다. 도구가 <strong>5~7개를 넘고</strong> 책임이 명확히 갈린다면, 역할별로 쪼개 <strong>도구 선택 정확도·유지보수·비용</strong>을 모두 개선할 시점입니다.</p>
+<hr/>
+<h2 id="1">1. 항목별 비교</h2>
+<table>
+<thead>
+<tr>
+<th>항목</th>
+<th>단일(거대) 에이전트</th>
+<th>멀티에이전트</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>시스템 프롬프트</td>
+<td>모든 규칙을 한 곳에(수백 줄)</td>
+<td>역할별로 짧게 분리</td>
+</tr>
+<tr>
+<td>도구 수</td>
+<td>전부 한 에이전트에(과다)</td>
+<td>역할에 필요한 것만</td>
+</tr>
+<tr>
+<td>도구 선택 정확도</td>
+<td>낮음(혼동)</td>
+<td>높음(후보가 적음)</td>
+</tr>
+<tr>
+<td>유지보수</td>
+<td>수정 시 부작용 큼</td>
+<td>역할 단위로 격리</td>
+</tr>
+<tr>
+<td>테스트</td>
+<td>통합 테스트만</td>
+<td>에이전트별 단위 테스트</td>
+</tr>
+<tr>
+<td>비용/지연</td>
+<td>긴 프롬프트로 토큰↑</td>
+<td>짧은 프롬프트로 절약</td>
+</tr>
+</tbody>
+</table>
+<p>하나씩 자세히 봅시다.</p>
+<hr/>
+<h2 id="2">2. 도구 선택 정확도 — 핵심 문제</h2>
+<p>가장 중요한 차이입니다. 6강에서 배웠듯, LLM은 <strong>도구 설명(docstring)을 읽고 어느 도구를 쓸지 판단</strong>합니다. 도구가 많아지면 이 판단이 흔들리죠.</p>
+<pre><code class="language-text">[도구 10개인 단일 에이전트]
+   "환불 문의" → get_order? refund? policy_search? coupon?
+   → 비슷한 도구들 사이에서 LLM이 헷갈림 → 엉뚱한 도구 호출
+
+[도구 1개인 정책 전문 에이전트]
+   "환불 문의" → search_faq (선택지가 하나라 헷갈릴 수 없음)
+   → 정확
+</code></pre>
+<p><strong>후보가 적으면 선택이 정확합니다.</strong> 사람도 "10개 메뉴 중 고르기"보다 "2개 중 고르기"가 쉽듯, LLM도 도구가 적을수록 정확하죠. 역할 분리의 가장 직접적인 효과입니다.</p>
+<hr/>
+<h2 id="3">3. 프롬프트 비대화</h2>
+<p>단일 에이전트는 모든 규칙을 한 프롬프트에 욱여넣습니다.</p>
+<pre><code class="language-python"># 단일 에이전트의 프롬프트 (계속 길어짐)
+system_prompt = """
+너는 승승장구몰 상담원이다.
+- 주문 조회는 주문번호를 받아 get_order로...
+- 환불은 7일 이내만 가능하고 절차는...
+- 상품 추천은 카테고리를 받아...
+- 쿠폰은 등급별로 다르고...
+- 배송 조회는...
+(수백 줄 계속)
+"""
+</code></pre>
+<pre><code class="language-python"># 멀티에이전트 — 각자 짧게
+sales_prompt = "너는 '상품 추천' 전문 상담원이다. 추천 외 질문은 정책 담당에 안내하라."
+policy_prompt = "너는 '정책/FAQ 안내' 전문 상담원이다. FAQ 근거로만 답하라."
+</code></pre>
+<p>프롬프트가 짧아지면:</p>
+<pre><code class="language-text">- LLM이 자기 역할에 집중 (잡음 적음)
+- 토큰이 줄어 비용·지연 감소 (매 호출마다 긴 프롬프트를 안 보냄)
+- 사람이 읽고 수정하기 쉬움
+</code></pre>
+<hr/>
+<h2 id="4">4. 유지보수 — 격리의 가치</h2>
+<p>단일 에이전트는 <strong>한 곳을 고치면 다른 곳이 깨질</strong> 위험이 있습니다.</p>
+<pre><code class="language-text">[단일] "환불 정책 문구 수정" → 같은 프롬프트의 추천 로직에 영향?
+   → 전체를 다시 테스트해야 안심
+
+[멀티] "환불 정책 수정" → policy_agent만 수정·테스트
+   → sales_agent는 건드리지 않았으니 안전
+</code></pre>
+<p>역할별로 <strong>격리</strong>돼 있어, 수정 범위가 명확합니다. 백엔드의 마이크로서비스가 "한 서비스 배포가 다른 서비스에 영향 없게" 하는 것과 같죠.</p>
+<hr/>
+<h2 id="5">5. 테스트 — 단위 테스트 가능</h2>
+<pre><code class="language-text">[단일] 통합 테스트만 가능 — "전체 시나리오를 돌려봐야" 검증
+[멀티] 에이전트별 단위 테스트 — "추천 에이전트만" 따로 검증 가능
+</code></pre>
+<pre><code class="language-python"># 멀티에이전트는 각 에이전트를 독립적으로 테스트
+def test_sales_agent():
+    r = sales_agent.invoke({"messages": [{"role": "user", "content": "전자기기 추천"}]})
+    assert "원" in r["messages"][-1].content   # 상품 추천이 나왔는지
+
+def test_policy_agent():
+    r = policy_agent.invoke({"messages": [{"role": "user", "content": "환불 기간"}]})
+    assert "7일" in r["messages"][-1].content   # 정책 답변이 나왔는지
+</code></pre>
+<p>작은 단위로 테스트하니 <strong>어디가 문제인지</strong> 빨리 찾습니다.</p>
+<hr/>
+<h2 id="6">6. 분리의 비용 — 공짜가 아니다</h2>
+<p>물론 멀티에이전트도 단점이 있습니다.</p>
+<pre><code class="language-text">- 라우팅 로직이 추가됨 (Supervisor를 만들고 관리)
+- 라우터가 틀리면 엉뚱한 에이전트로 감 (오라우팅)
+- 에이전트 간 흐름 추적이 복잡해질 수 있음
+- 너무 잘게 쪼개면 오히려 관리 부담
+</code></pre>
+<p>그래서 <strong>"무조건 쪼개라"가 아니라 "God Object가 됐을 때 쪼개라"</strong> 입니다. 도구 2~3개의 작은 에이전트는 단일로 두는 게 낫죠. 트레이드오프를 보고 판단하는 게 핵심입니다(28강 설계).</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>단일 vs 멀티: <strong>프롬프트·도구·정확도·유지보수·테스트·비용</strong> 전반에서 차이.</li>
+<li>핵심 효과: 도구 후보가 적어 <strong>도구 선택 정확도 ↑</strong>(6강 docstring 매칭).</li>
+<li>프롬프트가 짧아져 <strong>집중·비용·가독성</strong> 개선.</li>
+<li>역할별 <strong>격리</strong>로 수정 범위 명확, <strong>단위 테스트</strong> 가능.</li>
+<li>단, 라우팅 복잡도·오라우팅 위험이라는 <strong>비용</strong>도 존재.</li>
+<li>판단 기준: 도구 5~7개 초과·책임 분리·혼동 → 그때 쪼갠다.</li>
+<li>다음 절에서 협업 구조(Supervisor vs Handoff)를 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="01_만능-한명-vs-전문가-팀.html"><span class="lbl">← 이전 절</span>01. 만능 한명 vs 전문가 팀</a><a class="nxt" href="03_Supervisor-vs-Handoff.html"><span class="lbl">다음 절 →</span>03. Supervisor vs Handoff</a></div>
+</div>
+</body></html>

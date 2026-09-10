@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제19강 — LLM은 stateless — 맥락은 우리가 넣는다</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제19강 · agent memory</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제19강 · agent memory — 세부 목차</b><a class="" href="01_방금-말한걸-또-묻는-봇.html">01. 방금 말한걸 또 묻는 봇</a><a class="cur" href="02_LLM은-stateless다.html">02. LLM은 stateless다</a><a class="" href="03_InMemorySaver와-thread_id.html">03. InMemorySaver와 thread_id</a><a class="" href="04_따라하기-기억하는-상담봇.html">04. 따라하기 기억하는 상담봇</a><a class="" href="05_따라하기-같은세션-vs-다른세션.html">05. 따라하기 같은세션 vs 다른세션</a><a class="" href="06_긴-대화-메시지-관리.html">06. 긴 대화 메시지 관리</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="llm-stateless">LLM은 stateless — 맥락은 우리가 넣는다</h1>
+<h2 id="_1">한 줄 요약</h2>
+<p>LLM API는 <strong>상태를 저장하지 않습니다(stateless).</strong> 매 호출은 백지에서 시작하죠. "기억하는 것처럼" 보이는 챗봇도, 사실은 <strong>지금까지의 모든 대화를 매번 다시 전송</strong>하는 것입니다. 모델이 기억하는 게 아니라, 애플리케이션이 기록을 주입합니다.</p>
+<hr/>
+<h2 id="1-stateless">1. stateless란?</h2>
+<p><strong>stateless(무상태)</strong> 는 "이전 호출의 상태를 기억하지 않는다"는 뜻입니다. 각 호출이 완전히 독립적이죠.</p>
+<ul>
+<li><strong>호출 1</strong> → 처리 → 응답 <em>(끝나면 다 잊음)</em></li>
+<li><strong>호출 2</strong> → 처리 → 응답 <em>(호출 1을 전혀 모름, 백지에서 시작)</em></li>
+</ul>
+<p>백엔드 개발자에게 익숙한 개념입니다. HTTP가 stateless죠 — 각 요청이 독립적이고, 서버는 이전 요청을 기억하지 않습니다. 그래서 세션·쿠키로 상태를 따로 관리하잖아요. LLM도 똑같습니다.</p>
+<hr/>
+<h2 id="2-vs">2. 기억 없음 vs 기억 있음</h2>
+<p>같은 대화를 두 방식으로 비교해 봅시다.</p>
+<h3 id="_2">기억 없음 — 매번 백지</h3>
+<pre><code class="language-text">호출1: ["내 이름은 민준"]              → "반갑습니다"
+호출2: ["내 이름 뭐랬지?"]   ← 백지!    → "모르겠어요" ✗
+</code></pre>
+<p>호출 2는 "내 이름 뭐랬지?"만 받습니다. 호출 1의 "민준"을 모르니, 답할 수 없죠.</p>
+<h3 id="_3">기억 있음 — 기록을 매번 주입</h3>
+<ul>
+<li>호출1: <code>["내 이름은 민준"]</code> → "반갑습니다"</li>
+<li>호출2: <code>["내 이름은 민준", "반갑습니다", "내 이름 뭐랬지?"]</code> → "민준님이요!" ✓ <em>(이전 대화를 누적 주입)</em></li>
+</ul>
+<p>호출 2에 <strong>이전 대화 전체를 함께</strong> 넣으면, 모델이 "민준"을 보고 답할 수 있습니다. 차이는 단 하나 — <strong>이전 기록을 같이 보냈느냐</strong>입니다.</p>
+<hr/>
+<h2 id="3">3. "기억"은 착시다</h2>
+<p>핵심 깨달음: <strong>모델은 절대 기억하지 않습니다.</strong> 우리가 기억하는 것처럼 보이게 만드는 거죠.</p>
+<pre><code class="language-text">모델 입장: 매 호출 백지 (stateless, 불변)
+앱 입장:   대화 기록을 들고 있다가 매번 주입 → 모델이 "기억하는 것처럼" 보임
+</code></pre>
+<p>ChatGPT, Claude, 모든 챗봇이 이렇게 동작합니다. 모델 자체는 stateless이고, <strong>애플리케이션 계층</strong>이 대화를 누적·관리합니다. "기억"은 모델의 능력이 아니라 <strong>앱의 설계</strong>인 셈이죠.</p>
+<blockquote>
+<p>비유: 의사가 환자를 볼 때, 의사가 모든 환자를 외우는 게 아니라 <strong>차트(기록)</strong> 를 봅니다. 환자가 올 때마다 그 차트를 펴서 "지난번에 이런 말씀 하셨죠"라고 하죠. LLM의 "기억"도 이 차트(대화 기록)를 매번 펴 보는 것입니다.</p>
+</blockquote>
+<hr/>
+<h2 id="4">4. 직접 구현하면?</h2>
+<p>기억을 직접 만들면 이런 코드가 됩니다.</p>
+<pre><code class="language-python"># 수동 메모리 (직접 구현)
+history = []   # 대화 기록을 담을 리스트
+
+def chat(user_text):
+    history.append({"role": "user", "content": user_text})   # 사용자 발화 추가
+    response = llm.invoke(history)                            # 전체 기록을 보냄
+    history.append({"role": "assistant", "content": response})  # 봇 응답 추가
+    return response
+</code></pre>
+<p><code>history</code>에 대화를 계속 쌓고, 매 호출에 <strong>전체를 보냅니다.</strong> 7강에서 ReAct 루프의 <code>history</code>를 누적한 것과 같은 원리죠. 작동은 하지만, 세션이 여러 개면(여러 사용자) 관리가 복잡해집니다. 그래서 LangGraph가 이걸 자동화합니다(03번).</p>
+<hr/>
+<h2 id="5">5. 토큰 비용 주의</h2>
+<p>stateless를 이해하면 중요한 사실이 보입니다 — <strong>대화가 길어질수록 매번 보내는 양이 늘어납니다.</strong></p>
+<pre><code class="language-text">호출 1: 메시지 1개 보냄    → 토큰 적음
+호출 10: 메시지 19개 보냄  → 토큰 많음 (이전 대화 다 포함!)
+</code></pre>
+<p>"기억"은 공짜가 아닙니다. 대화가 길어지면 매 호출에 전체 기록을 보내니, <strong>토큰(비용)이 누적</strong>됩니다(2·7강 복습). 그래서 긴 대화는 오래된 메시지를 잘라내거나 요약해야 하죠(06번). 이게 stateless의 대가입니다.</p>
+<hr/>
+<h2 id="_4">핵심 정리</h2>
+<ul>
+<li>LLM은 <strong>stateless</strong> — 매 호출이 백지, 이전을 모름(HTTP처럼).</li>
+<li>"기억"은 <strong>이전 대화를 매번 누적 주입</strong>하는 것(앱의 설계).</li>
+<li>모델은 절대 기억 안 함 — <strong>앱 계층</strong>이 대화를 관리.</li>
+<li>직접 구현하면 <code>history</code> 리스트를 누적해 보냄(7강 ReAct처럼).</li>
+<li>대화가 길수록 <strong>토큰(비용) 누적</strong> → 트리밍·요약 필요(06번).</li>
+<li>다음 절에서 이걸 자동화하는 InMemorySaver를 배웁니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="01_방금-말한걸-또-묻는-봇.html"><span class="lbl">← 이전 절</span>01. 방금 말한걸 또 묻는 봇</a><a class="nxt" href="03_InMemorySaver와-thread_id.html"><span class="lbl">다음 절 →</span>03. InMemorySaver와 thread_id</a></div>
+</div>
+</body></html>

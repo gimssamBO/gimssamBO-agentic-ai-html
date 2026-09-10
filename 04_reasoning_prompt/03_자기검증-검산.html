@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제4강 — 자기검증(검산)</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제4강 · reasoning prompt</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제4강 · reasoning prompt — 세부 목차</b><a class="" href="01_왜-단계적-추론이-필요한가.html">01. 왜 단계적 추론이 필요한가</a><a class="" href="02_CoT-vs-직접답변.html">02. CoT vs 직접답변</a><a class="cur" href="03_자기검증-검산.html">03. 자기검증 검산</a><a class="" href="04_따라하기-CoT-정답률-비교.html">04. 따라하기 CoT 정답률 비교</a><a class="" href="05_따라하기-자기검증-추가하기.html">05. 따라하기 자기검증 추가하기</a><a class="" href="06_CoT가-효과없는-경우.html">06. CoT가 효과없는 경우</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">자기검증(검산)</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>CoT로 푼 답도 가끔 틀립니다. <strong>"위 풀이가 맞는지 다시 계산해 보라"</strong> 고 한 번 더 시키면(self-consistency 응용), 모델이 스스로 오류를 잡아 신뢰도가 올라갑니다. 돈·재고처럼 틀리면 안 되는 계산의 보험입니다.</p>
+<hr/>
+<h2 id="1-cot">1. CoT도 완벽하지 않다</h2>
+<p>CoT는 정답률을 크게 높이지만 100%는 아닙니다. 특히 단계가 많거나 숫자가 큰 문제에서는 여전히 틀릴 수 있습니다. 그럼 어떻게 더 믿음직하게 만들까요?</p>
+<p>답은 사람이 시험 볼 때 하는 것과 같습니다 — <strong>검산</strong>입니다.</p>
+<blockquote>
+<p>비유: 수학 시험에서 답을 다 푼 뒤 "다시 한번 계산해 보는" 그 과정입니다. 한 번 더 보면 실수를 잡을 확률이 올라갑니다.</p>
+</blockquote>
+<hr/>
+<h2 id="2-self-consistency">2. self-consistency란?</h2>
+<p>원래 <strong>self-consistency(자기일관성)</strong> 기법은 이렇습니다.</p>
+<ul>
+<li>같은 문제를 <strong>여러 번 풀게</strong> 한다 (temperature를 약간 높여 다양한 풀이 유도).</li>
+<li>나온 답들 중 <strong>가장 많이 나온 답(다수결)</strong> 을 채택한다.</li>
+</ul>
+<p>여러 번 풀어도 일관되게 같은 답이 나오면, 그 답을 믿을 수 있다는 아이디어죠. 다만 여러 번 호출하면 <strong>비용이 배로</strong> 듭니다.</p>
+<p>그래서 이 강에서는 더 가벼운 변형인 <strong>"검산 한 번"</strong> 으로 핵심을 체험합니다.</p>
+<hr/>
+<h2 id="3">3. 검산 함수</h2>
+<p>CoT로 푼 답을 모델에게 <strong>다시 검산</strong>시킵니다.</p>
+<pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
+from google.genai import types
+
+client = get_genai_client()
+
+def verify(question: str, cot_answer: str) -&gt; str:
+    """제출한 풀이를 모델에게 다시 검산시켜 신뢰도를 높인다."""
+    resp = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=(
+            f"[문제] {question}\n[제출한 풀이]\n{cot_answer}\n\n"
+            "위 풀이가 맞는지 다시 계산해 검산하라. "
+            "틀렸다면 올바른 값을, 맞다면 그대로 '정답: &lt;숫자&gt;'로 확정하라."
+        ),
+        config=types.GenerateContentConfig(temperature=0),
+    )
+    return resp.text
+</code></pre>
+<p>핵심은 <strong>이전 풀이를 통째로 보여 주고</strong> "이게 맞는지 다시 계산하라"고 시키는 것입니다. 모델은 그 풀이를 검토하며 오류가 있으면 바로잡습니다.</p>
+<hr/>
+<h2 id="4">4. 실행</h2>
+<pre><code class="language-python">q = "이어버드를 79000원에 3개 샀는데 10% 쿠폰을 받았습니다. 총 결제액은?"
+first = ask_cot(q)          # 1차 풀이
+print("[검산 결과]\n", verify(q, first))   # 2차 검산
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[검산 결과]
+ 제출한 풀이를 검토합니다.
+ 79000 × 3 = 237000 (맞음)
+ 237000 × 0.1 = 23700 (맞음)
+ 237000 - 23700 = 213300 (맞음)
+ 정답: 213300
+</code></pre>
+<p>검산을 통해 답이 <strong>확정</strong>되었습니다. 만약 1차 풀이에 오류가 있었다면, 이 단계에서 바로잡혔을 것입니다.</p>
+<hr/>
+<h2 id="5">5. 언제 검산을 쓰나</h2>
+<p>검산은 토큰(비용)을 약 2배로 늘립니다. 그래서 <strong>항상</strong> 쓰는 게 아니라, <strong>틀리면 큰일 나는 계산</strong>에 선택적으로 씁니다.</p>
+<ul>
+<li>✅ 환불 금액 계산, 재고 발주량, 정산 금액 → <strong>검산 필수</strong></li>
+<li>❌ "오늘 날씨 어때?" 같은 단순 질의 → 검산 불필요(낭비)</li>
+</ul>
+<blockquote>
+<p>현업 에이전트는 "민감한 계산엔 검산 한 번"을 기본 정책으로 두기도 합니다. 비용을 조금 더 내고 <strong>사고를 예방</strong>하는 거죠. 보험과 같은 개념입니다.</p>
+</blockquote>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>CoT 답도 틀릴 수 있어, <strong>검산</strong>으로 신뢰도를 높인다.</li>
+<li><code>verify()</code>는 <strong>이전 풀이를 보여 주고 "다시 계산하라"</strong> 고 시킨다.</li>
+<li>검산은 비용이 2배지만, <strong>틀리면 안 되는 계산</strong>에서는 값진 보험이다.</li>
+<li>다음 절에서 8문제 전체로 직접 vs CoT <strong>정답률을 측정</strong>합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="02_CoT-vs-직접답변.html"><span class="lbl">← 이전 절</span>02. CoT vs 직접답변</a><a class="nxt" href="04_따라하기-CoT-정답률-비교.html"><span class="lbl">다음 절 →</span>04. 따라하기 CoT 정답률 비교</a></div>
+</div>
+</body></html>

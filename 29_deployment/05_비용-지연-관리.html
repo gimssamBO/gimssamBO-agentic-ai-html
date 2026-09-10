@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제29강 — 비용·지연 관리</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제29강 · deployment</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제29강 · deployment — 세부 목차</b><a class="" href="01_내-PC에선-됐는데요.html">01. 내 PC에선 됐는데요</a><a class="" href="02_설정-분리-env와-config.html">02. 설정 분리 env와 config</a><a class="" href="03_구조적-로깅.html">03. 구조적 로깅</a><a class="" href="04_예외처리와-재시도-지수백오프.html">04. 예외처리와 재시도 지수백오프</a><a class="cur" href="05_비용-지연-관리.html">05. 비용 지연 관리</a><a class="" href="06_따라하기-견고한-운영-래퍼.html">06. 따라하기 견고한 운영 래퍼</a><a class="" href="07_따라하기-FastAPI-엔드포인트로-감싸기.html">07. 따라하기 FastAPI 엔드포인트로 감싸기</a><a class="" href="08_응답-캐싱으로-비용-줄이기.html">08. 응답 캐싱으로 비용 줄이기</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">비용·지연 관리</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>LLM 서비스는 <strong>호출할 때마다 돈과 시간</strong>이 듭니다. 토큰이 곧 비용이고, 프롬프트가 길수록 느립니다. <strong>모델 선택·프롬프트 길이·캐싱·top_k 조절</strong>로 비용과 지연을 관리합니다. 운영의 마지막 4번째 요소입니다.</p>
+<hr/>
+<h2 id="1">1. 왜 비용·지연을 신경 써야 하나</h2>
+<p>데모는 몇 번 돌리고 말지만, 운영은 <strong>수천·수만 번</strong> 호출됩니다.</p>
+<pre><code class="language-text">- 비용: 호출 1건이 0.002달러라도 × 10만 건 = 200달러/일
+        무료티어는 분당/일당 호출 한도가 있어 금방 막힘
+- 지연: 응답이 5초 걸리면 사용자는 떠남. 빠를수록 좋은 경험
+</code></pre>
+<p>특히 <strong>토큰이 곧 비용</strong>입니다. 입력(프롬프트) + 출력(답변)의 토큰 수에 비례해 과금되죠(2강 토큰·비용 감각). 그래서 "꼭 필요한 만큼만" 쓰는 게 핵심입니다.</p>
+<hr/>
+<h2 id="2-1">2. 전략 ① — 모델 선택</h2>
+<p>작업 난이도에 맞는 모델을 고릅니다. <strong>모든 일에 최고 모델을 쓸 필요는 없습니다.</strong></p>
+<pre><code class="language-text">간단한 작업(분류·추출):   gemini-2.5-flash-lite (싸고 빠름)
+일반 작업(상담·요약):     gemini-2.5-flash      (균형)
+어려운 작업(복잡 추론):    상위 모델만 골라서
+</code></pre>
+<pre><code class="language-python"># 작업에 따라 다른 모델 (config로 관리)
+classify_llm = get_chat(...)   # 분류는 가벼운 모델로 충분
+answer_llm = get_chat(...)     # 답변 생성만 좋은 모델
+</code></pre>
+<p><strong>분류·라우팅 같은 단순 작업에 비싼 모델은 낭비</strong>입니다. 25강에서 규칙 라우터로 LLM 호출을 줄인 것도 같은 맥락 — 싸게 할 수 있는 건 싸게.</p>
+<hr/>
+<h2 id="3-2">3. 전략 ② — 프롬프트 길이</h2>
+<p>토큰 = 비용이니, <strong>프롬프트를 짧게</strong> 합니다.</p>
+<pre><code class="language-text">[긴 프롬프트 (비쌈)]
+   "당신은 매우 친절하고 전문적이며 ... (장황한 역할 설명 10줄)
+    다음 규칙을 반드시 지키세요 ... (규칙 20개)"
+   → 매 호출마다 이 토큰을 다 지불
+
+[간결한 프롬프트 (저렴)]
+   "너는 승승장구몰 상담원이다. 정책 문서 근거로만 답하라."
+   → 핵심만, 토큰 절약
+</code></pre>
+<ul>
+<li><strong>시스템 프롬프트</strong>를 핵심만 간결하게.</li>
+<li><strong>RAG 컨텍스트</strong>를 너무 많이 넣지 않기(다음 전략).</li>
+<li>대화 기록이 길어지면 <strong>트리밍/요약</strong>(19강).</li>
+</ul>
+<hr/>
+<h2 id="4-3-top_k-rag">4. 전략 ③ — top_k 조절 (RAG)</h2>
+<p>RAG에서 <strong>검색해 가져오는 청크 수(top_k)</strong> 가 비용에 직결됩니다.</p>
+<pre><code class="language-text">top_k=10:  관련 청크 10개를 다 프롬프트에 넣음 → 토큰↑↑ → 비쌈·느림
+top_k=4:   상위 4개만 → 토큰 절약 (대개 충분)
+</code></pre>
+<pre><code class="language-yaml"># config.yaml
+rag:
+  top_k: 4          # 너무 많이 가져오지 않기
+</code></pre>
+<p>검색 결과를 많이 넣는다고 답이 좋아지지 않습니다. 오히려 <strong>관련 없는 청크가 노이즈</strong>가 되고 비용만 늘죠. "꼭 필요한 만큼만" 가져오는 게 핵심입니다(16강 검색 품질).</p>
+<hr/>
+<h2 id="5-4">5. 전략 ④ — 캐싱</h2>
+<p><strong>같은 질문이 반복</strong>되면, 매번 LLM을 부르지 말고 <strong>저장된 답</strong>을 돌려줍니다.</p>
+<pre><code class="language-text">"무료배송 기준?" (첫 질문)   → LLM 호출 → 답 저장
+"무료배송 기준?" (또 물음)   → 저장된 답 반환 (LLM 호출 0원·즉시)
+</code></pre>
+<pre><code class="language-python"># 개념: 질문을 key로 답을 캐시
+cache = {}
+def cached_answer(q):
+    if q in cache:
+        return cache[q]        # 캐시 적중 → LLM 안 부름
+    ans = llm.invoke(q).content
+    cache[q] = ans             # 결과 저장
+    return ans
+</code></pre>
+<p>FAQ처럼 <strong>반복되는 질문</strong>이 많은 서비스에선 캐싱만으로 비용이 크게 줄어듭니다. 이건 워낙 효과가 커서, <strong>08번에서 제대로</strong> 다룹니다(메모리 + 파일 영속 캐시).</p>
+<hr/>
+<h2 id="6">6. 운영 체크리스트</h2>
+<p>비용·지연을 포함한 29강 전체 운영 점검표입니다.</p>
+<pre><code class="language-text">[ ] 키가 코드/Git에 없는가?           (.env + .gitignore)
+[ ] 설정이 config.yaml로 외부화됐나?
+[ ] 로그가 파일에도 남는가? 레벨 조절 가능?
+[ ] LLM 호출에 타임아웃·재시도·폴백이 있나?
+[ ] 실패 시 서비스가 죽지 않고 안내를 주나?
+[ ] 비용 상한/모델 선택을 의식하고 있나?
+[ ] 반복 질문에 캐싱을 적용했나?
+[ ] RAG top_k가 과하지 않은가?
+</code></pre>
+<p>이 체크리스트를 통과하면 <strong>"내 PC에선 됐는데요"를 졸업</strong>한 것입니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>LLM 서비스는 <strong>호출마다 비용·시간</strong> — 토큰이 곧 돈, 프롬프트가 길면 느림.</li>
+<li><strong>① 모델 선택</strong>: 작업 난이도에 맞게(단순 작업에 비싼 모델 금지).</li>
+<li><strong>② 프롬프트 길이</strong>: 시스템 프롬프트·컨텍스트를 간결하게.</li>
+<li><strong>③ top_k 조절</strong>: RAG는 꼭 필요한 청크만(과하면 노이즈+비용).</li>
+<li><strong>④ 캐싱</strong>: 반복 질문은 저장된 답으로(08번에서 상세).</li>
+<li><strong>운영 체크리스트</strong>를 통과하면 데모를 졸업한 운영 서비스.</li>
+<li>다음 절에서 02~05를 묶은 <strong>견고한 운영 래퍼</strong>를 코드로 만듭니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="04_예외처리와-재시도-지수백오프.html"><span class="lbl">← 이전 절</span>04. 예외처리와 재시도 지수백오프</a><a class="nxt" href="06_따라하기-견고한-운영-래퍼.html"><span class="lbl">다음 절 →</span>06. 따라하기 견고한 운영 래퍼</a></div>
+</div>
+</body></html>

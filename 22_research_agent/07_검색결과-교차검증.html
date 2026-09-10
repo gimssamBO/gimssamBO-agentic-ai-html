@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제22강 — [신규] 검색 결과 교차 검증</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제22강 · research agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제22강 · research agent — 세부 목차</b><a class="" href="01_최신-시장동향을-매번-사람이.html">01. 최신 시장동향을 매번 사람이</a><a class="" href="02_리서치-에이전트-패턴.html">02. 리서치 에이전트 패턴</a><a class="" href="03_네트워크-의존성.html">03. 네트워크 의존성</a><a class="" href="04_따라하기-리서치-에이전트와-폴백.html">04. 따라하기 리서치 에이전트와 폴백</a><a class="" href="05_따라하기-마크다운-리포트-저장.html">05. 따라하기 마크다운 리포트 저장</a><a class="" href="06_복잡한-주제를-하위질의로-쪼개기.html">06. 복잡한 주제를 하위질의로 쪼개기</a><a class="cur" href="07_검색결과-교차검증.html">07. 검색결과 교차검증</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">[신규] 검색 결과 교차 검증</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>검색 결과 <strong>하나만 믿으면 위험</strong>합니다. 잘못된 기사나 오래된 정보일 수 있죠. 하나의 핵심 주장을 <strong>서로 다른 검색어 2개</strong>로 재검색해, 두 결과가 일치하는지 LLM이 판단하고 <strong>신뢰도(높음/보통/낮음)</strong> 를 매깁니다. 단일 출처 맹신을 막는 안전장치입니다.</p>
+<hr/>
+<h2 id="1">1. 단일 출처의 위험</h2>
+<p>검색 결과는 항상 옳지 않습니다.</p>
+<pre><code class="language-text">- 광고성·과장 기사 ("올해 최고의 이어버드!")
+- 오래된 정보 (2년 전 점유율을 최신처럼)
+- 한 회사 입장만 반영 (자사 유리한 통계)
+</code></pre>
+<p>리포트에 "ANC가 시장을 주도한다"라고 썼는데, 그게 <strong>한 블로그 글 하나</strong>에서만 나온 주장이라면? 신뢰하기 어렵습니다. 사람 애널리스트는 중요한 주장일수록 <strong>여러 출처로 교차 확인</strong>합니다. 이걸 코드로 옮긴 게 <strong>교차 검증</strong>입니다.</p>
+<p>주장: <strong>"무선이어버드 시장은 ANC 중심으로 성장한다"</strong> 를 두 검색어로 재검색합니다.</p>
+<ul>
+<li>검색어 A: "무선이어버드 시장 성장 노이즈 캔슬링"</li>
+<li>검색어 B: "TWS 이어버드 ANC 트렌드 2026"</li>
+</ul>
+<p>→ 두 결과를 LLM이 비교 → <strong>[판정]</strong> 일치/부분일치/불일치 + 신뢰도(높음/보통/낮음)</p>
+<hr/>
+<h2 id="2">2. 판정 결과를 구조화</h2>
+<p>교차 검증 결과를 일관된 형식으로 받으려고 Pydantic 스키마를 씁니다(06번과 같은 원리).</p>
+<pre><code class="language-bash">pip install -U pydantic            # 이미 설치했다면 생략
+</code></pre>
+<pre><code class="language-python"># 실행: python "sections/22_research_agent/07_검색결과-교차검증.py"
+import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parents[2] / "code"))
+from common import get_chat
+
+from pydantic import BaseModel, Field
+from langchain_community.tools import DuckDuckGoSearchResults
+
+
+class Verdict(BaseModel):
+    """[왜 구조화] 교차검증 결론을 일관된 형식(일치여부·신뢰도·근거)으로 강제."""
+    agree: str = Field(description="두 검색 결과의 관계: '일치' | '부분일치' | '불일치'")
+    confidence: str = Field(description="주장 신뢰도: '높음' | '보통' | '낮음'")
+    reason: str = Field(description="판단 근거 1~2문장(한국어)")
+</code></pre>
+<p>이렇게 하면 LLM 판정이 항상 <strong><code>agree</code>(일치 여부) · <code>confidence</code>(신뢰도) · <code>reason</code>(근거)</strong> 세 칸으로 들어옵니다. 리포트에 "신뢰도: 보통" 같은 라벨을 자동으로 붙일 수 있죠.</p>
+<hr/>
+<h2 id="3">3. 검색 함수 (폴백 포함)</h2>
+<pre><code class="language-python">def search(query: str) -&gt; str:
+    """검색어 하나로 웹 검색(실패 시 LLM 지식 폴백)."""
+    try:
+        return DuckDuckGoSearchResults().invoke(query)
+    except Exception as e:
+        print(f"[경고] 검색 실패('{query}') → LLM 지식으로 대체: {e}")
+        llm = get_chat(temperature=0.3)
+        return llm.invoke(f"'{query}'에 대해 아는 핵심 사실을 한국어로 3가지 정리하라.").content
+</code></pre>
+<p>06번과 같은 폴백 패턴입니다. 검색이 막혀도 LLM 지식으로 메워 교차 검증을 계속합니다.</p>
+<hr/>
+<h2 id="4">4. 교차 검증 함수</h2>
+<p>핵심입니다. <strong>같은 주장을 다른 검색어 2개로 본 뒤</strong>, LLM이 두 결과를 비교해 판정합니다.</p>
+<pre><code class="language-python">def cross_check(claim: str, q1: str, q2: str) -&gt; Verdict:
+    """동일 주장을 서로 다른 검색어 2개로 검증해 일치/신뢰도를 LLM이 판단한다."""
+    # [핵심] 같은 사실을 '다른 검색어'로 두 번 본다 → 한 출처에만 의존하지 않는 교차검증.
+    r1, r2 = search(q1), search(q2)
+    llm = get_chat(temperature=0)                 # [왜 0] 판정은 일관돼야 하니 결정적으로
+    structured = llm.with_structured_output(Verdict)
+    prompt = (
+        f"검증할 주장: \"{claim}\"\n\n"
+        f"[검색A: {q1}]\n{r1[:1200]}\n\n"
+        f"[검색B: {q2}]\n{r2[:1200]}\n\n"
+        "두 검색 결과가 이 주장을 지지하는지 비교하라. 서로 어긋나거나 근거가 약하면 신뢰도를 낮춰라."
+    )
+    try:
+        return structured.invoke(prompt)
+    except Exception as e:
+        print(f"[경고] 판단 실패 → 보수적 결론: {e}")
+        # [왜 보수적] 검증이 실패하면 '믿을 수 없음'으로 처리하는 게 안전하다.
+        return Verdict(agree="불일치", confidence="낮음", reason="검증 과정 오류로 신뢰 불가")
+</code></pre>
+<p><strong>설계 포인트</strong></p>
+<ul>
+<li><code>temperature=0</code> — 판정은 <strong>일관성</strong>이 생명이라 결정적으로(분류·검증은 항상 0, 3·16강).</li>
+<li><code>r1[:1200]</code> — 각 검색 결과를 잘라 토큰 관리(06번과 동일).</li>
+<li><strong>보수적 폴백</strong> — 판정이 실패하면 "불일치/낮음"으로 처리합니다. 검증이 안 됐는데 "믿을 만함"으로 두는 건 위험하니, <strong>의심스러우면 신뢰도를 낮추는</strong> 쪽이 안전하죠.</li>
+</ul>
+<hr/>
+<h2 id="5">5. 실행</h2>
+<pre><code class="language-python">if __name__ == "__main__":
+    claim = "최근 무선이어버드 시장은 노이즈 캔슬링(ANC) 기능 중심으로 성장하고 있다."
+    q1 = "무선이어버드 시장 성장 노이즈 캔슬링"
+    q2 = "TWS 이어버드 ANC 트렌드 2026"
+
+    print("=" * 60)
+    print("[검증 대상 주장]", claim)
+    print(f"[검색어A] {q1}")
+    print(f"[검색어B] {q2}")
+    print("=" * 60)
+    v = cross_check(claim, q1, q2)
+    print("[교차검증 결과]")
+    print(f"  일치여부 : {v.agree}")
+    print(f"  신뢰도   : {v.confidence}")
+    print(f"  근거     : {v.reason}")
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">============================================================
+[검증 대상 주장] 최근 무선이어버드 시장은 노이즈 캔슬링(ANC) 기능 중심으로 성장하고 있다.
+[검색어A] 무선이어버드 시장 성장 노이즈 캔슬링
+[검색어B] TWS 이어버드 ANC 트렌드 2026
+============================================================
+[교차검증 결과]
+  일치여부 : 일치
+  신뢰도   : 높음
+  근거     : 두 검색 모두 ANC 보편화와 프리미엄 기능 확산을 시장 성장 요인으로 언급함.
+</code></pre>
+<p>두 검색어가 <strong>서로 다른데도 같은 결론</strong>을 가리키면 신뢰도가 "높음"으로 올라갑니다. 반대로 한쪽은 ANC, 다른 쪽은 "가격이 핵심"이라고 하면 "부분일치/보통"이나 "불일치/낮음"이 나오죠.</p>
+<hr/>
+<h2 id="6">6. 리포트에 신뢰도 붙이기</h2>
+<p>교차 검증을 리서치 파이프라인(06번)과 결합하면, 리포트의 각 핵심 주장에 <strong>신뢰도 라벨</strong>을 달 수 있습니다.</p>
+<pre><code class="language-text">## 핵심 동향
+- ANC 중심 성장 ........... [신뢰도: 높음 ✅]
+- 5만원대 가성비 급성장 ..... [신뢰도: 보통 ⚠️]
+- 점유율 상위 3사 과점 ...... [신뢰도: 낮음 ❓ 출처 부족]
+</code></pre>
+<p>이렇게 하면 리포트를 읽는 사람이 <strong>"어디까지 믿어야 하는지"</strong> 를 한눈에 압니다. "신뢰도 낮음" 항목은 사람이 추가 확인하면 되죠. 16강(환각 억제)의 정신 — <strong>불확실하면 불확실하다고 표시</strong> — 을 리서치에 적용한 겁니다.</p>
+<hr/>
+<h2 id="7">7. 교차 검증의 비용과 트레이드오프</h2>
+<p>교차 검증은 공짜가 아닙니다.</p>
+<pre><code class="language-text">- 검색이 2배 (주장당 검색어 2개)
+- LLM 판정 호출 추가
+→ 모든 문장을 검증하면 비용·시간 폭증
+</code></pre>
+<p>그래서 실무에서는 <strong>중요한 핵심 주장 몇 개만</strong> 교차 검증합니다. "이 리포트의 결론을 좌우하는 주장"만 골라 검증하고, 부수적 내용은 그냥 두는 식이죠. 비용과 신뢰도 사이의 균형을 잡는 게 핵심입니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>검색 결과 <strong>하나만 믿으면 위험</strong>(광고·구식·편향).</li>
+<li>같은 주장을 <strong>다른 검색어 2개</strong>로 재검색 → LLM이 비교 → <strong>신뢰도</strong> 판정.</li>
+<li>판정은 <code>Verdict</code>(일치여부·신뢰도·근거)로 <strong>구조화</strong>, <code>temperature=0</code>으로 일관되게.</li>
+<li>검증 실패 시 <strong>보수적으로</strong>(불일치/낮음) — 의심스러우면 신뢰도를 낮춤.</li>
+<li>리포트 주장에 <strong>신뢰도 라벨</strong>을 달면 독자가 믿을 범위를 앎(16강 정신).</li>
+<li>비용이 2배 들므로 <strong>핵심 주장만</strong> 선별해 검증. 다음 절에서 22강을 정리합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_복잡한-주제를-하위질의로-쪼개기.html"><span class="lbl">← 이전 절</span>06. 복잡한 주제를 하위질의로 쪼개기</a><a class="nxt" href="08_정리-체크리스트.html"><span class="lbl">다음 절 →</span>08. 정리 체크리스트</a></div>
+</div>
+</body></html>

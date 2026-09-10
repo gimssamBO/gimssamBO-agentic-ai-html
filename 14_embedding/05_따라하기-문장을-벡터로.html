@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제14강 — 따라하기 — 문장을 벡터로</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제14강 · embedding</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제14강 · embedding — 세부 목차</b><a class="" href="01_텍스트를-벡터로.html">01. 텍스트를 벡터로</a><a class="" href="02_임베딩이란.html">02. 임베딩이란</a><a class="" href="03_코사인-유사도.html">03. 코사인 유사도</a><a class="" href="04_임베딩-vs-채팅-모델.html">04. 임베딩 vs 채팅 모델</a><a class="cur" href="05_따라하기-문장을-벡터로.html">05. 따라하기 문장을 벡터로</a><a class="" href="06_따라하기-FAQ-임베딩과-유사도-검색.html">06. 따라하기 FAQ 임베딩과 유사도 검색</a><a class="" href="07_긴-문서-임베딩-전략.html">07. 긴 문서 임베딩 전략</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">따라하기 — 문장을 벡터로</h1>
+<h2 id="_2">목표</h2>
+<p><code>get_embeddings()</code>로 문장을 벡터로 바꿔 봅니다. 단일 문장은 <code>embed_query</code>, 여러 문장은 <code>embed_documents</code>(배치)를 씁니다. 실제 파일은 <code>code/ch14_embedding.py</code> 입니다.</p>
+<hr/>
+<h2 id="0">0. 실습 준비 (설치)</h2>
+<pre><code class="language-bash">conda activate agentic
+
+# 14강에서 처음 쓰는 라이브러리
+#  - langchain-google-genai : GoogleGenerativeAIEmbeddings (Gemini 임베딩)
+#  - numpy                  : 벡터 계산
+#  - scikit-learn           : cosine_similarity (행렬 연산)
+pip install langchain-google-genai numpy scikit-learn
+</code></pre>
+<p><code>.env</code>의 <code>GOOGLE_API_KEY</code>가 필요합니다(임베딩도 API 호출). 이번 강은 <code>data/faq.csv</code>(FAQ 10개)를 씁니다.</p>
+<hr/>
+<h2 id="1-embed_query">1. 단일 문장 임베딩 — embed_query</h2>
+<p>문장 하나를 벡터로 바꿉니다.</p>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_embeddings
+
+emb = get_embeddings()   # GoogleGenerativeAIEmbeddings (gemini-embedding-001, 768차원)
+v = emb.embed_query("환불은 며칠 걸려요?")   # 문장 한 개 → 벡터
+
+print("벡터 차원:", len(v))     # 768
+print("앞 5개 값:", v[:5])
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">벡터 차원: 768
+앞 5개 값: [0.0123, -0.0481, 0.0207, 0.0015, -0.0339]
+</code></pre>
+<p><code>embed_query</code>는 <strong>문장 하나</strong>를 768개 숫자로 바꿔 줍니다. 이 숫자들이 그 문장의 의미 좌표입니다.</p>
+<hr/>
+<h2 id="2-embed_documents">2. 여러 문장 임베딩 — embed_documents (배치)</h2>
+<p>여러 문장을 한꺼번에 벡터로 바꿀 때는 <code>embed_documents</code>를 씁니다.</p>
+<pre><code class="language-python">import pandas as pd
+from common import DATA
+
+df = pd.read_csv(DATA / "faq.csv")
+questions = df["question"].tolist()   # FAQ 질문 10개
+
+# 여러 문장을 '한 번에' 변환 → 요청 수·비용 절감 (백엔드 기본기)
+doc_vectors = emb.embed_documents(questions)
+print("임베딩한 FAQ 수:", len(doc_vectors))      # 10
+print("벡터 차원:", len(doc_vectors[0]))          # 768
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">임베딩한 FAQ 수: 10
+벡터 차원: 768
+</code></pre>
+<p><code>embed_documents</code>는 <strong>문장 리스트</strong>를 받아 <strong>벡터 리스트</strong>를 돌려줍니다. 10개 질문 → 10개 벡터죠.</p>
+<hr/>
+<h2 id="3-embed_query-vs-embed_documents">3. embed_query vs embed_documents — 왜 나눠 쓰나</h2>
+<p>둘 다 텍스트를 벡터로 바꾸는데 왜 나눠 쓸까요?</p>
+<table>
+<thead>
+<tr>
+<th>함수</th>
+<th>입력</th>
+<th>용도</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>embed_query</code></td>
+<td>문장 1개</td>
+<td>검색할 <strong>질문</strong></td>
+</tr>
+<tr>
+<td><code>embed_documents</code></td>
+<td>문장 리스트</td>
+<td>인덱싱할 <strong>문서들</strong></td>
+</tr>
+</tbody>
+</table>
+<p>핵심은 <strong>배치(batch) 처리</strong>입니다. 문서 100개를 임베딩할 때 <code>embed_query</code>를 100번 부르면 <strong>API 요청이 100번</strong>입니다. <code>embed_documents</code>로 한 번에 보내면 <strong>요청이 1번</strong>(또는 몇 번)으로 줄어 빠르고 쌉니다.</p>
+<pre><code class="language-python"># 나쁨 — 100번 요청
+vectors = [emb.embed_query(q) for q in questions]   # API 100번 호출!
+
+# 좋음 — 1번 요청 (배치)
+vectors = emb.embed_documents(questions)            # API 1번 호출
+</code></pre>
+<blockquote>
+<p>백엔드 기본기: "여러 개를 처리할 땐 하나씩 말고 한 번에(배치로)." DB에 100개 INSERT를 한 번에 하는 것과 같은 원리입니다. 요청 횟수를 줄이면 빠르고 쌉니다.</p>
+</blockquote>
+<hr/>
+<h2 id="4">4. 벡터를 직접 들여다보기</h2>
+<p>벡터가 정말 "의미"를 담고 있는지, 두 문장의 벡터를 비교해 봅니다.</p>
+<pre><code class="language-python">v1 = emb.embed_query("환불")
+v2 = emb.embed_query("돈 돌려받기")
+v3 = emb.embed_query("로봇청소기")
+
+# (다음 절에서 코사인 유사도로 비교하지만, 미리 감만)
+# v1, v2는 비슷한 숫자 패턴, v3는 다른 패턴일 것
+print("환불 앞 3개:", v1[:3])
+print("돈돌려받기 앞 3개:", v2[:3])   # v1과 비슷
+print("로봇청소기 앞 3개:", v3[:3])   # v1과 다름
+</code></pre>
+<p>눈으로 숫자만 봐선 정확히 알기 어렵지만, <strong>코사인 유사도</strong>(다음 절)로 재면 "환불"과 "돈 돌려받기"가 가깝고, "로봇청소기"는 멀다는 게 숫자로 나옵니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>14강 설치: <code>pip install langchain-google-genai numpy scikit-learn</code>.</li>
+<li><code>embed_query(문장)</code> → 벡터 1개 (검색할 질문용).</li>
+<li><code>embed_documents(리스트)</code> → 벡터 리스트 (인덱싱할 문서용, <strong>배치</strong>).</li>
+<li>여러 문장은 반드시 <code>embed_documents</code>로 <strong>배치 처리</strong>(요청·비용 절감).</li>
+<li>다음 절에서 벡터로 의미 검색을 합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="04_임베딩-vs-채팅-모델.html"><span class="lbl">← 이전 절</span>04. 임베딩 vs 채팅 모델</a><a class="nxt" href="06_따라하기-FAQ-임베딩과-유사도-검색.html"><span class="lbl">다음 절 →</span>06. 따라하기 FAQ 임베딩과 유사도 검색</a></div>
+</div>
+</body></html>

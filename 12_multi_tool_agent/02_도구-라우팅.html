@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제12강 — 도구 라우팅(Tool Routing)</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제12강 · multi tool agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제12강 · multi tool agent — 세부 목차</b><a class="" href="01_여러-도구를-통합하다.html">01. 여러 도구를 통합하다</a><a class="cur" href="02_도구-라우팅.html">02. 도구 라우팅</a><a class="" href="03_따라하기-도구-3종-정의.html">03. 따라하기 도구 3종 정의</a><a class="" href="04_따라하기-하나의-에이전트로-통합.html">04. 따라하기 하나의 에이전트로 통합</a><a class="" href="05_따라하기-연쇄-호출-질문.html">05. 따라하기 연쇄 호출 질문</a><a class="" href="06_도구-실패시-폴백-처리.html">06. 도구 실패시 폴백 처리</a><a class="" href="07_도구-입력-검증.html">07. 도구 입력 검증</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="tool-routing">도구 라우팅(Tool Routing)</h1>
+<h2 id="_1">한 줄 요약</h2>
+<p><strong>도구 라우팅</strong>은 LLM이 각 도구의 docstring을 읽고 "지금 어떤 도구가 필요한가"를 스스로 판단하는 것입니다. 우리가 <code>if-else</code>로 분기를 짜는 게 아니라, <strong>LLM이 알아서</strong> 적절한 도구로 질문을 보냅니다.</p>
+<hr/>
+<h2 id="1">1. 라우팅이란?</h2>
+<p>여러 도구가 있을 때, "이 질문에는 어떤 도구를 써야 하지?"를 정하는 게 <strong>라우팅</strong>입니다. ("라우팅"은 "길을 정해 보낸다"는 뜻으로, 우편물을 알맞은 부서로 보내는 것과 같습니다.)</p>
+<pre><code class="language-text">"고객 주문 상태는?"     → get_order_status 로 라우팅
+"P0025 재고 있어?"      → get_stock 로 라우팅
+"이번 달 매출은?"        → run_pandas 로 라우팅
+</code></pre>
+<p>핵심은 이 라우팅을 <strong>우리가 코드로 짜지 않는다</strong>는 것입니다. LLM이 합니다.</p>
+<hr/>
+<h2 id="2-if-else">2. if-else 라우팅의 문제</h2>
+<p>만약 우리가 직접 라우팅을 짠다면 이렇게 됩니다.</p>
+<pre><code class="language-python"># 나쁜 방법 — if-else 하드코딩
+if "주문" in question:
+    get_order_status(...)
+elif "재고" in question:
+    get_stock(...)
+elif "매출" in question:
+    run_pandas(...)
+# 표현이 조금만 달라도("배송 어디까지?", "물건 남았어?") 놓침!
+</code></pre>
+<p>6강에서 봤듯, 이 방식은 표현이 조금만 달라도 놓치고, 도구가 늘 때마다 <code>if</code>가 늘어납니다. <strong>유지보수 지옥</strong>이죠.</p>
+<hr/>
+<h2 id="3-llm-docstring">3. LLM 라우팅 — docstring을 보고 판단</h2>
+<p>LLM 라우팅은 다릅니다. 각 도구의 <strong>docstring</strong>을 읽고 LLM이 의미를 이해해 고릅니다.</p>
+<pre><code class="language-python">@tool
+def get_order_status(customer_id: str) -&gt; str:
+    """고객 ID(예: 'C0001')의 가장 최근 주문 1건의 상태를 조회한다.
+    상품명, product_id, 주문일, 상태를 반환한다."""
+    # [라우팅 근거] 이 docstring을 LLM이 읽고 "주문 상태 질문엔 이 도구"라고 판단
+    ...
+</code></pre>
+<p>그래서 "배송 어디까지 왔어?", "내 주문 상태?", "물건 언제 와?" 같은 <strong>다양한 표현</strong>도 LLM이 의미로 이해해 <code>get_order_status</code>로 보냅니다. <code>if "주문"</code> 같은 단어 매칭이 아니라 <strong>의미 이해</strong>니까요.</p>
+<blockquote>
+<p>비유: if-else는 "주문이라는 단어가 있으면 1번 창구"라고 적힌 안내판입니다. LLM 라우팅은 손님 말을 <strong>알아듣고</strong> "아, 배송 문의시군요. 3번 창구로 가세요"라고 안내하는 직원이죠. 표현이 달라도 의미를 이해합니다.</p>
+</blockquote>
+<hr/>
+<h2 id="4">4. 라우팅의 흐름</h2>
+<p>질문: <strong>"C0001 주문 상태와 그 상품 재고는?"</strong> → LLM이 docstring들을 읽고 판단:</p>
+<ol>
+<li>"주문 상태" → <code>get_order_status(customer_id='C0001')</code> → 결과: "현미 잡곡, product_id=P0025"</li>
+<li>"그 상품 재고" → <code>get_stock(product_id='P0025')</code> <em>(앞 결과를 이어 씀!)</em> → 결과: "155개"</li>
+<li>두 결과를 모아 답변</li>
+</ol>
+<p>LLM이 질문을 분석해 <strong>두 도구를 순서대로</strong> 라우팅했고, 앞 결과(P0025)를 다음 도구에 넘겼습니다. 이게 멀티툴 에이전트의 핵심입니다.</p>
+<hr/>
+<h2 id="5-docstring">5. 좋은 라우팅 = 좋은 docstring</h2>
+<p>라우팅 정확도는 <strong>docstring 품질</strong>에 달렸습니다(6강 복습).</p>
+<ul>
+<li><strong>명확한 docstring</strong>: "고객 주문 상태 조회" → 정확한 라우팅</li>
+<li><strong>모호한 docstring</strong>: "정보 조회" → 엉뚱한 도구 선택</li>
+</ul>
+<p>그래서 멀티툴 에이전트를 만들 때는 각 도구의 docstring을 <strong>또렷하고 구별되게</strong> 쓰는 게 가장 중요합니다. 도구가 많아질수록 더 그렇습니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li><strong>도구 라우팅</strong> = LLM이 docstring을 보고 적절한 도구를 스스로 고르는 것.</li>
+<li><code>if-else</code> 하드코딩은 표현 변화에 약하고 유지보수가 어렵다.</li>
+<li>LLM 라우팅은 <strong>의미를 이해</strong>해 다양한 표현도 올바르게 보낸다.</li>
+<li>라우팅 정확도는 <strong>docstring 품질</strong>에 달렸다(6강).</li>
+<li>다음 절에서 통합할 도구 3종을 만듭니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="01_여러-도구를-통합하다.html"><span class="lbl">← 이전 절</span>01. 여러 도구를 통합하다</a><a class="nxt" href="03_따라하기-도구-3종-정의.html"><span class="lbl">다음 절 →</span>03. 따라하기 도구 3종 정의</a></div>
+</div>
+</body></html>

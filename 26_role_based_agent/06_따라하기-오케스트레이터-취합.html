@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제26강 — 따라하기 — 오케스트레이터 취합</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제26강 · role based agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제26강 · role based agent — 세부 목차</b><a class="" href="01_무엇을-할지와-어떻게-할지-나누기.html">01. 무엇을 할지와 어떻게 할지 나누기</a><a class="" href="02_Planner-Worker-협업구조.html">02. Planner Worker 협업구조</a><a class="" href="03_Supervisor-vs-Planner-Worker.html">03. Supervisor vs Planner Worker</a><a class="" href="04_따라하기-Planner-작업-분해.html">04. 따라하기 Planner 작업 분해</a><a class="" href="05_따라하기-Worker-작업-실행.html">05. 따라하기 Worker 작업 실행</a><a class="cur" href="06_따라하기-오케스트레이터-취합.html">06. 따라하기 오케스트레이터 취합</a><a class="" href="07_Worker-실패-처리와-재시도.html">07. Worker 실패 처리와 재시도</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">따라하기 — 오케스트레이터 취합</h1>
+<h2 id="_2">목표</h2>
+<p>Planner(계획)와 Worker(실행)를 하나의 <strong>오케스트레이터 함수</strong>로 묶고, Worker 산출물을 모아 <strong>하나의 캠페인 실행안</strong>으로 취합합니다.</p>
+<hr/>
+<h2 id="1">1. 오케스트레이터 — 계획 → 실행 → 취합</h2>
+<p><code>run_campaign</code>이 전체 흐름을 지휘합니다.</p>
+<pre><code class="language-python">def run_campaign(brief_text: str) -&gt; str:
+    """Planner로 쪼개고, Worker로 하나씩 실행해, 결과를 하나의 실행안으로 취합한다."""
+    llm_plan = get_chat(temperature=0)      # [왜 0] 계획은 일관성·재현성이 중요
+    llm_work = get_chat(temperature=0.5)    # [왜 0.5] 카피 등 창의 작업은 다양성이 도움
+
+    print("[1] Planner 작업 분해 중...")
+    subtasks = plan(llm_plan, brief_text)        # 계획 단계
+    for i, t in enumerate(subtasks, 1):
+        print(f"   서브태스크 {i}: {t}")
+
+    print("\n[2] Worker 실행 중...")
+    outputs = []
+    for i, t in enumerate(subtasks, 1):          # 하위 작업을 하나씩 순회 실행
+        print(f"   - 작업 {i} 수행: {t}")
+        outputs.append((t, work(llm_work, brief_text, t)))   # (작업, 산출물) 보관
+
+    print("\n[3] 결과 취합")
+    report = [f"# 캠페인 실행안\n\n&gt; {brief_text}\n"]
+    for i, (t, out) in enumerate(outputs, 1):
+        report.append(f"## {i}. {t}\n{out}\n")
+    return "\n".join(report)
+</code></pre>
+<p>세 단계가 한 함수에 흐릅니다.</p>
+<pre><code class="language-text">[1] plan()으로 작업 분해      (Planner, temperature=0)
+[2] work()를 작업마다 반복     (Worker, temperature=0.5)
+[3] 산출물을 마크다운으로 취합
+</code></pre>
+<hr/>
+<h2 id="2">2. "오케스트레이터"란</h2>
+<p><code>run_campaign</code> 같은 함수를 <strong>오케스트레이터(orchestrator, 지휘자)</strong> 라 부릅니다.</p>
+<pre><code class="language-text">오케스트라 지휘자: 각 연주자(Planner·Worker)에게 언제 무엇을 할지 지시
+오케스트레이터 함수: 각 에이전트를 언제 호출할지, 결과를 어떻게 넘길지 제어
+</code></pre>
+<p>오케스트레이터의 책임:</p>
+<pre><code class="language-text">- 순서 제어: Planner 먼저, 그 다음 Worker
+- 데이터 전달: Planner 결과(작업 리스트)를 Worker에 넘김
+- 취합: Worker 산출물을 모아 최종 결과로
+</code></pre>
+<p>에이전트들은 각자 일만 하고, <strong>흐름은 오케스트레이터가 코드로 제어</strong>합니다. 26강에서는 <code>for</code> 루프로, 27강에서는 StateGraph로 이 지휘를 합니다.</p>
+<hr/>
+<h2 id="3">3. 취합 — 섹션으로 묶기</h2>
+<p>취합 부분을 자세히 보면:</p>
+<pre><code class="language-python">report = [f"# 캠페인 실행안\n\n&gt; {brief_text}\n"]   # 제목 + 브리프 요약
+for i, (t, out) in enumerate(outputs, 1):
+    report.append(f"## {i}. {t}\n{out}\n")          # 각 작업을 섹션으로
+final = "\n".join(report)
+</code></pre>
+<pre><code class="language-text"># 캠페인 실행안
+&gt; 캠페인명: 신학기 전자기기 프로모션 / ...
+
+## 1. 대학생 타깃의 핵심 니즈와 구매 동기를 분석하라
+(작업1 산출물)
+
+## 2. '번들' 혜택을 강조한 광고 카피 3종을 작성하라
+(작업2 산출물)
+
+## 3. 800만원 예산을 채널별로 배분하라
+(작업3 산출물)
+</code></pre>
+<p><strong>Planner가 쪼갠 작업이 그대로 문서의 목차(<code>## 1.</code>, <code>## 2.</code>)</strong> 가 됩니다. 계획이 곧 구조가 되는 거죠. 읽는 사람은 "어떤 작업으로 나눠 어떤 결과가 나왔는지" 한눈에 봅니다.</p>
+<hr/>
+<h2 id="4">4. 전체 실행</h2>
+<pre><code class="language-python">def main():
+    brief_text = load_brief_text("CMP02")   # 캠페인 1건 텍스트 로드
+    print(run_campaign(brief_text))
+
+
+if __name__ == "__main__":
+    main()
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[1] Planner 작업 분해 중...
+   서브태스크 1: 대학생 타깃의 핵심 니즈와 구매 동기를 분석하라
+   서브태스크 2: '이어버드+보조배터리 번들' 혜택을 강조한 광고 카피 3종을 작성하라
+   서브태스크 3: 800만원 예산을 채널별로 배분하는 방안을 제안하라
+
+[2] Worker 실행 중...
+   - 작업 1 수행: 대학생 타깃의 ...
+   - 작업 2 수행: '이어버드+보조배터리 번들' ...
+   - 작업 3 수행: 800만원 예산을 ...
+
+[3] 결과 취합
+# 캠페인 실행안
+
+&gt; 캠페인명: 신학기 전자기기 프로모션 / 카테고리: 전자기기 / 타깃: 대학생 / 예산: 8,000,000원 ...
+
+## 1. 대학생 타깃의 핵심 니즈와 구매 동기를 분석하라
+- 가성비와 휴대성을 중시 ...
+
+## 2. '이어버드+보조배터리 번들' 혜택을 강조한 광고 카피 3종 ...
+1) "강의실에서 카페까지, 하루 종일 끊김 없이 — 이어버드+보조배터리 번들" ...
+
+## 3. 800만원 예산을 채널별로 배분하는 방안을 제안하라
+- 인스타/틱톡 광고: 400만원 ...
+</code></pre>
+<p>캠페인 브리프 한 줄에서 <strong>완성된 실행안</strong>이 나왔습니다. Planner가 쪼개고, Worker가 채우고, 오케스트레이터가 엮은 결과죠.</p>
+<hr/>
+<h2 id="5-vs-plannerworker">5. 단일 호출 vs Planner/Worker 비교</h2>
+<p>같은 캠페인을 <strong>한 번의 LLM 호출</strong>로 처리했다면 어땠을까요?</p>
+<pre><code class="language-text">[단일 호출] "캠페인 다 준비해줘"
+   → 타깃 분석은 한 줄, 카피는 대충, 예산은 깜빡... (어설픔)
+
+[Planner/Worker]
+   → 각 작업을 독립적으로 깊이 처리 → 빠짐없이 균일한 품질
+</code></pre>
+<p>작업을 나눠 각자 집중하니 <strong>각 부분의 품질이 고르고 깊습니다.</strong> "한 번에 다"보다 "나눠서 차근차근"이 나은 거죠. 이게 Planner/Worker의 가치입니다.</p>
+<hr/>
+<h2 id="6">6. 이 구조의 확장성</h2>
+<p><code>run_campaign</code>은 작은 함수지만, 확장 여지가 많습니다.</p>
+<pre><code class="language-text">- Worker 병렬화: for 루프 → ThreadPoolExecutor (05번)
+- Worker 재시도: 실패 시 다시 (07번 신규)
+- Reviewer 추가: 취합 후 검토 단계 (09번 실습)
+- 전문 Worker: 작업별 다른 에이전트 (03번 + 25강 Supervisor)
+- StateGraph화: for 루프 → 그래프 (27강)
+</code></pre>
+<p>지금은 <strong>가장 단순한 순차 버전</strong>입니다. 다음 절(07번)에서 <strong>실패 처리·재시도</strong>를 더해 견고하게 만들고, 27강에서 StateGraph로 발전시킵니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li><code>run_campaign()</code>: <strong>계획 → 실행 → 취합</strong>을 묶은 오케스트레이터.</li>
+<li>오케스트레이터 = <strong>흐름 지휘자</strong>(순서·데이터 전달·취합을 코드로 제어).</li>
+<li>취합: 작업을 <strong>섹션(<code>## 1.</code>)으로</strong> 묶어 → Planner 계획이 곧 문서 목차.</li>
+<li>단일 호출보다 <strong>품질이 고르고 깊음</strong>(각 작업에 집중).</li>
+<li>확장 여지: 병렬화·재시도·Reviewer·전문 Worker·StateGraph화.</li>
+<li>다음 절에서 Worker 실패 처리와 재시도를 더합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="05_따라하기-Worker-작업-실행.html"><span class="lbl">← 이전 절</span>05. 따라하기 Worker 작업 실행</a><a class="nxt" href="07_Worker-실패-처리와-재시도.html"><span class="lbl">다음 절 →</span>07. Worker 실패 처리와 재시도</a></div>
+</div>
+</body></html>

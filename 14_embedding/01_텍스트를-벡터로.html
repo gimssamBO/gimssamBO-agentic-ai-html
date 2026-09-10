@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제14강 — 텍스트를 벡터로, 의미를 거리로</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제14강 · embedding</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제14강 · embedding — 세부 목차</b><a class="cur" href="01_텍스트를-벡터로.html">01. 텍스트를 벡터로</a><a class="" href="02_임베딩이란.html">02. 임베딩이란</a><a class="" href="03_코사인-유사도.html">03. 코사인 유사도</a><a class="" href="04_임베딩-vs-채팅-모델.html">04. 임베딩 vs 채팅 모델</a><a class="" href="05_따라하기-문장을-벡터로.html">05. 따라하기 문장을 벡터로</a><a class="" href="06_따라하기-FAQ-임베딩과-유사도-검색.html">06. 따라하기 FAQ 임베딩과 유사도 검색</a><a class="" href="07_긴-문서-임베딩-전략.html">07. 긴 문서 임베딩 전략</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">텍스트를 벡터로, 의미를 거리로</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>13강의 검색은 <code>"환불" in text</code> 같은 <strong>단어 매칭</strong>이라, "돈 돌려받기"로는 "환불"을 못 찾았습니다. 텍스트를 <strong>의미를 담은 숫자 벡터(임베딩)</strong> 로 바꾸면, 단어가 달라도 <strong>의미가 비슷하면</strong> 찾을 수 있습니다. 이게 RAG의 심장인 "의미 기반 검색"입니다.</p>
+<hr/>
+<h2 id="1-13">1. 단어 매칭의 한계 (13강 복습)</h2>
+<p>13강에서 청크를 만들었지만, 검색은 단순 문자열 매칭이었습니다.</p>
+<pre><code class="language-python">hits = [c for c in chunks if "환불" in c.page_content]
+</code></pre>
+<p>이건 한계가 명확합니다. 고객이 이렇게 물으면?</p>
+<pre><code class="language-text">"돈 언제 돌려받아요?"
+  → "환불"이라는 단어가 없음 → 매칭 실패! ✗
+</code></pre>
+<p>사람은 "돈 돌려받기 = 환불"임을 압니다. 하지만 단어 매칭은 <strong>글자가 같아야만</strong> 찾습니다. 의미가 같아도 글자가 다르면 못 찾죠.</p>
+<hr/>
+<h2 id="2">2. 기계에게 '의미'를 가르치려면</h2>
+<p>기계가 "돈 돌려받기"와 "환불"이 <strong>비슷한 의미</strong>임을 알게 하려면 어떻게 할까요? </p>
+<p>핵심 아이디어: <strong>텍스트를 "의미를 담은 숫자"로 바꾸고, 그 숫자들이 비슷하면 의미도 비슷하다고 본다.</strong></p>
+<ul>
+<li><code>"환불"</code> → <code>[0.021, -0.118, 0.073, …]</code></li>
+<li><code>"돈 돌려받기"</code> → <code>[0.019, -0.121, 0.069, …]</code> — 숫자가 비슷함 → <strong>의미도 비슷!</strong></li>
+<li><code>"로봇청소기"</code> → <code>[-0.087, 0.203, -0.011, …]</code> — 숫자가 완전 다름 → 의미도 다름</li>
+</ul>
+<p>이렇게 텍스트를 의미를 담은 숫자 벡터로 바꾸는 게 <strong>임베딩(embedding)</strong> 입니다.</p>
+<blockquote>
+<p>백엔드 비유: 문자열 비교가 <code>WHERE text LIKE '%환불%'</code>라면, 임베딩 검색은 "의미 좌표가 가까운 행을 거리순으로 정렬"하는 것에 가깝습니다. 글자가 아니라 <strong>의미의 위치</strong>로 찾는 거죠.</p>
+</blockquote>
+<hr/>
+<h2 id="3">3. "의미를 거리로" 바꾼다</h2>
+<p>임베딩의 마법은 <strong>의미를 거리(distance)로 바꾼다</strong>는 것입니다.</p>
+<pre><code class="language-text">의미 공간(상상):
+        환불 •
+        돈돌려받기 •     ← 환불과 가까이 위치
+
+                           • 로봇청소기   ← 멀리 위치
+                           • 배터리
+</code></pre>
+<p>비슷한 의미는 <strong>가까이</strong>, 다른 의미는 <strong>멀리</strong> 위치합니다. 그러면 "이 질문과 의미가 가까운 문서"를 <strong>거리 계산</strong>으로 찾을 수 있죠. "환불" 근처에 있는 문서를 찾으면, "돈 돌려받기"로 물어도 "환불 정책"을 찾아냅니다.</p>
+<hr/>
+<h2 id="4">4. 이 강에서 배울 것</h2>
+<table>
+<thead>
+<tr>
+<th>목차</th>
+<th>내용</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>02</td>
+<td>임베딩이란 — 텍스트를 벡터로</td>
+</tr>
+<tr>
+<td>03</td>
+<td>코사인 유사도 — 의미를 거리로 재는 법</td>
+</tr>
+<tr>
+<td>04</td>
+<td>임베딩 모델 vs 채팅 모델</td>
+</tr>
+<tr>
+<td>05~06</td>
+<td>문장 임베딩 + FAQ 의미 검색</td>
+</tr>
+<tr>
+<td>07</td>
+<td>긴 문서 임베딩 전략 (신규)</td>
+</tr>
+</tbody>
+</table>
+<p>이 강은 <strong>벡터DB 없이 numpy만으로</strong> 미니 의미 검색을 직접 만듭니다. 원리를 손으로 체득한 뒤, 15강에서 진짜 벡터DB(FAISS)를 씁니다.</p>
+<hr/>
+<h2 id="5-rag-5-3">5. RAG 5단계 중 ③ 임베딩</h2>
+<p>13강에서 본 RAG 파이프라인에서, 이 강은 <strong>③ 임베딩</strong> 단계입니다.</p>
+<blockquote>
+<p>① 로드 ✓ · ② 청킹 ✓ · <strong>③ 임베딩 ← 14강(지금)</strong> · ④ 저장(15강) · ⑤ 생성(16강)</p>
+</blockquote>
+<p>청크(②)를 벡터(③)로 바꾸는 게 14강이죠. 이걸 해야 의미 기반 검색이 가능해집니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>단어 매칭은 <strong>글자가 같아야</strong> 찾아 "돈 돌려받기 ≠ 환불"의 한계.</li>
+<li><strong>임베딩</strong> = 텍스트를 <strong>의미를 담은 숫자 벡터</strong>로 변환.</li>
+<li>비슷한 의미는 벡터도 비슷 → <strong>의미를 거리로</strong> 바꿔 검색.</li>
+<li>벡터DB 없이 numpy로 원리를 먼저 체득(15강에서 벡터DB).</li>
+<li>다음 절에서 임베딩을 자세히 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><span class="prv off"><span class="lbl"> </span> </span><a class="nxt" href="02_임베딩이란.html"><span class="lbl">다음 절 →</span>02. 임베딩이란</a></div>
+</div>
+</body></html>

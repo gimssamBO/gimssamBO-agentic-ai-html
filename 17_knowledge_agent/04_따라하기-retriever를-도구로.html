@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제17강 — 따라하기 — retriever를 도구로</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제17강 · knowledge agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제17강 · knowledge agent — 세부 목차</b><a class="" href="01_필요할때만-검색하게.html">01. 필요할때만 검색하게</a><a class="" href="02_항상검색-vs-필요할때검색.html">02. 항상검색 vs 필요할때검색</a><a class="" href="03_RAG를-도구로-만들기.html">03. RAG를 도구로 만들기</a><a class="cur" href="04_따라하기-retriever를-도구로.html">04. 따라하기 retriever를 도구로</a><a class="" href="05_따라하기-일상질문-vs-정책질문.html">05. 따라하기 일상질문 vs 정책질문</a><a class="" href="06_도구-선택-실패와-description-개선.html">06. 도구 선택 실패와 description 개선</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="retriever">따라하기 — retriever를 도구로</h1>
+<h2 id="_1">목표</h2>
+<p>여러 사내 문서를 통합 인덱싱하고, <code>create_retriever_tool</code>로 검색 도구를 만들어 에이전트에 연결합니다. 실제 파일은 <code>code/ch17_knowledge_agent.py</code> 입니다.</p>
+<hr/>
+<h2 id="0">0. 실습 준비 (설치)</h2>
+<pre><code class="language-bash">conda activate agentic
+
+# 17강에 필요한 라이브러리 (앞 강에서 설치했다면 생략 가능)
+pip install langchain langgraph langchain-community langchain-google-genai faiss-cpu pypdf
+</code></pre>
+<p>이번 강은 <code>환불교환정책.pdf</code>, <code>직원핸드북.pdf</code>, <code>멤버십정책.pdf</code> 세 문서를 통합합니다.</p>
+<hr/>
+<h2 id="1">1. 여러 문서 통합 인덱스</h2>
+<p>세 정책 문서를 하나의 인덱스로 묶습니다(15강 복습).</p>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_chat, get_embeddings, DOCS
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import FAISS
+
+def build_retriever():
+    """환불정책+핸드북+멤버십을 하나의 인덱스로 통합."""
+    files = ["환불교환정책.pdf", "직원핸드북.pdf", "멤버십정책.pdf"]
+    docs = []
+    for f in files:
+        docs.extend(PyPDFLoader(str(DOCS / f)).load())   # 세 문서를 한 인덱스로
+    chunks = RecursiveCharacterTextSplitter(
+        chunk_size=500, chunk_overlap=50).split_documents(docs)
+    vs = FAISS.from_documents(chunks, get_embeddings())
+    return vs.as_retriever(search_kwargs={"k": 4})
+</code></pre>
+<p>환불·핸드북·멤버십 세 문서가 한 인덱스에 들어갑니다. 그래서 "환불 규정"도, "연차 휴가"도, "VIP 등급"도 한 도구로 검색할 수 있죠.</p>
+<hr/>
+<h2 id="2-retriever">2. retriever를 도구로</h2>
+<p><code>create_retriever_tool</code>로 검색 도구를 만듭니다(03번).</p>
+<pre><code class="language-python">from langchain_core.tools.retriever import create_retriever_tool
+
+retriever = build_retriever()
+# [핵심] description이 라우팅 규칙 — 에이전트는 이 설명을 읽고 "언제 검색할지" 판단
+policy_tool = create_retriever_tool(
+    retriever,
+    name="company_policy_search",
+    description="승승장구몰 환불/교환/멤버십/직원 규정 사내 문서를 검색한다. "
+                "정책·규정·등급·반품·휴가 등 회사 규정 관련 질문에 사용하라.",
+)
+</code></pre>
+<p>description에 <strong>"정책·규정·등급·반품·휴가"</strong> 라고 구체적으로 적었습니다. 이게 에이전트가 "이 질문이 정책 검색 대상인가?"를 판단하는 근거입니다.</p>
+<hr/>
+<h2 id="3">3. 에이전트 구성</h2>
+<pre><code class="language-python">from langchain.agents import create_agent
+
+llm = get_chat(temperature=0)
+agent = create_agent(
+    llm,
+    tools=[policy_tool],
+    system_prompt="너는 승승장구몰의 친절한 상담원이다. 회사 규정은 반드시 도구로 검색해 답하라.",
+)
+</code></pre>
+<p>시스템 프롬프트에 <strong>"회사 규정은 반드시 도구로 검색해 답하라"</strong> 라고 명시했습니다. 이게 "규정 질문엔 환각하지 말고 꼭 문서를 찾아라"라는 지침이죠. 일상 질문은 언급 안 했으니, 그건 에이전트가 알아서 검색 없이 답합니다.</p>
+<hr/>
+<h2 id="4">4. 검색 여부 확인 함수</h2>
+<p>에이전트가 검색했는지 확인하는 헬퍼를 만듭니다(02번).</p>
+<pre><code class="language-python">def ask(q):
+    out = agent.invoke({"messages": [{"role": "user", "content": q}]})
+    msgs = out["messages"]
+    # tool_calls가 하나라도 있으면 = 검색 도구를 호출했다는 뜻
+    used = any(getattr(m, "tool_calls", None) for m in msgs)
+    return msgs[-1].content, used   # (최종 답변, 도구 사용 여부)
+</code></pre>
+<p><code>ask</code>는 답변과 함께 <strong>검색했는지 여부</strong>(<code>used</code>)를 돌려줍니다. 이걸로 "일상 질문엔 검색 안 하고, 정책 질문엔 검색하는지"를 다음 절에서 확인합니다.</p>
+<hr/>
+<h2 id="5">5. 통합 인덱스의 장점</h2>
+<p>세 문서를 한 인덱스에 넣은 게 핵심입니다. 그래서 <strong>하나의 검색 도구</strong>로 모든 정책을 커버합니다.</p>
+<pre><code class="language-text">company_policy_search 도구 하나로:
+  "환불 며칠?"   → 환불교환정책 청크 검색
+  "연차 며칠?"   → 직원핸드북 청크 검색
+  "VIP 조건?"    → 멤버십정책 청크 검색
+</code></pre>
+<p>문서마다 도구를 따로 만들 필요 없이, <strong>통합 인덱스 + 도구 하나</strong>면 됩니다. 의미 검색이 알맞은 문서의 청크를 알아서 찾으니까요(15강). 도구가 적을수록 에이전트의 라우팅도 쉽습니다(6강).</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>여러 문서를 <strong>하나의 인덱스</strong>로 통합 → 검색 도구 하나로 커버.</li>
+<li><code>create_retriever_tool</code>로 검색 도구 생성(description 명확히).</li>
+<li>시스템 프롬프트에 <strong>"규정은 반드시 검색"</strong> 명시.</li>
+<li><code>tool_calls</code>로 <strong>검색 여부</strong>를 확인하는 헬퍼 작성.</li>
+<li>통합 인덱스 + 도구 하나면 모든 정책 질문 처리.</li>
+<li>다음 절에서 일상/정책 질문의 검색 여부를 비교합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="03_RAG를-도구로-만들기.html"><span class="lbl">← 이전 절</span>03. RAG를 도구로 만들기</a><a class="nxt" href="05_따라하기-일상질문-vs-정책질문.html"><span class="lbl">다음 절 →</span>05. 따라하기 일상질문 vs 정책질문</a></div>
+</div>
+</body></html>

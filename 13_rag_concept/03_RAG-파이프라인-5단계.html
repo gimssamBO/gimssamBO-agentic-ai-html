@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제13강 — RAG 파이프라인 5단계</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제13강 · rag concept</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제13강 · rag concept — 세부 목차</b><a class="" href="01_검색으로-근거를-찾아-답하기.html">01. 검색으로 근거를 찾아 답하기</a><a class="" href="02_LLM의-세가지-한계.html">02. LLM의 세가지 한계</a><a class="cur" href="03_RAG-파이프라인-5단계.html">03. RAG 파이프라인 5단계</a><a class="" href="04_왜-청킹하는가.html">04. 왜 청킹하는가</a><a class="" href="05_따라하기-PDF-로드하기.html">05. 따라하기 PDF 로드하기</a><a class="" href="06_따라하기-청킹하기.html">06. 따라하기 청킹하기</a><a class="" href="07_청크-크기와-오버랩-튜닝.html">07. 청크 크기와 오버랩 튜닝</a><a class="" href="08_다양한-문서-로더.html">08. 다양한 문서 로더</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="rag-5">RAG 파이프라인 5단계</h1>
+<h2 id="_1">한 줄 요약</h2>
+<p>RAG는 다섯 단계로 돕니다: <strong>① 로드 → ② 청킹 → ③ 임베딩 → ④ 저장/검색 → ⑤ 생성</strong>. 앞 4단계는 <strong>사전 준비(인덱싱)</strong>, 검색·생성은 <strong>매 질문마다(질의)</strong> 일어납니다. 이 전체 그림이 13~16강의 지도입니다.</p>
+<hr/>
+<h2 id="1">1. 전체 그림</h2>
+<p>RAG는 두 시점으로 나뉩니다.</p>
+<ul>
+<li><strong>■ 사전 준비 (인덱싱 — 서비스 시작 전 1회/배치)</strong><br/>
+  ① 로드(PDF/CSV → Document) → ② 청킹(긴 문서를 작은 조각으로) → ③ 임베딩(각 조각을 벡터로) → ④ 저장(벡터DB에 보관)</li>
+<li><strong>■ 질의 (매 질문마다)</strong><br/>
+  사용자 질문을 임베딩 → ④' 검색(벡터DB에서 유사 조각 k개) → ⑤ 생성(LLM이 그 조각을 근거로 답변)</li>
+</ul>
+<hr/>
+<h2 id="2">2. 다섯 단계 해설</h2>
+<table>
+<thead>
+<tr>
+<th>단계</th>
+<th>이름</th>
+<th>하는 일</th>
+<th>배우는 강</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>①</td>
+<td>로드(Load)</td>
+<td>PDF 등을 Document로 읽기</td>
+<td>13강 (이 강)</td>
+</tr>
+<tr>
+<td>②</td>
+<td>청킹(Chunk)</td>
+<td>긴 문서를 조각으로 나누기</td>
+<td>13강 (이 강)</td>
+</tr>
+<tr>
+<td>③</td>
+<td>임베딩(Embedding)</td>
+<td>조각을 벡터로 변환</td>
+<td>14강</td>
+</tr>
+<tr>
+<td>④</td>
+<td>저장(Store)</td>
+<td>벡터DB에 보관</td>
+<td>15강</td>
+</tr>
+<tr>
+<td>⑤</td>
+<td>생성(Generate)</td>
+<td>검색한 근거로 답변</td>
+<td>16강</td>
+</tr>
+</tbody>
+</table>
+<p>13~16강이 이 다섯 단계를 하나씩 배우는 여정입니다. 13강에서는 ①②를, 다음 강들에서 ③④⑤를 배웁니다.</p>
+<hr/>
+<h2 id="3-vs">3. 두 단계로 나뉜 흐름 — 인덱싱 vs 질의</h2>
+<p>RAG의 5단계는 <strong>두 시점</strong>으로 나뉩니다. 이걸 이해하는 게 핵심입니다.</p>
+<h3 id="14">인덱싱 (①~④) — 사전 준비</h3>
+<p>서비스를 시작하기 <strong>전에 한 번</strong> 합니다. 문서를 로드·청킹·임베딩해서 벡터DB에 저장해 둡니다. 마치 도서관에서 책을 미리 분류해 서가에 꽂아 두는 것처럼요.</p>
+<h3 id="45">질의 (④'~⑤) — 매 요청</h3>
+<p>사용자가 질문할 <strong>때마다</strong> 합니다. 질문을 임베딩해서 유사한 조각을 검색하고, 그 조각을 근거로 답을 생성합니다. 도서관에서 "이 주제 책 어디 있어요?"라고 물으면 서가에서 찾아 주는 것처럼요.</p>
+<blockquote>
+<p>백엔드 개발자 비유: 인덱싱은 <strong>"마이그레이션/시드"</strong>(서비스 전 1회), 질의는 <strong>"API 핸들러"</strong>(요청마다)라고 생각하면 깔끔합니다.</p>
+</blockquote>
+<hr/>
+<h2 id="4">4. 왜 인덱싱을 미리 하나</h2>
+<p>"질문할 때마다 로드·청킹·임베딩을 다 하면 안 되나?"라고 생각할 수 있습니다. 안 됩니다.</p>
+<ul>
+<li><strong>느림</strong>: 100페이지 PDF를 매 질문마다 로드·임베딩하면 답이 몇 초씩 걸립니다.</li>
+<li><strong>비용</strong>: 임베딩은 API 호출(비용)입니다. 매번 전체를 임베딩하면 돈이 낭비됩니다.</li>
+</ul>
+<p>그래서 <strong>무거운 작업(①~④)은 미리 한 번</strong> 해 두고, <strong>가벼운 작업(검색·생성)만 매번</strong> 합니다. 검색은 미리 만든 벡터DB를 조회하는 거라 빠르죠. 이 분리가 RAG를 실용적으로 만듭니다.</p>
+<hr/>
+<h2 id="5-13">5. 13강의 위치</h2>
+<p>이 강(13강)은 ①②(로드·청킹)만 다룹니다. 그것도 <strong>임베딩 없이</strong>요. 왜냐하면:</p>
+<ul>
+<li>③임베딩부터는 API 키와 비용이 필요합니다(14강).</li>
+<li>먼저 "문서를 어떻게 조각으로 나누는가"라는 <strong>기초 원리</strong>를 확실히 잡는 게 중요합니다.</li>
+</ul>
+<p>집을 지을 때 기초 공사부터 하듯, RAG도 "문서를 다루는 법"부터 배웁니다. ③④⑤(임베딩·저장·생성)는 그 위에 차곡차곡 쌓습니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>RAG 5단계: <strong>로드 → 청킹 → 임베딩 → 저장/검색 → 생성</strong>.</li>
+<li>두 시점: <strong>인덱싱</strong>(①~④, 사전 1회) + <strong>질의</strong>(④'~⑤, 매 요청).</li>
+<li>무거운 작업은 <strong>미리</strong>, 가벼운 검색·생성만 <strong>매번</strong> → 빠르고 싸다.</li>
+<li>13강은 ①②(로드·청킹)를 임베딩 없이 다룬다.</li>
+<li>다음 절에서 "왜 청킹하는가"를 자세히 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="02_LLM의-세가지-한계.html"><span class="lbl">← 이전 절</span>02. LLM의 세가지 한계</a><a class="nxt" href="04_왜-청킹하는가.html"><span class="lbl">다음 절 →</span>04. 왜 청킹하는가</a></div>
+</div>
+</body></html>

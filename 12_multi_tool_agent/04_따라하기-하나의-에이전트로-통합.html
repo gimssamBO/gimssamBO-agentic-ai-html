@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제12강 — 따라하기 — 하나의 에이전트로 통합</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제12강 · multi tool agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제12강 · multi tool agent — 세부 목차</b><a class="" href="01_여러-도구를-통합하다.html">01. 여러 도구를 통합하다</a><a class="" href="02_도구-라우팅.html">02. 도구 라우팅</a><a class="" href="03_따라하기-도구-3종-정의.html">03. 따라하기 도구 3종 정의</a><a class="cur" href="04_따라하기-하나의-에이전트로-통합.html">04. 따라하기 하나의 에이전트로 통합</a><a class="" href="05_따라하기-연쇄-호출-질문.html">05. 따라하기 연쇄 호출 질문</a><a class="" href="06_도구-실패시-폴백-처리.html">06. 도구 실패시 폴백 처리</a><a class="" href="07_도구-입력-검증.html">07. 도구 입력 검증</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">따라하기 — 하나의 에이전트로 통합</h1>
+<h2 id="_2">목표</h2>
+<p>03번에서 만든 세 도구를 <strong>하나의 에이전트</strong>에 통합합니다. 시스템 프롬프트로 도구 선택·연쇄·집계 규칙을 가르칩니다.</p>
+<hr/>
+<h2 id="1">1. 도구 목록으로 묶기</h2>
+<p>세 도구를 리스트에 담습니다. 이게 에이전트에게 쥐여 줄 "공구함"입니다.</p>
+<pre><code class="language-python"># 에이전트에게 쥐여 줄 도구 목록. LLM은 각 docstring을 보고 무엇을 쓸지 라우팅한다.
+TOOLS = [get_order_status, get_stock, run_pandas]
+</code></pre>
+<p>도구를 추가하고 싶으면 이 리스트에 넣기만 하면 됩니다. 예를 들어 9강의 웹 검색을 추가하려면 <code>TOOLS = [..., web_search]</code>처럼요.</p>
+<hr/>
+<h2 id="2">2. 시스템 프롬프트 — 라우팅·연쇄 규칙</h2>
+<p>여러 도구를 다룰 때는 시스템 프롬프트에 <strong>사용 규칙</strong>을 명시합니다.</p>
+<pre><code class="language-python">SYSTEM = (
+    "너는 승승장구몰의 운영 비서다. 필요한 도구를 골라 순서대로 사용해 답하라.\n"
+    "여러 정보가 필요하면 도구를 여러 번 호출해도 된다. 앞 도구 결과(product_id 등)를\n"
+    "다음 도구의 입력으로 이어 써라. 매출 집계 시 취소/환불은 제외하고,\n"
+    "답은 한국어로 항목별로 정리한다."
+)
+</code></pre>
+<p>세 가지를 지시했습니다.</p>
+<ul>
+<li><strong>"필요한 도구를 골라 순서대로"</strong>: 라우팅과 다단계 사용을 허용</li>
+<li><strong>"앞 도구 결과를 다음 도구 입력으로 이어 써라"</strong>: 연쇄 호출 유도 (핵심!)</li>
+<li><strong>"매출 집계 시 취소/환불 제외"</strong>: 분석 규칙(11강 복습)</li>
+</ul>
+<p>특히 <strong>"앞 도구 결과를 이어 써라"</strong> 가 연쇄 호출의 비결입니다. 이 한 줄이 "주문 조회 → product_id 획득 → 재고 조회"를 가능하게 합니다.</p>
+<hr/>
+<h2 id="3">3. 에이전트 생성</h2>
+<pre><code class="language-python">agent = create_agent(llm, tools=TOOLS, system_prompt=SYSTEM)
+</code></pre>
+<p>8강부터 계속 본 그 패턴입니다. 도구가 3개로 늘었을 뿐, 코드는 똑같습니다. LangChain이 라우팅·연쇄·반복을 모두 내부에서 처리합니다.</p>
+<hr/>
+<h2 id="4">4. 통합 에이전트의 구조</h2>
+<p>하나의 <strong>통합 에이전트</strong>(<code>create_agent</code>)가 질문을 받아 처리합니다.</p>
+<ul>
+<li><strong>질문 입력</strong> → 에이전트가 각 도구의 docstring을 보고 라우팅.</li>
+<li>보유 도구: <code>get_order_status</code> · <code>get_stock</code> · <code>run_pandas</code> — 필요한 만큼 골라 순서대로 실행.</li>
+<li>결과를 모아 정리 → <strong>답변 출력.</strong></li>
+</ul>
+<p>하나의 에이전트가 세 도구를 다 쥐고, 질문에 맞춰 필요한 걸 골라 씁니다.</p>
+<hr/>
+<h2 id="5">5. 간단 실행</h2>
+<pre><code class="language-python">q = "C0001 고객의 최근 주문 상태를 알려줘."
+result = agent.invoke({"messages": [{"role": "user", "content": q}]})
+print(result["messages"][-1].content)
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">C0001 고객의 최근 주문은 '승승 현미 잡곡 10kg'이며, 2026-03-26에 주문되어
+현재 '배송완료' 상태입니다.
+</code></pre>
+<p>이 질문은 주문 도구 하나만 필요했습니다. 에이전트가 "주문 상태" 질문임을 알고 <code>get_order_status</code>만 라우팅했죠. 다음 절에서는 <strong>여러 도구가 연쇄되는</strong> 복합 질문을 봅니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>도구들을 <code>TOOLS</code> 리스트에 담아 <code>create_agent</code>에 넘긴다.</li>
+<li>시스템 프롬프트에 <strong>"앞 도구 결과를 다음 입력으로 이어 써라"</strong>(연쇄 핵심).</li>
+<li>도구가 늘어도 <code>create_agent</code> 코드는 똑같다(라우팅은 LangChain이 처리).</li>
+<li>단순 질문은 도구 <strong>하나만</strong> 라우팅된다.</li>
+<li>다음 절에서 여러 도구가 <strong>연쇄 호출</strong>되는 복합 질문을 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="03_따라하기-도구-3종-정의.html"><span class="lbl">← 이전 절</span>03. 따라하기 도구 3종 정의</a><a class="nxt" href="05_따라하기-연쇄-호출-질문.html"><span class="lbl">다음 절 →</span>05. 따라하기 연쇄 호출 질문</a></div>
+</div>
+</body></html>

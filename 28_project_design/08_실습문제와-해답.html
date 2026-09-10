@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제28강 — 실습문제와 해답</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제28강 · project design</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제28강 · project design — 세부 목차</b><a class="" href="01_바로-코딩이-망하는-이유.html">01. 바로 코딩이 망하는 이유</a><a class="" href="02_요구사항-정의와-기능-분해.html">02. 요구사항 정의와 기능 분해</a><a class="" href="03_구성요소-필요성-판단.html">03. 구성요소 필요성 판단</a><a class="" href="04_아키텍처와-인터페이스-설계.html">04. 아키텍처와 인터페이스 설계</a><a class="" href="05_따라하기-설계를-코드-스켈레톤으로.html">05. 따라하기 설계를 코드 스켈레톤으로</a><a class="" href="06_트레이드오프-판단-RAG-멀티에이전트.html">06. 트레이드오프 판단 RAG 멀티에이전트</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="cur" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">실습문제와 해답</h1>
+<p>28강 설계 사고법을 직접 적용해, <strong>새로운 에이전트의 설계 문서와 코드 스켈레톤</strong>을 만듭니다. 두 문제는 이어집니다(문제1 설계 → 문제2 스켈레톤).</p>
+<blockquote>
+<p><strong>실습 준비</strong><br/>
+<code>bash
+conda activate agentic
+pip install pyyaml      # 표준 dataclass만 써도 됨 (LLM 호출 없음)</code></p>
+</blockquote>
+<hr/>
+<h2 id="1">문제 1 — 설계 문서 작성</h2>
+<h3 id="_2">요구사항</h3>
+<p><strong>"CS 티켓 자동 분류·답변 에이전트"</strong> 의 설계 문서를 작성해 <code>docs/cs_agent_design.md</code>로 저장하세요. 다음 4개 섹션을 <strong>반드시</strong> 포함합니다.</p>
+<ol>
+<li><strong>요구사항 분석</strong> — 입력=<code>data/support_tickets.csv</code>의 <code>content</code>, 출력=severity 분류 + 답변 초안.</li>
+<li><strong>도구 목록</strong> — 예: <code>classify_severity</code>, <code>search_faq</code>(<code>data/faq.csv</code> 검색), <code>draft_reply</code>. 각 도구의 <strong>입력/출력 타입</strong> 명시.</li>
+<li><strong>데이터 흐름</strong> — 티켓 입력 → 분류 → FAQ 검색 → 답변 생성.</li>
+<li><strong>텍스트 아키텍처 다이어그램.</strong></li>
+</ol>
+<blockquote>
+<p><strong>기대 결과</strong>: 4개 섹션 + 최소 3개 도구가 명세된 마크다운 문서.</p>
+</blockquote>
+<h3 id="_3">해답</h3>
+<p><code>docs/cs_agent_design.md</code>:</p>
+<pre><code class="language-markdown"># CS 티켓 자동 분류·답변 에이전트 — 설계 문서
+
+## 1. 요구사항 분석
+- 목적: 고객 지원 티켓을 자동으로 심각도 분류하고 답변 초안을 생성한다.
+- 입력: data/support_tickets.csv 의 `content`(티켓 본문 텍스트)
+- 출력: severity(긴급/보통/낮음) + 답변 초안(마크다운)
+- 사용자 시나리오:
+  - T1 "결제했는데 주문이 안 보여요" → 긴급 분류 + 즉시 안내 초안
+  - T2 "배송 언제 와요?" → 보통 분류 + FAQ 기반 안내
+
+## 2. 도구 목록
+| 도구 | 입력 → 출력 | 설명 |
+|------|-------------|------|
+| classify_severity(content: str) | str → str | 티켓 본문을 '긴급/보통/낮음'으로 분류 |
+| search_faq(keyword: str) | str → str | data/faq.csv 에서 관련 FAQ 답변 검색 |
+| draft_reply(content: str, faq: str) | (str, str) → str | 티켓+FAQ 근거로 답변 초안 작성 |
+
+## 3. 데이터 흐름
+티켓(content) → classify_severity(분류) → search_faq(근거 검색)
+→ draft_reply(초안 생성) → [severity + 답변 초안]
+
+## 4. 아키텍처 (흐름)
+1. support_tickets.csv (content)
+2. → classify_severity → severity(긴급/보통/낮음)
+3. → search_faq(키워드) → faq.csv 에서 근거
+4. → draft_reply(티켓, 근거) → 답변 초안
+5. → [출력] severity + 답변 초안
+
+## 5. 구성요소 판단
+- 도구: ✅ (분류·검색·작성)
+- RAG: △ FAQ가 짧으면 CSV 검색으로 충분, 길고 많아지면 RAG로 승격
+- 메모리: ❌ 티켓 단건 처리라 대화 맥락 불필요
+- 멀티에이전트: ❌ 도구 3개 → 단일로 시작
+</code></pre>
+<p><strong>관찰 포인트</strong></p>
+<ul>
+<li>28강의 <strong>5단계 절차</strong>를 그대로 적용했습니다(요구사항 → 도구 분해 → 흐름 → 아키텍처 → 구성요소 판단).</li>
+<li>도구마다 <strong>입력/출력 타입</strong>을 명시해, 문제 2의 시그니처로 바로 옮길 수 있습니다.</li>
+<li>메모리·멀티에이전트를 <strong>❌로 판단</strong> — "필요 없는 건 안 넣는다"(03번)를 실천.</li>
+</ul>
+<hr/>
+<h2 id="2">문제 2 — 코드 스켈레톤 작성</h2>
+<h3 id="_4">요구사항</h3>
+<p>문제 1의 설계를 바탕으로 <code>code/ch28_ex_skeleton.py</code>를 작성하세요.</p>
+<ul>
+<li><code>ch28_design.py</code>처럼 <code>@dataclass AgentSpec</code>과 도구 시그니처(<code>classify_severity</code>, <code>search_faq</code>, <code>draft_reply</code> — 본문은 <code>raise NotImplementedError("구현 예정")</code>)를 정의.</li>
+<li><code>print_design()</code>을 구현해 실행 시 <strong>요구사항·도구목록·데이터흐름 요약</strong>이 출력되게.</li>
+<li><strong>검증</strong>: <code>python code/ch28_ex_skeleton.py</code> 실행 시 에러 없이 설계 요약이 출력된다.</li>
+</ul>
+<h3 id="_5">해답</h3>
+<pre><code class="language-python"># code/ch28_ex_skeleton.py
+# 실행: python code/ch28_ex_skeleton.py
+import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import DATA
+
+from dataclasses import dataclass
+
+
+@dataclass
+class AgentSpec:
+    """CS 티켓 분류·답변 에이전트의 설계 명세."""
+    name: str = "CS 티켓 자동 분류·답변 에이전트"
+    tools: tuple = ("classify_severity", "search_faq", "draft_reply")
+    use_rag: bool = False         # FAQ가 짧아 CSV 검색으로 충분 → RAG 보류
+    use_memory: bool = False      # 티켓 단건 처리 → 메모리 불필요
+    use_multi_agent: bool = False # 도구 3개 → 단일로 시작
+
+
+# ----- 도구 시그니처 (구현 예정) -----
+def classify_severity(content: str) -&gt; str:
+    """티켓 본문을 '긴급/보통/낮음'으로 분류. (구현: LLM 분류 또는 규칙)"""
+    raise NotImplementedError("구현 예정")  # TODO
+
+
+def search_faq(keyword: str) -&gt; str:
+    """data/faq.csv 에서 키워드로 FAQ 답변 검색."""
+    raise NotImplementedError("구현 예정")  # TODO
+
+
+def draft_reply(content: str, faq: str) -&gt; str:
+    """티켓 본문 + FAQ 근거로 답변 초안 작성."""
+    raise NotImplementedError("구현 예정")  # TODO
+
+
+# ----- 진입 함수 시그니처 -----
+def handle_ticket(content: str) -&gt; dict:
+    """티켓 한 건을 받아 {'severity':..., 'reply':...} 반환. (단일 진입점)"""
+    # TODO: severity = classify_severity(content)
+    #       faq = search_faq(키워드 추출)
+    #       reply = draft_reply(content, faq)
+    raise NotImplementedError("구현 예정")
+
+
+# ----- 설계 요약 출력 -----
+def print_design():
+    spec = AgentSpec()
+    print("=" * 60)
+    print(f"[설계] {spec.name}")
+    print("=" * 60)
+    print("요구사항:")
+    print("  입력: support_tickets.csv 의 content")
+    print("  출력: severity(긴급/보통/낮음) + 답변 초안")
+    print(f"\n도구 목록: {', '.join(spec.tools)}")
+    print(f"RAG: {spec.use_rag} / 메모리: {spec.use_memory} / "
+          f"멀티에이전트: {spec.use_multi_agent}")
+    print("\n데이터 흐름:")
+    print("  티켓 → classify_severity → search_faq → draft_reply → [severity + 초안]")
+    print(f"\n데이터 소스: {DATA}")
+
+
+if __name__ == "__main__":
+    print_design()
+</code></pre>
+<p><strong>검증 실행</strong></p>
+<pre><code class="language-bash">python code/ch28_ex_skeleton.py
+</code></pre>
+<pre><code class="language-text">============================================================
+[설계] CS 티켓 자동 분류·답변 에이전트
+============================================================
+요구사항:
+  입력: support_tickets.csv 의 content
+  출력: severity(긴급/보통/낮음) + 답변 초안
+
+도구 목록: classify_severity, search_faq, draft_reply
+RAG: False / 메모리: False / 멀티에이전트: False
+
+데이터 흐름:
+  티켓 → classify_severity → search_faq → draft_reply → [severity + 초안]
+
+데이터 소스: .../data
+</code></pre>
+<p><strong>관찰 포인트</strong></p>
+<ul>
+<li>설계 문서(문제 1)의 도구 목록이 <strong>그대로 시그니처</strong>가 됐습니다 — 설계가 코드로 이어짐.</li>
+<li>본문은 <code>raise NotImplementedError("구현 예정")</code> — 아직 안 만들었음을 명시(05번 기법).</li>
+<li>실행하면 <strong>에러 없이 설계 요약</strong>이 출력 → 검증 통과. 구현 단계에서 TODO만 채우면 됩니다.</li>
+</ul>
+<hr/>
+<h2 id="_6">마무리</h2>
+<ul>
+<li><strong>문제 1</strong>: 5단계 절차로 <strong>새 에이전트 설계 문서</strong>를 작성했습니다(요구사항·도구·흐름·아키텍처·구성요소 판단).</li>
+<li><strong>문제 2</strong>: 그 설계를 <strong>코드 스켈레톤</strong>으로 박제했습니다(<code>@dataclass</code> + 시그니처 + <code>print_design</code>).</li>
+<li>핵심은 <strong>설계 → 코드가 매끄럽게 이어진다</strong>는 것. 설계 문서의 도구 목록이 곧 코드의 시그니처가 됩니다.</li>
+<li>이 사고법은 모든 에이전트 프로젝트의 <strong>출발점</strong>입니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="07_정리-체크리스트.html"><span class="lbl">← 이전 절</span>07. 정리 체크리스트</a><span class="nxt off"><span class="lbl"> </span> </span></div>
+</div>
+</body></html>

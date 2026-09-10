@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제10강 — 코드 실행 실패 시 재시도 (self-correcting)</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제10강 · code execution agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제10강 · code execution agent — 세부 목차</b><a class="" href="01_LLM은-계산기가-아니다.html">01. LLM은 계산기가 아니다</a><a class="" href="02_코드-생성-실행-루프.html">02. 코드 생성 실행 루프</a><a class="" href="03_안전한-실행-네임스페이스-제한.html">03. 안전한 실행 네임스페이스 제한</a><a class="" href="04_따라하기-pandas-식-실행-도구.html">04. 따라하기 pandas 식 실행 도구</a><a class="" href="05_따라하기-자연어로-집계-질문.html">05. 따라하기 자연어로 집계 질문</a><a class="cur" href="06_코드-실행-실패시-재시도.html">06. 코드 실행 실패시 재시도</a><a class="" href="07_보안-주의사항과-실무-대안.html">07. 보안 주의사항과 실무 대안</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="self-correcting">코드 실행 실패 시 재시도 (self-correcting)</h1>
+<h2 id="_1">한 줄 요약</h2>
+<p>LLM이 만든 pandas 식이 <strong>항상 맞지는 않습니다</strong>(컬럼 오타·잘못된 메서드 등). 실행 실패 시 <strong>오류 메시지를 그대로 LLM에 피드백</strong>해 식을 고쳐 다시 실행하는 <strong>자가교정(self-correcting)</strong> 루프를 만듭니다.</p>
+<hr/>
+<h2 id="1-llm">1. LLM이 만든 코드도 틀린다</h2>
+<p>LLM은 pandas 코드를 잘 만들지만 완벽하진 않습니다. 특히 이런 실수를 합니다.</p>
+<pre><code class="language-python"># 존재하지 않는 컬럼
+"df['revenue'].sum()"        # → 실행 오류: 'revenue' (컬럼명은 sales인데!)
+
+# 잘못된 메서드
+"df['sales'].total()"        # → 실행 오류: 'total' 메서드 없음 (sum()이어야)
+
+# 없는 개념 (요일 컬럼이 없는데 요일별 집계 시도)
+"df.groupby('weekday')..."   # → 실행 오류: 'weekday' 없음
+</code></pre>
+<p>이때 그냥 "실행 오류"로 끝내면 사용자는 답을 못 받습니다. 하지만 <strong>오류 메시지를 보면 무엇이 틀렸는지</strong> 알 수 있죠. 그걸 LLM에게 알려 주면 고칠 수 있습니다.</p>
+<blockquote>
+<p>비유: 사람도 코드를 짜다 오류가 나면, <strong>에러 메시지를 읽고</strong> "아, 컬럼명을 잘못 썼네"하고 고칩니다. LLM에게도 똑같이 에러 메시지를 보여 주면 스스로 고칩니다.</p>
+</blockquote>
+<hr/>
+<h2 id="2">2. 자가교정 루프</h2>
+<p>핵심 아이디어: <strong>식 생성 → 실행 → 실패하면 오류를 피드백해 다시 생성</strong>. 이건 8강의 "계획 검증 → 재계획"과 같은 패턴입니다. (실습 파일: <code>sections/10_code_execution_agent/06_코드-실행-실패시-재시도.py</code>)</p>
+<pre><code class="language-text">1차: 식 생성 → 실행 → 실패 → 오류 메시지 기억
+2차: (오류를 보여 주며) 식 다시 생성 → 실행 → 성공!
+</code></pre>
+<hr/>
+<h2 id="3">3. 오류를 피드백하는 식 생성</h2>
+<p><code>make_expr</code>에 <strong>이전 오류</strong>를 함께 넘겨, LLM이 고치게 합니다.</p>
+<pre><code class="language-python">SYSTEM = (
+    "너는 승승장구몰의 데이터 분석가다. 일별 매출 DataFrame df(컬럼: date, sales)에 대해 "
+    "질문에 답할 pandas 식 '한 줄'만 출력하라. 식 안에서는 df, pd 만 쓸 수 있다. "
+    "코드블록·설명 없이 식만 출력하라."
+)
+
+def make_expr(question: str, error_feedback: str = "") -&gt; str:
+    """질문(과 이전 오류 피드백)을 받아 pandas 식 한 줄을 생성한다."""
+    prompt = f"{SYSTEM}\n\n질문: {question}"
+    if error_feedback:
+        # 직전 실패의 오류 메시지를 그대로 보여주고 고치게 한다 (self-correcting)
+        prompt += (
+            f"\n\n[직전 시도가 실패했다] 오류: {error_feedback}\n"
+            "위 오류를 고쳐 올바른 pandas 식 한 줄을 다시 출력하라. "
+            "존재하는 컬럼은 date, sales 뿐임을 명심하라."
+        )
+    return llm.invoke(prompt).content.strip()
+</code></pre>
+<p><code>error_feedback</code>이 있으면 "직전 시도가 이 오류로 실패했다. 고쳐라"라고 알려 줍니다. "존재하는 컬럼은 date, sales 뿐"이라는 힌트도 함께 줘서 같은 실수를 막습니다.</p>
+<hr/>
+<h2 id="4">4. 재시도 루프</h2>
+<pre><code class="language-python">def answer_with_retry(question: str, max_retries: int = 3):
+    """식 생성 → 실행 → 실패 시 오류를 피드백해 다시 식을 만드는 자가교정 루프."""
+    feedback = ""
+    for step in range(1, max_retries + 1):
+        expr = make_expr(question, feedback)
+        print(f"[STEP {step}] 생성된 식: {expr}")
+        result = run_pandas(expr)
+
+        if not result.startswith("실행 오류:"):
+            print(f"[STEP {step}] 실행 성공 → 결과: {result}")
+            return result               # 성공!
+
+        # 실패 → 오류 메시지를 다음 시도의 피드백으로 넘긴다
+        print(f"[STEP {step}] 실행 실패 → {result} (오류를 피드백해 재시도)")
+        feedback = result
+
+    print("[종료] 최대 재시도 초과")
+    return None
+</code></pre>
+<p><code>feedback</code> 변수가 핵심입니다. 실패하면 그 오류 메시지를 <code>feedback</code>에 담아 다음 <code>make_expr</code>에 넘깁니다. <code>max_retries</code>는 7·8강에서 배운 안전장치(무한 재시도 방지)입니다.</p>
+<hr/>
+<h2 id="5">5. 실패 → 교정 흐름 보기</h2>
+<p>일부러 <strong>존재하지 않는 개념</strong>(revenue, 요일)을 끌어내 첫 식이 틀리게 유도합니다.</p>
+<pre><code class="language-python">answer_with_retry("매출(revenue)이 가장 높았던 요일은 무슨 요일이야?")
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[STEP 1] 생성된 식: df.groupby(df['date'].dt.dayofweek)['revenue'].sum()...
+[STEP 1] 실행 실패 → 실행 오류: 'revenue' (오류를 피드백해 재시도)
+[STEP 2] 생성된 식: df.assign(요일=pd.to_datetime(df['date']).dt.day_name()).groupby('요일')['sales'].sum().idxmax()
+[STEP 2] 실행 성공 → 결과: Wednesday
+</code></pre>
+<p>1차에서 <code>revenue</code>(없는 컬럼)를 써서 실패했지만, <strong>오류 메시지를 받아</strong> 2차에서 올바른 컬럼(<code>sales</code>)으로 고쳐 성공했습니다. LLM이 <strong>스스로 디버깅</strong>한 거죠.</p>
+<hr/>
+<h2 id="6">6. 이 패턴의 중요성</h2>
+<p>"생성 → 실행 → 오류 피드백 → 재생성"은 <strong>AI 에이전트의 핵심 능력</strong> 중 하나입니다. 사람 개발자가 에러를 보며 코드를 고치듯, 에이전트도 그렇게 합니다.</p>
+<ul>
+<li>8강: 계획 검증 → 재계획</li>
+<li>10강: 코드 실행 → 오류 피드백 → 재시도 (지금)</li>
+<li>23강: 코딩 에이전트의 재귀적 버그 수정 (더 본격적)</li>
+</ul>
+<p>LLM의 첫 시도를 <strong>그냥 믿지 않고</strong>, 실패하면 <strong>이유를 알려 고치게</strong> 하는 거죠. 이게 신뢰할 수 있는 에이전트의 조건입니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>LLM이 만든 코드도 <strong>틀릴 수 있다</strong>(컬럼 오타·잘못된 메서드).</li>
+<li><strong>오류 메시지를 LLM에 피드백</strong>해 스스로 고치게 한다(self-correcting).</li>
+<li><code>feedback</code> 변수로 직전 오류를 다음 시도에 전달, <code>max_retries</code>로 상한.</li>
+<li>LLM이 에러를 보며 <strong>스스로 디버깅</strong>한다.</li>
+<li>23강에서 이 자가교정을 더 본격적으로 다룬다.</li>
+<li>다음 절에서 코드 실행의 <strong>보안 주의사항과 실무 대안</strong>을 배웁니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="05_따라하기-자연어로-집계-질문.html"><span class="lbl">← 이전 절</span>05. 따라하기 자연어로 집계 질문</a><a class="nxt" href="07_보안-주의사항과-실무-대안.html"><span class="lbl">다음 절 →</span>07. 보안 주의사항과 실무 대안</a></div>
+</div>
+</body></html>

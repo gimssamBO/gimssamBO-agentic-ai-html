@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제29강 — [신규] 응답 캐싱으로 비용 줄이기</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제29강 · deployment</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제29강 · deployment — 세부 목차</b><a class="" href="01_내-PC에선-됐는데요.html">01. 내 PC에선 됐는데요</a><a class="" href="02_설정-분리-env와-config.html">02. 설정 분리 env와 config</a><a class="" href="03_구조적-로깅.html">03. 구조적 로깅</a><a class="" href="04_예외처리와-재시도-지수백오프.html">04. 예외처리와 재시도 지수백오프</a><a class="" href="05_비용-지연-관리.html">05. 비용 지연 관리</a><a class="" href="06_따라하기-견고한-운영-래퍼.html">06. 따라하기 견고한 운영 래퍼</a><a class="" href="07_따라하기-FastAPI-엔드포인트로-감싸기.html">07. 따라하기 FastAPI 엔드포인트로 감싸기</a><a class="cur" href="08_응답-캐싱으로-비용-줄이기.html">08. 응답 캐싱으로 비용 줄이기</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">[신규] 응답 캐싱으로 비용 줄이기</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>같은 질문이 반복되면 <strong>LLM을 다시 부르지 말고 저장된 답</strong>을 돌려줍니다. 메모리 dict 캐시 + JSON 파일 영속 캐시를 만들어, 반복 질문을 <strong>0원·즉시</strong> 처리합니다. 히트/미스 로그와 절감된 호출 수·예상 비용까지 출력합니다.</p>
+<blockquote>
+<p>실습 파일: <code>sections/29_deployment/08_응답-캐싱으로-비용-줄이기.py</code></p>
+</blockquote>
+<hr/>
+<h2 id="1">1. 왜 캐싱인가</h2>
+<p>FAQ형 서비스에선 <strong>같은 질문이 수없이 반복</strong>됩니다.</p>
+<pre><code class="language-text">"무료배송 기준?"  ← 하루에 수백 명이 똑같이 물음
+"환불 며칠 걸려?"  ← 역시 반복
+
+[캐싱 없음]  매번 LLM 호출 → 매번 돈·시간 (같은 답을 매번 새로 생성)
+[캐싱 있음]  첫 질문만 LLM → 이후엔 저장된 답 (0원·즉시)
+</code></pre>
+<p>LLM 호출은 돈과 시간이 듭니다. <strong>같은 질문에 매번 새로 묻는 건 낭비</strong>죠. 질문을 key로 답을 저장해두면, 반복 질문은 공짜로 처리됩니다(05번 전략 ④).</p>
+<hr/>
+<h2 id="2-key">2. 캐시 key — 질문 정규화</h2>
+<p>문제는 "같은 질문"을 어떻게 판단하느냐입니다. 글자가 조금만 달라도 다른 질문으로 보면 캐시가 잘 안 맞죠.</p>
+<pre><code class="language-python">import hashlib
+
+def _key(question: str) -&gt; str:
+    """질문을 정규화 후 해시해 캐시 key로 쓴다(공백·대소문자 차이 흡수)."""
+    norm = " ".join(question.strip().lower().split())   # 앞뒤 공백·중복 공백·대소문자 정규화
+    return hashlib.sha256(norm.encode("utf-8")).hexdigest()[:16]
+</code></pre>
+<p><code>"무료배송 기준?"</code>, <code>"무료배송  기준?"</code>, <code>" 무료배송 기준? "</code> — 셋 다 <strong>정규화하면 같은 key</strong> → 캐시 적중!</p>
+<ul>
+<li><code>strip()</code> — 앞뒤 공백 제거.</li>
+<li><code>lower()</code> — 대소문자 통일(영문).</li>
+<li><code>" ".join(...split())</code> — 중복 공백을 하나로.</li>
+<li><code>sha256(...)[:16]</code> — 정규화된 질문을 짧은 해시로(key로 쓰기 좋게).</li>
+</ul>
+<p>이렇게 <strong>정규화</strong>하면 사소한 차이를 흡수해 캐시 적중률이 올라갑니다.</p>
+<hr/>
+<h2 id="3">3. 캐시 클래스 — 메모리 + 파일 영속</h2>
+<p>메모리 dict로 빠르게, JSON 파일로 <strong>서버 재시작에도 유지</strong>되게 만듭니다.</p>
+<pre><code class="language-python">import json
+from common import ROOT
+
+CACHE_FILE = ROOT / "cache" / "response_cache.json"
+
+class ResponseCache:
+    """질문→답변 캐시. 메모리 dict + JSON 파일 영속."""
+
+    def __init__(self, persist: bool = True):
+        self.persist = persist
+        self.store = {}            # key → answer
+        self.hits = 0              # 캐시 히트 횟수(= 절감된 호출 수)
+        self.misses = 0            # 캐시 미스 횟수(= 실제 LLM 호출)
+        if persist and CACHE_FILE.exists():
+            self.store = json.loads(CACHE_FILE.read_text(encoding="utf-8"))  # 기존 캐시 로드
+
+    def get(self, question: str):
+        return self.store.get(_key(question))
+
+    def set(self, question: str, answer: str):
+        self.store[_key(question)] = answer
+        if self.persist:                       # 파일에도 즉시 반영(서버 재시작에도 유지)
+            CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            CACHE_FILE.write_text(
+                json.dumps(self.store, ensure_ascii=False, indent=2), encoding="utf-8")
+</code></pre>
+<pre><code class="language-text">메모리 dict:  실행 중 빠른 조회 (RAM)
+JSON 파일:   서버를 껐다 켜도 캐시 유지 (디스크 영속)
+   → 시작 시 파일 로드, 저장 시 파일에도 기록
+</code></pre>
+<ul>
+<li><code>hits</code>/<code>misses</code> 카운터로 <strong>절감 효과</strong>를 추적.</li>
+<li><code>ensure_ascii=False</code> — 한글이 <code>\uXXXX</code>로 깨지지 않게 그대로 저장.</li>
+</ul>
+<hr/>
+<h2 id="4">4. 캐시 우선 호출</h2>
+<p>캐시를 <strong>먼저 보고</strong>, 없을 때만 LLM(06번 <code>robust_invoke</code>)을 부릅니다.</p>
+<pre><code class="language-python">from ch29_deploy import robust_invoke
+
+def cached_invoke(cache: ResponseCache, llm, question: str, logger) -&gt; str:
+    """캐시를 먼저 보고, 없을 때만 robust_invoke로 LLM을 부른다."""
+    hit = cache.get(question)
+    if hit is not None:
+        cache.hits += 1
+        logger.info(f"캐시 HIT — LLM 호출 건너뜀: {question}")
+        return hit                                 # 캐시 적중 → LLM 안 부름
+    cache.misses += 1
+    logger.info(f"캐시 MISS — LLM 호출: {question}")
+    answer = robust_invoke(llm, question, logger)  # 견고한 래퍼로 실제 호출
+    cache.set(question, answer)                     # 결과를 캐시에 저장
+    return answer
+</code></pre>
+<p>질문 → <strong>캐시 확인</strong>:</p>
+<ul>
+<li><strong>HIT</strong> → 저장된 답 반환 (LLM 호출 0)</li>
+<li><strong>MISS</strong> → <code>robust_invoke</code> 호출 → 답 저장 → 반환</li>
+</ul>
+<p>06번 운영 자산(<code>robust_invoke</code>)을 <strong>그대로 재사용</strong>합니다 — 캐시는 그 앞단에 얹은 층입니다.</p>
+<hr/>
+<h2 id="5">5. 절감 효과 리포트</h2>
+<p>캐시가 얼마나 아꼈는지 보여줍니다.</p>
+<pre><code class="language-python">COST_PER_CALL = 0.002   # 호출 1회당 예상 비용(USD, 데모용 가정치)
+
+def report(self):
+    total = self.hits + self.misses
+    saved = self.hits * COST_PER_CALL
+    print(f"[캐시 리포트] 총 요청 {total}건 / 히트 {self.hits} / 미스 {self.misses}")
+    print(f"  절감된 LLM 호출: {self.hits}회  →  예상 절감 비용: ${saved:.4f}")
+</code></pre>
+<hr/>
+<h2 id="6">6. 실행과 결과</h2>
+<p>같은 질문을 일부러 반복해 캐시 효과를 확인합니다.</p>
+<pre><code class="language-python">if __name__ == "__main__":
+    cfg = load_config()
+    logger = setup_logging(cfg)
+    llm = get_chat(provider=cfg["llm"]["provider"], temperature=cfg["llm"]["temperature"])
+    cache = ResponseCache(persist=True)
+
+    questions = [
+        "승승장구몰 무료배송 기준을 한 문장으로 알려줘.",
+        "승승장구몰 무료배송 기준을 한 문장으로 알려줘.",   # 동일 → HIT
+        "환불은 며칠 안에 가능해?",
+        "승승장구몰 무료배송 기준을  한문장으로 알려줘.",     # 공백만 다름 → 정규화로 HIT
+        "환불은 며칠 안에 가능해?",                          # 동일 → HIT
+    ]
+    for i, q in enumerate(questions, 1):
+        ans = cached_invoke(cache, llm, q, logger)
+        print(f"[{i}] 답변: {ans[:60]}\n")
+    cache.report()
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">  [MISS] 승승장구몰 무료배송 기준...  → LLM 호출
+[1] 답변: 3만원 이상 구매 시 무료배송입니다.
+
+  [HIT ] 승승장구몰 무료배송 기준...
+[2] 답변: 3만원 이상 구매 시 무료배송입니다.
+
+  [MISS] 환불은 며칠 안에 가능해?  → LLM 호출
+[3] 답변: 환불은 영업일 기준 3~5일 내 처리됩니다.
+
+  [HIT ] 승승장구몰 무료배송 기준...   ← 공백만 다른데도 정규화로 적중!
+[4] ...
+
+============================================================
+[캐시 리포트] 총 요청 5건 / 히트 3 / 미스 2
+  절감된 LLM 호출: 3회  →  예상 절감 비용: $0.0060
+============================================================
+</code></pre>
+<p><strong>관찰 포인트</strong></p>
+<ul>
+<li>5번 질문 중 <strong>실제 LLM 호출은 2번</strong>뿐 — 3번은 캐시로 처리(60% 절감).</li>
+<li>4번 질문은 <strong>공백만 달랐는데도</strong> 정규화 덕에 적중했습니다(2번 캐시 key 기법).</li>
+<li><code>response_cache.json</code>에 저장돼, <strong>서버를 껐다 켜도</strong> 캐시가 유지됩니다.</li>
+</ul>
+<hr/>
+<h2 id="7">7. 주의 — 캐싱이 부적절한 경우</h2>
+<pre><code class="language-text">캐싱 좋음:  FAQ·정책 안내처럼 '답이 고정'된 질문
+캐싱 주의:  "내 주문 상태는?" → 시시각각 변함! 캐싱하면 옛 정보를 줌
+           → 실시간 도구 호출 결과는 캐싱하면 안 됨 (또는 짧은 TTL)
+</code></pre>
+<p><strong>답이 변하는 질문은 캐싱하면 안 됩니다.</strong> 주문 상태·재고처럼 실시간 데이터는 캐시하면 옛 정보를 주게 되죠. FAQ·정책처럼 <strong>답이 고정된 것</strong>만 캐싱하는 게 안전합니다. (실무에선 캐시에 <strong>유효기간(TTL)</strong> 을 둬 오래된 답을 자동 폐기합니다.)</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>반복 질문은 <strong>저장된 답</strong>으로 처리 → LLM 호출 0원·즉시(05번 전략 ④의 구현).</li>
+<li><strong>캐시 key 정규화</strong>(공백·대소문자 흡수 + 해시)로 적중률↑.</li>
+<li><strong>메모리 dict + JSON 파일 영속</strong> → 빠르고, 서버 재시작에도 유지.</li>
+<li><code>cached_invoke</code>가 06번 <code>robust_invoke</code> 앞단에 얹혀 캐시 우선 처리.</li>
+<li><strong>히트/미스·절감 비용 리포트</strong>로 효과 측정.</li>
+<li><strong>답이 변하는 질문(주문·재고)은 캐싱 금지</strong> — FAQ·정책만(또는 TTL).</li>
+<li>다음 절에서 29강을 정리합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="07_따라하기-FastAPI-엔드포인트로-감싸기.html"><span class="lbl">← 이전 절</span>07. 따라하기 FastAPI 엔드포인트로 감싸기</a><a class="nxt" href="09_정리-체크리스트.html"><span class="lbl">다음 절 →</span>09. 정리 체크리스트</a></div>
+</div>
+</body></html>

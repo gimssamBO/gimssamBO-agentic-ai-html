@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제26강 — 실습문제와 해답</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제26강 · role based agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제26강 · role based agent — 세부 목차</b><a class="" href="01_무엇을-할지와-어떻게-할지-나누기.html">01. 무엇을 할지와 어떻게 할지 나누기</a><a class="" href="02_Planner-Worker-협업구조.html">02. Planner Worker 협업구조</a><a class="" href="03_Supervisor-vs-Planner-Worker.html">03. Supervisor vs Planner Worker</a><a class="" href="04_따라하기-Planner-작업-분해.html">04. 따라하기 Planner 작업 분해</a><a class="" href="05_따라하기-Worker-작업-실행.html">05. 따라하기 Worker 작업 실행</a><a class="" href="06_따라하기-오케스트레이터-취합.html">06. 따라하기 오케스트레이터 취합</a><a class="" href="07_Worker-실패-처리와-재시도.html">07. Worker 실패 처리와 재시도</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="cur" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">실습문제와 해답</h1>
+<p>26강에서 만든 Planner/Worker 구조를 직접 확장해 봅니다. 두 문제 모두 <code>code/ch26_role_agent.py</code>(이번 강 실습 파일)를 바탕으로 합니다. 데이터는 <code>data/marketing_brief.csv</code>를 씁니다.</p>
+<blockquote>
+<p><strong>실습 준비</strong><br/>
+<code>bash
+conda activate agentic
+pip install -U langchain langchain-google-genai pydantic pandas pyyaml</code></p>
+</blockquote>
+<hr/>
+<h2 id="1-reviewer">문제 1 — Reviewer 단계 추가하기</h2>
+<h3 id="_2">요구사항</h3>
+<p><code>code/ch26_role_agent.py</code>를 복사해 <code>code/ch26_ex_review.py</code>를 만드세요. 기존 <strong>Planner → Worker</strong> 흐름 뒤에 <strong>Reviewer(검토자)</strong> 단계를 추가합니다.</p>
+<ul>
+<li><code>REVIEWER_SYSTEM</code> 프롬프트와 <code>review(llm, report)</code> 함수를 만든다.</li>
+<li>Worker들이 만든 실행안 전체를 보고 <strong>누락·개선점 3가지 이상</strong>을 제시한다.</li>
+<li>최종 결과 끝에 <strong><code>## 검토 의견</code></strong> 섹션이 붙는다.</li>
+</ul>
+<blockquote>
+<p><strong>왜 하나?</strong> 사람 조직에도 "초안 → 검토(리뷰)" 단계가 있죠. Worker는 자기 작업에만 집중하느라 <strong>전체적으로 빠진 것</strong>(예: KPI 누락, 일정 없음)을 못 봅니다. Reviewer는 <strong>전체를 한 번 더 훑어</strong> 품질을 끌어올리는 역할입니다. 25·26강의 "역할 분리"를 한 단계 더 적용하는 셈입니다.</p>
+</blockquote>
+<h3 id="_3">해답</h3>
+<pre><code class="language-python"># code/ch26_ex_review.py
+# 실행: python code/ch26_ex_review.py
+import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_chat
+
+# 기존 26강 로직을 그대로 재사용 (계획·실행)
+from ch26_role_agent import load_brief_text, plan, work
+
+from langchain_core.messages import SystemMessage, HumanMessage
+
+# [추가] Reviewer 역할 — '실행은 하지 말고, 전체를 검토만 하라'
+REVIEWER_SYSTEM = (
+    "너는 마케팅 캠페인 '검토자(Reviewer)'다. "
+    "주어진 캠페인 실행안 전체를 읽고, 빠졌거나 더 보완하면 좋을 점을 "
+    "구체적으로 3가지 이상 짚어라. 각 항목은 한 문장으로, 실무에 바로 반영할 수 있게 써라. "
+    "새 실행안을 작성하지 말고, 검토 의견만 제시하라."
+)
+
+
+def review(llm, report: str) -&gt; str:
+    """완성된 실행안을 검토해 개선점 3가지 이상을 반환한다."""
+    result = llm.invoke([
+        SystemMessage(REVIEWER_SYSTEM),
+        HumanMessage(f"[검토할 캠페인 실행안]\n{report}"),
+    ])
+    return result.content
+
+
+def run_campaign_with_review(brief_text: str) -&gt; str:
+    """계획 → 실행 → 취합 → (추가) 검토."""
+    llm_plan = get_chat(temperature=0)
+    llm_work = get_chat(temperature=0.5)
+    llm_review = get_chat(temperature=0)     # 검토는 일관성 있게 → 0
+
+    # 1) 계획  2) 실행  3) 취합  (26강 06번과 동일)
+    subtasks = plan(llm_plan, brief_text)
+    outputs = [(t, work(llm_work, brief_text, t)) for t in subtasks]
+    report = [f"# 캠페인 실행안\n\n&gt; {brief_text}\n"]
+    for i, (t, out) in enumerate(outputs, 1):
+        report.append(f"## {i}. {t}\n{out}\n")
+    final = "\n".join(report)
+
+    # 4) 검토 단계 추가
+    opinion = review(llm_review, final)
+    final += f"\n## 검토 의견\n{opinion}\n"
+    return final
+
+
+if __name__ == "__main__":
+    brief_text = load_brief_text("CMP02")
+    print(run_campaign_with_review(brief_text))
+</code></pre>
+<p><strong>예상 출력 (끝부분)</strong></p>
+<pre><code class="language-text">## 3. 800만원 예산을 채널별로 배분하는 방안을 제안하라
+- 인스타/틱톡 광고: 400만원 ...
+
+## 검토 의견
+1. 캠페인 성과를 측정할 KPI(전환율·ROAS 등)가 빠져 있어 효과 검증이 어렵다.
+2. 채널별 예산은 있으나 집행 일정(주차별 타임라인)이 없어 실행 순서가 불명확하다.
+3. 번들 혜택의 재고·물류 확인이 없어, 수요 급증 시 품절 리스크가 있다.
+</code></pre>
+<p><strong>관찰 포인트</strong></p>
+<ul>
+<li>Reviewer는 <strong>새 실행안을 쓰지 않고</strong>, 전체를 보고 <strong>빠진 것</strong>만 짚었습니다(KPI·일정·재고).</li>
+<li>"실행하지 말고 검토만 하라"는 프롬프트가, Planner의 "실행은 하지 마라"와 같은 <strong>역할 경계</strong> 장치입니다.</li>
+<li>흐름이 <strong>Planner → Worker → Reviewer</strong>로 늘었지만, 오케스트레이터는 그대로 <em>순서를 코드로 지휘</em>할 뿐입니다.</li>
+</ul>
+<blockquote>
+<p><strong>한 걸음 더</strong> — Reviewer 의견을 다시 Worker에게 넘겨 <strong>수정본</strong>을 만들면 "검토 → 반영" 루프가 됩니다(23강 재귀 수정의 정신). 다만 무한 반복을 막도록 1~2회로 제한하세요.</p>
+</blockquote>
+<hr/>
+<h2 id="2-yaml">문제 2 — 역할별 프롬프트를 YAML로 외부화하기</h2>
+<h3 id="_4">요구사항</h3>
+<p>문제 1의 스크립트에서 <code>PLANNER_SYSTEM</code> / <code>WORKER_SYSTEM</code> / <code>REVIEWER_SYSTEM</code>을 코드에 박아두지 말고, <strong><code>data/role_prompts.yaml</code></strong>(키: <code>planner</code> / <code>worker</code> / <code>reviewer</code>)로 분리해 파일에서 로드하도록 리팩터링하세요.</p>
+<ul>
+<li>각 프롬프트에 <strong>역할의 책임 + 산출물 형식</strong>을 구체적으로 명시한다.</li>
+<li><strong>검증</strong>: YAML 값만 바꿔 재실행했을 때, <strong>코드를 고치지 않고도</strong> 각 역할의 말투·동작이 달라지면 성공.</li>
+</ul>
+<blockquote>
+<p><strong>왜 하나?</strong> 프롬프트는 자주 바뀝니다("좀 더 공손하게", "5줄 말고 3줄로"). 이걸 코드에 박아두면 <strong>수정할 때마다 코드를 건드려야</strong> 하죠. 설정(프롬프트)과 코드를 분리하면, <strong>기획자도 YAML만 고쳐</strong> 동작을 바꿀 수 있습니다. 29강 "설정 분리(.env vs config)"의 연습이기도 합니다.</p>
+</blockquote>
+<h3 id="_5">해답</h3>
+<p><strong>(1) 프롬프트 파일 — <code>data/role_prompts.yaml</code></strong></p>
+<pre><code class="language-yaml"># data/role_prompts.yaml — 역할별 시스템 프롬프트
+# 코드를 고치지 않고 이 파일만 수정해 각 역할의 동작을 바꾼다.
+planner: |
+  너는 마케팅 캠페인 '기획 설계자(Planner)'다.
+  주어진 캠페인 브리프를 보고, 실행에 필요한 하위 작업을 3~4개로 쪼개라.
+  작업은 서로 겹치지 않게, 한 문장 명령형으로 작성하라. 실행은 하지 마라.
+
+worker: |
+  너는 마케팅 '실무 작업자(Worker)'다.
+  주어진 캠페인 브리프 맥락에서, 지정된 '하나의 작업'만 구체적으로 수행하라.
+  결과는 5줄 이내로 실무에 바로 쓸 수 있게 작성하라.
+
+reviewer: |
+  너는 마케팅 캠페인 '검토자(Reviewer)'다.
+  주어진 캠페인 실행안 전체를 읽고, 빠졌거나 더 보완하면 좋을 점을
+  구체적으로 3가지 이상 짚어라. 각 항목은 한 문장으로 써라.
+  새 실행안을 작성하지 말고, 검토 의견만 제시하라.
+</code></pre>
+<p><strong>(2) 로딩 코드 — <code>code/ch26_ex_yaml.py</code></strong></p>
+<pre><code class="language-python"># code/ch26_ex_yaml.py
+# 실행: python code/ch26_ex_yaml.py
+import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_chat, DATA
+
+import yaml                                   # pip install pyyaml
+from ch26_role_agent import load_brief_text, Plan   # 데이터 로드·스키마 재사용
+from langchain_core.messages import SystemMessage, HumanMessage
+
+# [핵심] 프롬프트를 코드가 아니라 YAML 파일에서 읽는다.
+def load_prompts() -&gt; dict:
+    with open(DATA / "role_prompts.yaml", encoding="utf-8") as f:
+        return yaml.safe_load(f)             # {'planner': ..., 'worker': ..., 'reviewer': ...}
+
+
+PROMPTS = load_prompts()
+
+
+def plan(llm, brief_text: str) -&gt; list[str]:
+    planner = llm.with_structured_output(Plan)
+    result = planner.invoke([
+        SystemMessage(PROMPTS["planner"]),          # ← YAML에서 읽은 프롬프트
+        HumanMessage(f"[캠페인 브리프]\n{brief_text}"),
+    ])
+    return result.subtasks
+
+
+def work(llm, brief_text: str, subtask: str) -&gt; str:
+    result = llm.invoke([
+        SystemMessage(PROMPTS["worker"]),           # ← YAML에서 읽은 프롬프트
+        HumanMessage(f"[브리프]\n{brief_text}\n\n[작업]\n{subtask}"),
+    ])
+    return result.content
+
+
+def review(llm, report: str) -&gt; str:
+    result = llm.invoke([
+        SystemMessage(PROMPTS["reviewer"]),         # ← YAML에서 읽은 프롬프트
+        HumanMessage(f"[검토할 캠페인 실행안]\n{report}"),
+    ])
+    return result.content
+
+
+def run_campaign(brief_text: str) -&gt; str:
+    llm_plan, llm_work, llm_review = get_chat(0), get_chat(temperature=0.5), get_chat(0)
+    subtasks = plan(llm_plan, brief_text)
+    report = [f"# 캠페인 실행안\n\n&gt; {brief_text}\n"]
+    for i, t in enumerate(subtasks, 1):
+        report.append(f"## {i}. {t}\n{work(llm_work, brief_text, t)}\n")
+    final = "\n".join(report)
+    final += f"\n## 검토 의견\n{review(llm_review, final)}\n"
+    return final
+
+
+if __name__ == "__main__":
+    print(run_campaign(load_brief_text("CMP02")))
+</code></pre>
+<p><strong>검증 방법</strong></p>
+<pre><code class="language-text">1) 그대로 실행 → 정상 동작 확인.
+2) role_prompts.yaml 의 worker 를 "결과는 3줄 이내, 반말로 작성하라" 로 바꿈.
+3) 코드는 한 글자도 안 고치고 재실행 → Worker 산출물의 길이·말투가 바뀜.
+   → 설정(프롬프트)과 코드가 분리됐다는 증거.
+</code></pre>
+<p><strong>관찰 포인트</strong></p>
+<ul>
+<li>프롬프트가 <strong>코드 밖(YAML)</strong> 으로 나오니, 비개발자도 동작을 바꿀 수 있습니다.</li>
+<li>세 역할의 프롬프트가 <strong>한 파일에 모여</strong> 있어, 역할 정의를 한눈에 비교·관리할 수 있습니다.</li>
+<li><code>yaml.safe_load</code>는 YAML을 <strong>파이썬 dict</strong>로 바꿔 줍니다. <code>|</code>(블록 스칼라)는 여러 줄 문자열을 그대로 보존합니다.</li>
+</ul>
+<blockquote>
+<p><strong>주의</strong> — <code>yaml.load</code>가 아니라 <strong><code>yaml.safe_load</code></strong> 를 쓰세요. <code>safe_load</code>는 신뢰할 수 없는 파일에서 임의 객체가 생성되는 보안 위험을 막아 줍니다.</p>
+</blockquote>
+<hr/>
+<h2 id="_6">마무리</h2>
+<ul>
+<li><strong>문제 1</strong>: 역할을 하나 더(<strong>Reviewer</strong>) 추가해, 초안을 검토하는 단계를 붙였습니다 — 역할 분리의 확장.</li>
+<li><strong>문제 2</strong>: 프롬프트를 <strong>YAML로 외부화</strong>해, 코드 수정 없이 동작을 바꾸게 했습니다 — 설정·코드 분리(29강 예고).</li>
+<li>둘 다 26강 코드를 <strong>재사용</strong>해 확장했다는 점이 핵심입니다. 잘 나눠 둔 구조는 이렇게 <strong>덧붙이기 쉽습니다.</strong></li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="08_정리-체크리스트.html"><span class="lbl">← 이전 절</span>08. 정리 체크리스트</a><span class="nxt off"><span class="lbl"> </span> </span></div>
+</div>
+</body></html>

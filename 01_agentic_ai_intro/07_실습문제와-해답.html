@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제1강 — 실습문제와 해답</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제1강 · agentic ai intro</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제1강 · agentic ai intro — 세부 목차</b><a class="" href="00_실습환경-준비하기.html">00. 실습환경 준비하기</a><a class="" href="01_왜-에이전트가-필요한가.html">01. 왜 에이전트가 필요한가</a><a class="" href="02_AI앱-vs-AI에이전트.html">02. AI앱 vs AI에이전트</a><a class="" href="03_에이전트의-4요소-LLM-도구-기억-루프.html">03. 에이전트의 4요소 LLM 도구 기억 루프</a><a class="" href="04_환각은-왜-생기는가.html">04. 환각은 왜 생기는가</a><a class="" href="05_따라하기-LLM의-한계-확인하기.html">05. 따라하기 LLM의 한계 확인하기</a><a class="" href="06_정리-체크리스트.html">06. 정리 체크리스트</a><a class="cur" href="07_실습문제와-해답.html">07. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">실습문제와 해답</h1>
+<p>직접 코드를 고쳐 보며 1강 내용을 손에 익힙니다. 먼저 <strong>스스로 풀어 본 뒤</strong> 해답을 펼쳐 보세요.</p>
+<hr/>
+<h2 id="1">문제 1 — 시스템 지시로 페르소나 바꾸기</h2>
+<p><code>code/ch01_intro.py</code>의 <code>ask()</code> 함수를 수정해, LLM에게 <strong>"한 문장으로만 답하는 무뚝뚝한 엔지니어"</strong> 라는 역할을 부여하세요. 그런 다음 질문 1을 다시 실행합니다.</p>
+<ul>
+<li>힌트: <code>config=types.GenerateContentConfig(system_instruction="...")</code> 를 <code>generate_content</code>에 추가합니다.</li>
+<li><code>from google.genai import types</code> 임포트가 필요합니다.</li>
+<li>기대 결과: 원래는 3가지를 풀어 설명하던 답이, 수정 후엔 <strong>한 문장 단답</strong>으로 바뀌면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_genai_client, GEMINI_MODEL
+from google.genai import types          # ← 추가: 설정 객체를 쓰기 위해
+
+client = get_genai_client()
+
+def ask(question: str) -&gt; str:
+    resp = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=question,
+        # system_instruction = 모델에게 부여하는 '역할/규칙'
+        config=types.GenerateContentConfig(
+            system_instruction="너는 한 문장으로만 답하는 무뚝뚝한 엔지니어다.",
+        ),
+    )
+    return resp.text
+
+if __name__ == "__main__":
+    q1 = "블루투스 이어버드를 고를 때 무엇을 봐야 하나요? 3가지만 짧게."
+    print("A:", ask(q1))
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code>A: 음질, 배터리, 연결 안정성만 보면 된다.   ← 한 문장 단답으로 변함
+</code></pre>
+
+
+**해설**: `system_instruction` 은 모델의 **기본 태도·역할**을 정하는 지시입니다. 사용자 질문(`contents`)보다 상위에서 작동해, 답변의 말투·길이·관점을 통제합니다. 2강에서 자세히 다룹니다.
+
+</details>
+<hr/>
+<h2 id="2-vs">문제 2 — 환각 vs 사실 도구 비교 스크립트</h2>
+<p><code>code/ch01_intro.py</code>에 함수 <code>compare(order_id)</code> 를 추가하세요. 이 함수는 같은 주문번호에 대해 두 가지 답을 <strong>나란히</strong> 출력합니다.</p>
+<ol>
+<li><code>ask(...)</code> 로 LLM에게 직접 물어본 답 (← 환각이 섞일 수 있음)</li>
+<li><code>data/orders.csv</code> 에서 해당 주문의 실제 <code>status</code> 를 직접 찾은 값 (← 사실)</li>
+</ol>
+<ul>
+<li>사용 파일: <code>data/orders.csv</code> (컬럼: <code>order_id</code>, <code>status</code> 등)</li>
+<li>기대 결과: LLM의 (지어낸) 답과 CSV의 실제 상태가 한 화면에 나란히 떠서, <strong>"도구로 사실에 근거하면 환각이 사라진다"</strong> 를 비교할 수 있으면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_genai_client, GEMINI_MODEL, DATA
+import pandas as pd
+
+client = get_genai_client()
+
+def ask(question: str) -&gt; str:
+    resp = client.models.generate_content(model=GEMINI_MODEL, contents=question)
+    return resp.text
+
+def compare(order_id: str) -&gt; None:
+    """LLM의 답(환각 가능)과 CSV의 실제 상태(사실)를 나란히 보여 준다."""
+    # (1) LLM에게 직접 묻기 — 도구 없이
+    llm_answer = ask(f"승승장구몰 주문번호 {order_id}는 지금 배송 어디까지 왔나요?")
+
+    # (2) CSV에서 사실 찾기 — 도구처럼
+    orders = pd.read_csv(DATA / "orders.csv", encoding="utf-8-sig")
+    row = orders[orders["order_id"] == order_id]
+    fact = "주문번호 없음" if row.empty else row.iloc[0]["status"]
+
+    print("=" * 60)
+    print(f"[LLM 답 (도구 없음)] {llm_answer}")
+    print(f"[CSV 사실 (도구 사용)] {order_id} → {fact}")
+    print("=" * 60)
+
+if __name__ == "__main__":
+    compare("O002282")   # data/orders.csv 에 실제로 있는 주문번호
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code>============================================================
+[LLM 답 (도구 없음)] 현재 배송중이며 내일 도착 예정입니다 ...   ← 지어낸 답(환각 가능)
+[CSV 사실 (도구 사용)] O002282 → 배송완료                      ← 진짜 데이터
+============================================================
+</code></pre>
+
+
+**해설**: 똑같은 질문이라도 LLM 혼자(도구 없음)는 그럴듯하게 지어내지만, `orders.csv` 를 조회하면 **진짜 상태**가 나옵니다. 이 차이가 바로 에이전트가 **도구**를 쓰는 이유입니다. 5강에서 이 CSV 조회를 LLM이 **스스로 호출**하도록 만듭니다.
+
+&gt; 참고: `data/orders.csv` 에서 실제 존재하는 `order_id` 를 써야 합니다. (예: `O002282`) 첫 줄을 열어 확인해 보세요.
+
+</details>
+<hr/>
+<h2 id="_2">정리</h2>
+<ul>
+<li>문제 1로 <strong>시스템 지시</strong>가 답변을 어떻게 바꾸는지 맛봤습니다 (→ 2강 심화).</li>
+<li>문제 2로 <strong>도구(CSV 조회)가 환각을 어떻게 없애는지</strong> 직접 비교했습니다 (→ 5강 심화).</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_정리-체크리스트.html"><span class="lbl">← 이전 절</span>06. 정리 체크리스트</a><span class="nxt off"><span class="lbl"> </span> </span></div>
+</div>
+</body></html>

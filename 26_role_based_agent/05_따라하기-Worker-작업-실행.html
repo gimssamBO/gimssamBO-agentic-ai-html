@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제26강 — 따라하기 — Worker 작업 실행</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제26강 · role based agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제26강 · role based agent — 세부 목차</b><a class="" href="01_무엇을-할지와-어떻게-할지-나누기.html">01. 무엇을 할지와 어떻게 할지 나누기</a><a class="" href="02_Planner-Worker-협업구조.html">02. Planner Worker 협업구조</a><a class="" href="03_Supervisor-vs-Planner-Worker.html">03. Supervisor vs Planner Worker</a><a class="" href="04_따라하기-Planner-작업-분해.html">04. 따라하기 Planner 작업 분해</a><a class="cur" href="05_따라하기-Worker-작업-실행.html">05. 따라하기 Worker 작업 실행</a><a class="" href="06_따라하기-오케스트레이터-취합.html">06. 따라하기 오케스트레이터 취합</a><a class="" href="07_Worker-실패-처리와-재시도.html">07. Worker 실패 처리와 재시도</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="worker">따라하기 — Worker 작업 실행</h1>
+<h2 id="_1">목표</h2>
+<p>Planner가 만든 작업 리스트의 <strong>각 작업을 Worker가 하나씩 실행</strong>하게 만듭니다. Worker는 캠페인 맥락 안에서 지정된 한 작업만 구체적으로 수행합니다.</p>
+<hr/>
+<h2 id="1-worker">1. Worker 함수</h2>
+<p>Worker는 <strong>받은 한 작업만</strong> 깊이 수행합니다.</p>
+<pre><code class="language-python">WORKER_SYSTEM = (         # Worker 역할 고정 프롬프트 — '딱 한 작업만' 집중
+    "너는 마케팅 '실무 작업자(Worker)'다. "
+    "주어진 캠페인 브리프 맥락에서, 지정된 '하나의 작업'만 구체적으로 수행하라. "
+    "결과는 5줄 이내로 실무에 바로 쓸 수 있게 작성하라."
+)
+
+
+def work(llm, brief_text: str, subtask: str) -&gt; str:
+    """하나의 하위 작업만 받아 구체적으로 수행한 결과를 반환한다."""
+    result = llm.invoke([
+        SystemMessage(WORKER_SYSTEM),
+        HumanMessage(f"[캠페인 브리프]\n{brief_text}\n\n[수행할 작업]\n{subtask}"),  # 맥락+그 작업 하나
+    ])
+    return result.content
+</code></pre>
+<p><strong>핵심</strong></p>
+<ul>
+<li><code>WORKER_SYSTEM</code> — "지정된 <strong>하나의 작업만</strong>" + "5줄 이내 실무용". 범위를 좁혀 집중시킴.</li>
+<li><code>HumanMessage</code>에 <strong>맥락(브리프) + 작업(subtask)</strong> 을 함께 전달. "전체 그림 안에서 이 작업을 하라"는 뜻.</li>
+<li><code>work(llm, brief_text, subtask)</code> — 작업 하나를 인자로 받으니, <strong>작업마다 재호출</strong> 가능.</li>
+</ul>
+<hr/>
+<h2 id="2">2. 왜 맥락(브리프)을 함께 주나</h2>
+<p>Worker에게 작업만 주지 않고 <strong>캠페인 브리프(맥락)도 함께</strong> 줍니다.</p>
+<pre><code class="language-text">[맥락 없이 작업만]
+   "광고 카피 3종을 작성하라"
+   → Worker: "무슨 상품? 누구 대상? 예산은?" (정보 부족 → 일반적인 카피)
+
+[맥락 + 작업]
+   "[브리프] 신학기/대학생/이어버드+보조배터리 번들/800만원
+    [작업] 광고 카피 3종을 작성하라"
+   → Worker: 대학생·번들에 딱 맞는 구체적 카피
+</code></pre>
+<p>같은 작업이라도 <strong>맥락이 있어야 구체적인 결과</strong>가 나옵니다. Worker는 작업 하나에 집중하되, 전체 캠페인 맥락 안에서 일하는 거죠.</p>
+<hr/>
+<h2 id="3-worker">3. Worker는 같은 함수를 반복 호출</h2>
+<p>Planner가 만든 작업 리스트를 <strong>하나씩 순회</strong>하며 Worker를 호출합니다.</p>
+<pre><code class="language-python">llm_work = get_chat(temperature=0.5)    # 카피 등 창의 작업은 다양성이 도움 → 0.5
+
+outputs = []
+for i, subtask in enumerate(subtasks, 1):
+    print(f"   - 작업 {i} 수행: {subtask}")
+    result = work(llm_work, brief_text, subtask)   # 같은 work() 함수를 작업마다 재호출
+    outputs.append((subtask, result))              # (작업, 산출물) 튜플로 보관
+</code></pre>
+<p><strong>같은 <code>work()</code> 함수</strong>를 작업마다 호출합니다. 작업 1, 작업 2, 작업 3... 각각 독립적으로 실행되죠. 이 독립성 덕에:</p>
+<pre><code class="language-text">- 재사용: 함수 하나로 모든 작업 처리
+- 병렬화: 작업끼리 독립이라 동시 실행 가능 (concurrent.futures)
+- 재시도: 한 작업 실패해도 그것만 다시 (07번)
+</code></pre>
+<p><code>(작업, 산출물)</code> 튜플로 묶어 보관해, 나중에 취합할 때 "어떤 작업의 결과인지" 알 수 있게 합니다.</p>
+<hr/>
+<h2 id="4">4. 실행해 확인</h2>
+<pre><code class="language-python">if __name__ == "__main__":
+    brief_text = load_brief_text("CMP02")
+    llm_plan = get_chat(temperature=0)
+    llm_work = get_chat(temperature=0.5)
+
+    subtasks = plan(llm_plan, brief_text)            # 04번 Planner
+    print("[작업 분해 완료]", len(subtasks), "개\n")
+
+    for i, subtask in enumerate(subtasks, 1):
+        print(f"[작업 {i}] {subtask}")
+        result = work(llm_work, brief_text, subtask)  # Worker 실행
+        print(result)
+        print("-" * 50)
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[작업 분해 완료] 3 개
+
+[작업 1] 대학생 타깃의 핵심 니즈와 구매 동기를 분석하라
+- 가성비 중시: 한정된 예산으로 최대 효용 추구
+- 휴대성: 강의실·카페·이동 중 사용
+- 트렌드 민감: 또래·SNS 영향 큼
+--------------------------------------------------
+[작업 2] '이어버드+보조배터리 번들' 혜택을 강조한 광고 카피 3종을 작성하라
+1) "강의실에서 카페까지, 하루 종일 끊김 없이"
+2) "신학기엔 풀충전 — 이어버드 + 보조배터리 한 세트"
+3) "방전 걱정 끝, 공부도 음악도 멈추지 않게"
+--------------------------------------------------
+[작업 3] 800만원 예산을 채널별로 배분하는 방안을 제안하라
+- 인스타/틱톡 광고: 400만원 (타깃 도달)
+- 대학 커뮤니티 제휴: 250만원
+- 인플루언서 협업: 150만원
+--------------------------------------------------
+</code></pre>
+<p><strong>관찰 포인트</strong></p>
+<ul>
+<li>각 Worker가 <strong>자기 작업에만 집중</strong>해 구체적인 결과를 냈습니다.</li>
+<li>작업 2(카피)는 대학생·번들에 딱 맞는 문구 — <strong>맥락을 반영</strong>했죠.</li>
+<li>작업 3(예산)은 800만원을 <strong>실제로 배분</strong> — 구체적 숫자까지.</li>
+</ul>
+<p>각 작업이 독립적으로 잘 처리됐습니다. 이제 06번에서 이 산출물들을 <strong>하나의 실행안으로 취합</strong>합니다.</p>
+<hr/>
+<h2 id="5">5. 병렬화 가능성 (미리보기)</h2>
+<p>Worker 작업이 독립적이라, 사실 <strong>동시에 실행</strong>할 수도 있습니다.</p>
+<pre><code class="language-python"># 참고: 작업이 독립적이라 병렬 실행도 가능 (선택적 최적화)
+from concurrent.futures import ThreadPoolExecutor
+
+with ThreadPoolExecutor(max_workers=3) as ex:
+    results = list(ex.map(lambda t: work(llm_work, brief_text, t), subtasks))
+outputs = list(zip(subtasks, results))
+</code></pre>
+<p>작업 3개를 <strong>순차로 하면 3배 시간</strong>이 걸리지만, 병렬로 하면 거의 1개 시간에 끝나죠. 단, 이번 강은 이해를 위해 <strong>순차 실행</strong>으로 두고, 병렬·재시도 같은 견고화는 07번과 29강에서 다룹니다. "독립적이면 병렬 가능"이라는 점만 기억하세요.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li><code>work()</code>: Worker가 <strong>받은 한 작업만</strong> 구체적으로 수행(5줄 이내 실무용).</li>
+<li><strong>맥락(브리프) + 작업</strong>을 함께 줘야 구체적 결과가 나옴.</li>
+<li>같은 <code>work()</code> 함수를 <strong>작업마다 재호출</strong>(for 루프) → 재사용·독립.</li>
+<li><code>(작업, 산출물)</code> 튜플로 보관 → 취합 시 추적 가능.</li>
+<li>작업이 독립적이라 <strong>병렬화·재시도</strong>에 유리(07번·29강).</li>
+<li>다음 절에서 산출물을 하나의 실행안으로 취합합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="04_따라하기-Planner-작업-분해.html"><span class="lbl">← 이전 절</span>04. 따라하기 Planner 작업 분해</a><a class="nxt" href="06_따라하기-오케스트레이터-취합.html"><span class="lbl">다음 절 →</span>06. 따라하기 오케스트레이터 취합</a></div>
+</div>
+</body></html>

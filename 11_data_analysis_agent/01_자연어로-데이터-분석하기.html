@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제11강 — 자연어로 데이터 분석하기</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제11강 · data analysis agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제11강 · data analysis agent — 세부 목차</b><a class="cur" href="01_자연어로-데이터-분석하기.html">01. 자연어로 데이터 분석하기</a><a class="" href="02_데이터-함정-이상치-처리.html">02. 데이터 함정 이상치 처리</a><a class="" href="03_분석규칙을-시스템-프롬프트로.html">03. 분석규칙을 시스템 프롬프트로</a><a class="" href="04_따라하기-분석-도구와-전처리.html">04. 따라하기 분석 도구와 전처리</a><a class="" href="05_따라하기-자연어-질문으로-분석.html">05. 따라하기 자연어 질문으로 분석</a><a class="" href="06_분석전-데이터-품질-체크.html">06. 분석전 데이터 품질 체크</a><a class="" href="07_분석결과-차트로-시각화.html">07. 분석결과 차트로 시각화</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">자연어로 데이터 분석하기</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>10강에서는 매출 한 컬럼만 다뤘지만, 현실의 주문 데이터는 취소·환불이 섞이고 이상치가 있습니다. <strong>"카테고리별 매출 top3 뽑아줘"라고 한국어로 말하면 알아서 분석</strong>해 주는 에이전트를 만듭니다. 핵심은 <strong>데이터 함정</strong>을 다루는 것입니다.</p>
+<hr/>
+<h2 id="1">1. 현실의 데이터는 지저분하다</h2>
+<p>10강의 데이터(<code>sales_daily.csv</code>)는 <code>date</code>, <code>sales</code> 두 컬럼뿐인 <strong>깨끗한</strong> 데이터였습니다. 하지만 진짜 주문 데이터(<code>orders.csv</code>)는 훨씬 복잡하고 지저분합니다.</p>
+<pre><code class="language-text">order_id, order_date, customer_id, product_id, product_name,
+category, quantity, unit_price, amount, channel, status
+</code></pre>
+<p>그리고 이런 함정들이 숨어 있습니다.</p>
+<ul>
+<li><strong>취소·환불 건</strong>: <code>status</code>가 '취소'나 '환불'인 주문 — 매출에 넣으면 안 됨</li>
+<li><strong>이상치</strong>: 누군가 실수로 <code>quantity</code>에 999를 입력</li>
+<li><strong>음수 금액</strong>: 환불이 음수 <code>amount</code>로 기록되어 합계를 왜곡</li>
+</ul>
+<p>분석가가 매번 "취소/환불 빼고, 이상치 거르고, 카테고리로 묶어서…" 코드를 짜는 건 번거롭습니다.</p>
+<hr/>
+<h2 id="2">2. 자연어로 분석하는 에이전트</h2>
+<p>10강의 코드 실행 에이전트를 발전시킵니다. 분석 규칙을 가르쳐, 한국어 질문에 <strong>알아서 올바르게</strong> 분석하게 합니다.</p>
+<pre><code class="language-python">agent.invoke("배송완료된 주문 기준으로 카테고리별 매출 top3 알려줘.")
+# → LLM이 "취소/환불 제외하고 groupby('category')..." 식을 생성
+# → 실행 → "1위 가전, 2위 전자기기 ..." 정리
+</code></pre>
+<p>우리는 한국어로 묻고, 에이전트가 <strong>데이터 함정을 피해</strong> 분석합니다. 진짜 데이터 분석가의 일을 자동화하는 거죠.</p>
+<blockquote>
+<p>비유: 신입 분석가에게 "매출 분석해줘"라고 하면, 그 신입이 회사 규칙("취소/환불은 매출에서 빼")을 모르면 틀린 보고서를 냅니다. 그래서 <strong>규칙을 먼저 가르쳐야</strong> 합니다. 에이전트도 똑같습니다.</p>
+</blockquote>
+<hr/>
+<h2 id="3-10">3. 흐름 — 10강과 같지만 데이터가 복잡</h2>
+<p>질문: <strong>"카테고리별 매출 top3"</strong></p>
+<ol>
+<li><strong>LLM: 식 생성</strong> (규칙 반영: 취소/환불 제외) — <code>orders[orders.status=='배송완료'].groupby('category')['amount'].sum()...</code></li>
+<li><strong>run_pandas 도구: 실행</strong> — 결과 표 (가전 6855만, 전자기기 4354만, …)</li>
+<li><strong>LLM: 한국어 정리</strong> — "1위 가전, 2위 전자기기 …"</li>
+</ol>
+<p>10강과 흐름은 같습니다. 차이는 두 가지입니다.</p>
+<ul>
+<li><strong>데이터가 복잡</strong>: 여러 컬럼, 여러 상태</li>
+<li><strong>규칙이 필요</strong>: 취소/환불 제외, 이상치 처리</li>
+</ul>
+<hr/>
+<h2 id="4">4. 이 강에서 배울 것</h2>
+<table>
+<thead>
+<tr>
+<th>목차</th>
+<th>내용</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>02</td>
+<td>데이터 함정 — 이상치·취소·환불 처리</td>
+</tr>
+<tr>
+<td>03</td>
+<td>분석 규칙을 시스템 프롬프트로 주입</td>
+</tr>
+<tr>
+<td>04~05</td>
+<td>분석 도구 + 자연어 질문</td>
+</tr>
+<tr>
+<td>06</td>
+<td>분석 전 데이터 품질 체크 (신규)</td>
+</tr>
+<tr>
+<td>07</td>
+<td>분석 결과를 차트로 시각화 (신규)</td>
+</tr>
+</tbody>
+</table>
+<p>데이터는 <code>data/orders.csv</code>(주문)와 <code>data/products.csv</code>(상품)를 씁니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>현실의 주문 데이터는 <strong>취소·환불·이상치</strong>가 섞여 지저분하다.</li>
+<li>한국어 질문에 <strong>데이터 함정을 피해</strong> 분석하는 에이전트를 만든다.</li>
+<li>핵심은 분석 <strong>규칙</strong>(취소/환불 제외 등)을 가르치는 것.</li>
+<li>10강 코드 실행의 흐름에 <strong>규칙과 복잡한 데이터</strong>를 더한 것.</li>
+<li>다음 절에서 데이터 함정을 자세히 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><span class="prv off"><span class="lbl"> </span> </span><a class="nxt" href="02_데이터-함정-이상치-처리.html"><span class="lbl">다음 절 →</span>02. 데이터 함정 이상치 처리</a></div>
+</div>
+</body></html>

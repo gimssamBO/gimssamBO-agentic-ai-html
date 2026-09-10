@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제11강 — 분석 규칙을 시스템 프롬프트로</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제11강 · data analysis agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제11강 · data analysis agent — 세부 목차</b><a class="" href="01_자연어로-데이터-분석하기.html">01. 자연어로 데이터 분석하기</a><a class="" href="02_데이터-함정-이상치-처리.html">02. 데이터 함정 이상치 처리</a><a class="cur" href="03_분석규칙을-시스템-프롬프트로.html">03. 분석규칙을 시스템 프롬프트로</a><a class="" href="04_따라하기-분석-도구와-전처리.html">04. 따라하기 분석 도구와 전처리</a><a class="" href="05_따라하기-자연어-질문으로-분석.html">05. 따라하기 자연어 질문으로 분석</a><a class="" href="06_분석전-데이터-품질-체크.html">06. 분석전 데이터 품질 체크</a><a class="" href="07_분석결과-차트로-시각화.html">07. 분석결과 차트로 시각화</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">분석 규칙을 시스템 프롬프트로</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>데이터 함정(02번)을 에이전트가 알아서 피하게 하려면, <strong>분석 규칙을 시스템 프롬프트에 명시</strong>합니다. "매출 집계 시 취소/환불 제외", "이상치 처리" 같은 규칙을 미리 가르치면, 에이전트가 그 규칙을 지키는 코드를 만듭니다.</p>
+<hr/>
+<h2 id="1">1. 규칙을 가르치는 곳 — 시스템 프롬프트</h2>
+<p>3강에서 시스템 지시(프롬프트)가 모델의 "행동 규칙"이라고 배웠습니다. 데이터 분석 규칙도 여기에 넣습니다.</p>
+<pre><code class="language-python">SYSTEM = (
+    "너는 승승장구몰의 데이터 분석가다. 계산은 반드시 run_pandas 도구로만 하라.\n"
+    "규칙:\n"
+    "1) 매출(amount) 집계 시 status가 '취소','환불'인 행은 제외한다.\n"
+    "2) quantity=999 처럼 비정상적으로 큰 값과 음수 amount는 이상치이므로,\n"
+    "   집계 전에 적절히 제외하거나 사용자에게 언급한다.\n"
+    "3) 최종 답변은 한국어로 간결하게, 숫자는 천단위 콤마를 붙여 설명한다."
+)
+</code></pre>
+<p>이 규칙들을 시스템 프롬프트에 넣으면, 에이전트가 <strong>매번 자동으로</strong> 지킵니다. 분석가에게 회사 규칙을 한 번 가르쳐 두면 계속 지키는 것과 같죠.</p>
+<hr/>
+<h2 id="2">2. 규칙이 코드로 반영되는 모습</h2>
+<p>규칙을 가르치면, LLM이 만드는 pandas 식에 그 규칙이 <strong>반영</strong>됩니다.</p>
+<pre><code class="language-python"># 규칙 없이 "카테고리별 매출" 물으면:
+orders.groupby('category')['amount'].sum()
+#  ↑ 취소/환불도 포함 → 매출 부풀려짐
+
+# 규칙("취소/환불 제외")을 가르치면:
+orders[~orders['status'].isin(['취소','환불'])].groupby('category')['amount'].sum()
+#  ↑ 취소/환불 제외 → 정확한 매출!
+</code></pre>
+<p>우리가 매번 "취소/환불 빼고"라고 안 말해도, 시스템 프롬프트에 규칙이 있으니 LLM이 알아서 <code>status</code> 필터를 넣습니다.</p>
+<hr/>
+<h2 id="3-vs-docstring">3. 규칙 주입의 두 곳 — 시스템 프롬프트 vs 도구 docstring</h2>
+<p>사실 규칙을 가르칠 수 있는 곳이 두 군데입니다.</p>
+<h3 id="1_1">① 시스템 프롬프트 (에이전트의 행동 규칙)</h3>
+<pre><code class="language-python">SYSTEM = "...매출 집계 시 취소/환불 제외..."
+agent = create_agent(llm, tools=[run_pandas], system_prompt=SYSTEM)
+</code></pre>
+<h3 id="2-docstring">② 도구 docstring (도구 사용법·데이터 설명)</h3>
+<pre><code class="language-python">@tool
+def run_pandas(expr: str) -&gt; str:
+    """...
+    분석 주의사항:
+      * 매출(amount) 집계는 보통 status가 '취소','환불'인 건을 제외한다.
+      * amount 에 음수나 quantity=999 같은 이상치가 섞여 있을 수 있다.
+    ..."""
+</code></pre>
+<p><strong>둘 다</strong> 쓰는 게 좋습니다. 시스템 프롬프트는 "분석가로서 지킬 규칙"을, docstring은 "이 데이터/도구의 특성"을 알려 줍니다. 서로 보강하죠.</p>
+<hr/>
+<h2 id="4-ab">4. 규칙이 있고 없고의 차이 (A/B 비교)</h2>
+<p>규칙의 효과는 직접 비교하면 명확합니다.</p>
+<pre><code class="language-python"># 규칙 있는 에이전트 vs 규칙 없는 에이전트
+agent_with_rule = create_agent(llm, tools=[run_pandas], system_prompt=SYSTEM)
+agent_no_rule = create_agent(llm, tools=[run_pandas], system_prompt="너는 분석가다.")
+
+q = "카테고리별 총 매출은?"
+# agent_with_rule → 취소/환불 제외한 정확한 매출
+# agent_no_rule   → 취소/환불 포함한 부풀려진 매출 (더 큼)
+</code></pre>
+<p>규칙을 뺀 쪽은 취소/환불까지 더해 <strong>매출이 더 크게</strong> 나옵니다. 그 차이가 곧 "취소/환불 금액"이죠. (이건 09번 연습문제로 직접 측정합니다.)</p>
+<hr/>
+<h2 id="5">5. 규칙 주입의 한계</h2>
+<p>시스템 프롬프트 규칙은 강력하지만 <strong>100% 보장은 아닙니다.</strong> LLM이 가끔 규칙을 놓칠 수 있습니다. 그래서 중요한 분석에서는:</p>
+<ul>
+<li><strong>규칙을 명확하고 구체적으로</strong> 씁니다(애매하면 안 지킴).</li>
+<li><strong>결과를 검증</strong>합니다(06번 데이터 품질 체크로 사전 점검).</li>
+<li><strong>중요한 집계는 사람이 확인</strong>합니다.</li>
+</ul>
+<p>규칙 주입은 "분석가에게 가이드라인을 주는 것"이지, "절대 안 틀리게 만드는 것"은 아닙니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>데이터 분석 규칙을 <strong>시스템 프롬프트</strong>에 명시하면 에이전트가 자동으로 지킨다.</li>
+<li>규칙이 LLM이 만드는 <strong>pandas 식에 반영</strong>된다(status 필터 등).</li>
+<li>규칙은 <strong>시스템 프롬프트 + 도구 docstring</strong> 둘 다에 두면 좋다.</li>
+<li>규칙 주입은 강력하지만 100%는 아니라 <strong>검증</strong>이 필요하다.</li>
+<li>다음 절에서 분석 도구와 전처리를 실제로 만듭니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="02_데이터-함정-이상치-처리.html"><span class="lbl">← 이전 절</span>02. 데이터 함정 이상치 처리</a><a class="nxt" href="04_따라하기-분석-도구와-전처리.html"><span class="lbl">다음 절 →</span>04. 따라하기 분석 도구와 전처리</a></div>
+</div>
+</body></html>

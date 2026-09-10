@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제29강 — 구조적 로깅 — print를 버려라</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제29강 · deployment</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제29강 · deployment — 세부 목차</b><a class="" href="01_내-PC에선-됐는데요.html">01. 내 PC에선 됐는데요</a><a class="" href="02_설정-분리-env와-config.html">02. 설정 분리 env와 config</a><a class="cur" href="03_구조적-로깅.html">03. 구조적 로깅</a><a class="" href="04_예외처리와-재시도-지수백오프.html">04. 예외처리와 재시도 지수백오프</a><a class="" href="05_비용-지연-관리.html">05. 비용 지연 관리</a><a class="" href="06_따라하기-견고한-운영-래퍼.html">06. 따라하기 견고한 운영 래퍼</a><a class="" href="07_따라하기-FastAPI-엔드포인트로-감싸기.html">07. 따라하기 FastAPI 엔드포인트로 감싸기</a><a class="" href="08_응답-캐싱으로-비용-줄이기.html">08. 응답 캐싱으로 비용 줄이기</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="print">구조적 로깅 — print를 버려라</h1>
+<h2 id="_1">한 줄 요약</h2>
+<p>운영에서 <code>print</code>는 못 씁니다. 레벨도, 시각도, 출처도 없으니까요. 표준 <strong><code>logging</code></strong> 모듈로 <strong>구조적 로깅</strong>을 합니다 — 시각·레벨(INFO/WARNING/ERROR)이 일관되게 붙고, <strong>콘솔과 파일에 동시에</strong> 남아 운영 중 문제를 추적할 수 있습니다.</p>
+<hr/>
+<h2 id="1-print">1. print의 한계</h2>
+<p>데모에선 <code>print</code>로 충분했지만, 운영에선 무력합니다.</p>
+<pre><code class="language-python">print("LLM 호출")           # 언제? 어느 수준의 일? 어디서?
+print("실패함")             # 얼마나 심각? 무시해도 되나?
+</code></pre>
+<p>문제점:</p>
+<pre><code class="language-text">- 시각 없음: "언제" 일어난 일인지 모름
+- 레벨 없음: 정보인지 경고인지 치명적 오류인지 구분 안 됨
+- 출처 없음: 어느 모듈에서 찍혔는지 모름
+- 켜고 끄기 불가: 운영에선 조용히, 디버깅 땐 상세히 → print는 못 함
+- 파일 저장 안 됨: 터미널 닫으면 사라짐 → 나중에 못 봄
+</code></pre>
+<hr/>
+<h2 id="2-logging">2. logging — 운영의 표준</h2>
+<p>파이썬 표준 <code>logging</code> 모듈은 이 모든 걸 해결합니다.</p>
+<pre><code class="language-python">import logging
+logger = logging.getLogger("cs_agent")
+logger.info("LLM 호출 성공")        # 2026-06-01 10:00:01 [INFO] LLM 호출 성공
+logger.warning("재시도합니다")       # 2026-06-01 10:00:02 [WARNING] 재시도합니다
+logger.error("최종 실패")           # 2026-06-01 10:00:05 [ERROR] 최종 실패
+</code></pre>
+<p><strong>시각 + 레벨 + 메시지</strong>가 자동으로 붙습니다. 나중에 로그 파일을 열어 "WARNING 이상만" 검색하거나, 특정 시각의 사건을 추적할 수 있죠.</p>
+<hr/>
+<h2 id="3">3. 로그 레벨 — 심각도 구분</h2>
+<p>logging은 메시지에 <strong>심각도 레벨</strong>을 붙입니다.</p>
+<pre><code class="language-text">DEBUG &lt; INFO &lt; WARNING &lt; ERROR &lt; CRITICAL
+(상세)                              (치명적)
+
+DEBUG    : 개발 중 상세 추적 ("변수 x=5")
+INFO     : 정상 동작 기록 ("앱 시작", "호출 성공")
+WARNING  : 문제지만 계속 가능 ("재시도합니다")
+ERROR    : 실패 ("호출 최종 실패")
+CRITICAL : 시스템 다운 수준
+</code></pre>
+<p><strong>레벨로 켜고 끕니다.</strong> <code>level=INFO</code>로 두면 DEBUG는 안 보이고 INFO 이상만 출력됩니다. 평소엔 INFO로 조용히, 문제 추적 땐 <strong>config만 바꿔 DEBUG</strong>로 — 코드 수정 없이요.</p>
+<pre><code class="language-python"># config.yaml 의 logging.level 만 "DEBUG"로 바꾸면 상세 로그가 켜짐
+level = getattr(logging, cfg["logging"]["level"].upper(), logging.INFO)
+logger.setLevel(level)
+</code></pre>
+<hr/>
+<h2 id="4">4. 핸들러 — 콘솔과 파일에 동시에</h2>
+<p><code>logging</code>의 강력한 점은 <strong>여러 출력지(핸들러)</strong> 에 동시에 보낼 수 있다는 것입니다.</p>
+<p>하나의 <code>logger.info()</code> 호출이 두 곳으로 동시에 나갑니다.</p>
+<ul>
+<li><strong>StreamHandler</strong> → 콘솔(터미널)</li>
+<li><strong>FileHandler</strong> → <code>logs/agent.log</code> (파일에 영구 저장)</li>
+</ul>
+<pre><code class="language-python">def setup_logging(cfg: dict) -&gt; logging.Logger:
+    level = getattr(logging, cfg["logging"]["level"].upper(), logging.INFO)
+    log_path = ROOT / cfg["logging"]["file"]
+    log_path.parent.mkdir(parents=True, exist_ok=True)   # logs/ 자동 생성
+
+    logger = logging.getLogger("cs_agent")
+    logger.setLevel(level)
+    logger.handlers.clear()              # 재호출 시 핸들러 중복(로그 2번 찍힘) 방지
+    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")  # 공통 포맷
+
+    sh = logging.StreamHandler()         # ① 콘솔 출력
+    sh.setFormatter(fmt)
+    fh = logging.FileHandler(log_path, encoding="utf-8")  # ② 파일 출력
+    fh.setFormatter(fmt)
+    logger.addHandler(sh)
+    logger.addHandler(fh)
+    return logger
+</code></pre>
+<p><strong>핵심 디테일</strong>:</p>
+<ul>
+<li><strong><code>StreamHandler</code>(콘솔) + <code>FileHandler</code>(파일)</strong> 둘 다 등록 → 화면으로 보면서 파일에도 남김.</li>
+<li><strong><code>Formatter</code></strong> — <code>%(asctime)s [%(levelname)s] %(message)s</code>로 시각·레벨·메시지 포맷 통일.</li>
+<li><strong><code>logger.handlers.clear()</code></strong> — 이 함수를 여러 번 부르면 핸들러가 쌓여 로그가 2번, 3번 찍힙니다. 그래서 매번 비우고 다시 등록(흔한 함정).</li>
+<li><strong><code>mkdir(parents=True, exist_ok=True)</code></strong> — <code>logs/</code> 폴더가 없으면 자동 생성.</li>
+</ul>
+<hr/>
+<h2 id="5">5. 왜 파일에도 남기나</h2>
+<p>콘솔만으로는 부족합니다.</p>
+<pre><code class="language-text">콘솔만:   터미널 닫으면 사라짐, 며칠 전 사건은 못 봄
+파일에도: logs/agent.log 에 계속 쌓임
+          → "어제 오후 3시에 무슨 일?" 을 파일 열어 검색 가능
+          → 에러 빈도 집계, 사용자 문의 대응의 근거
+</code></pre>
+<p>운영에서 "왜 안 됐어요?"라는 문의가 오면, <strong>로그 파일</strong>이 유일한 단서입니다. 파일에 남겨두지 않으면 영영 알 수 없죠. 그래서 운영 로그는 <strong>반드시 파일에도</strong> 남깁니다.</p>
+<hr/>
+<h2 id="6">6. 사용 예</h2>
+<pre><code class="language-python">logger = setup_logging(load_config())
+logger.info("앱 시작")
+logger.info("LLM 호출 시도 1/3")
+logger.warning("호출 실패(1회) → 2초 후 재시도")
+logger.info("LLM 호출 성공")
+</code></pre>
+<p><strong>출력 (콘솔 + <code>logs/agent.log</code> 동시)</strong></p>
+<pre><code class="language-text">2026-06-01 10:00:00 [INFO] 앱 시작
+2026-06-01 10:00:00 [INFO] LLM 호출 시도 1/3
+2026-06-01 10:00:01 [WARNING] 호출 실패(1회) → 2초 후 재시도
+2026-06-01 10:00:03 [INFO] LLM 호출 성공
+</code></pre>
+<p>각 줄에 <strong>시각·레벨</strong>이 일관되게 붙어, 나중에 추적·검색·집계가 가능합니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>운영에선 <code>print</code>를 버리고 <strong><code>logging</code></strong> 사용 — 시각·레벨·출처가 일관되게 붙음.</li>
+<li><strong>로그 레벨</strong>(DEBUG~CRITICAL)로 심각도 구분, <strong>config로 레벨 전환</strong>(코드 수정 없이).</li>
+<li><strong>핸들러 2개</strong>: <code>StreamHandler</code>(콘솔) + <code>FileHandler</code>(파일) → 화면+파일 동시.</li>
+<li><code>logger.handlers.clear()</code>로 <strong>중복 등록(로그 2번)</strong> 방지 — 흔한 함정.</li>
+<li>파일 로그는 운영 문제 추적의 <strong>유일한 단서</strong> — 반드시 남긴다.</li>
+<li>다음 절에서 ③ 예외 처리와 재시도를 다룹니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="02_설정-분리-env와-config.html"><span class="lbl">← 이전 절</span>02. 설정 분리 env와 config</a><a class="nxt" href="04_예외처리와-재시도-지수백오프.html"><span class="lbl">다음 절 →</span>04. 예외처리와 재시도 지수백오프</a></div>
+</div>
+</body></html>

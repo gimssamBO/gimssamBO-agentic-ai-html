@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제7강 — 직접 돌리는 루프와 종료 조건</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제7강 · agent loop</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제7강 · agent loop — 세부 목차</b><a class="" href="01_한번-묻고-끝나지-않는-일.html">01. 한번 묻고 끝나지 않는 일</a><a class="" href="02_ReAct-패턴-생각-행동-관찰.html">02. ReAct 패턴 생각 행동 관찰</a><a class="cur" href="03_직접-돌리는-루프와-종료조건.html">03. 직접 돌리는 루프와 종료조건</a><a class="" href="04_따라하기-미니-에이전트-루프-구현.html">04. 따라하기 미니 에이전트 루프 구현</a><a class="" href="05_따라하기-2-3스텝-작업-실행.html">05. 따라하기 2 3스텝 작업 실행</a><a class="" href="06_무한루프와-반복호출-방지.html">06. 무한루프와 반복호출 방지</a><a class="" href="07_대화기록-누적과-토큰-관리.html">07. 대화기록 누적과 토큰 관리</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">직접 돌리는 루프와 종료 조건</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>Agent Loop는 5강의 "결정→실행→전달"을 <code>while</code>로 <strong>여러 번 반복</strong>하는 것입니다. 단, 반복에는 <strong>종료 조건</strong>이 필수입니다 — (1) 모델이 더 이상 도구를 안 부를 때(정상 종료), (2) 최대 반복 횟수(<code>max_steps</code>, 안전장치) 도달.</p>
+<hr/>
+<h2 id="1">1. 루프의 뼈대</h2>
+<p>5강에서 "모델은 결정, 실행은 우리"라고 했습니다. Agent Loop은 그 한 스텝을 <code>while</code>로 감싼 것뿐입니다.</p>
+<pre><code class="language-python">while True:
+    resp = 모델_호출(대화기록 + 도구목록)
+    if resp.function_calls:              # 모델이 도구를 부르려 한다 (Action)
+        결과 = 도구_실행(...)             # 우리가 실행 (Observation)
+        대화기록에 [모델의 호출] + [결과] 추가   # 관찰을 되돌려줌
+        continue                         # 다음 스텝으로
+    else:                                # 더 부를 도구가 없다 → 최종 답
+        print(resp.text)
+        break
+</code></pre>
+<p>매 바퀴마다 모델은 "도구를 더 부를지" 아니면 "이제 답할지"를 정합니다. 도구를 부르면 실행해서 결과를 되돌리고, 안 부르면 그게 최종 답입니다.</p>
+<hr/>
+<h2 id="2">2. 종료 조건이 왜 필요한가</h2>
+<p><code>while True</code>는 <strong>무한 루프</strong>의 위험이 있습니다. 만약 모델이 계속 도구만 부르면? 영원히 안 끝나고 <strong>토큰(비용)을 끝없이 태웁니다.</strong> 그래서 종료 조건을 둘 둡니다.</p>
+<table>
+<thead>
+<tr>
+<th>종료 조건</th>
+<th>의미</th>
+<th>종류</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>모델이 도구를 안 부름</td>
+<td>"이제 답할 수 있다"고 판단</td>
+<td>정상 종료</td>
+</tr>
+<tr>
+<td>최대 반복 횟수 도달</td>
+<td><code>max_steps</code>에 도달</td>
+<td>안전장치</td>
+</tr>
+</tbody>
+</table>
+<hr/>
+<h2 id="3-1">3. 종료 조건 ① — 정상 종료</h2>
+<p>모델이 <code>function_calls</code>를 비워서 돌려주면, "더 부를 도구가 없다 = 이제 답할 수 있다"는 뜻입니다. 그게 최종 답입니다.</p>
+<pre><code class="language-python">if not resp.function_calls:        # 도구를 안 부름
+    print("최종 답변:", resp.text)  # 이게 답!
+    return resp.text
+</code></pre>
+<p>예를 들어 재고(3개)와 기준(30개)을 둘 다 확인한 뒤, 모델은 더 이상 도구를 부르지 않고 "재주문이 필요합니다"라고 답합니다. 그게 정상 종료죠.</p>
+<hr/>
+<h2 id="4-2-max_steps">4. 종료 조건 ② — max_steps 안전장치</h2>
+<p>가장 중요한 안전장치입니다. <code>for step in range(1, max_steps + 1)</code>로 <strong>반복 횟수에 상한</strong>을 둡니다.</p>
+<pre><code class="language-python">def run_agent(question: str, max_steps: int = 6):
+    ...
+    for step in range(1, max_steps + 1):   # 최대 max_steps 번만 반복
+        resp = 모델_호출(...)
+        if not resp.function_calls:
+            return resp.text               # 정상 종료
+        # ... 도구 실행 ...
+
+    print("[종료] 최대 스텝 도달 — 안전장치 작동")   # max_steps 초과
+    return None
+</code></pre>
+<p><code>max_steps=6</code>이면 아무리 꼬여도 6번 안에 멈춥니다. 모델이 버그나 혼란으로 같은 도구를 무한히 부르려 해도, 이 상한이 <strong>비용 폭탄을 막아</strong> 줍니다.</p>
+<blockquote>
+<p>실무에서 <code>max_steps</code>(보통 5~10)는 <strong>반드시</strong> 둡니다. 이건 선택이 아니라 필수입니다. "혹시 모를 무한 루프"를 막는 마지막 방어선이거든요. (더 정교한 반복 방지는 06번에서 배웁니다.)</p>
+</blockquote>
+<hr/>
+<h2 id="5-max_steps">5. max_steps는 몇으로?</h2>
+<ul>
+<li><strong>너무 작으면</strong>(예: 1~2): 정상적인 다단계 작업도 끝나기 전에 잘립니다.</li>
+<li><strong>너무 크면</strong>(예: 100): 사고가 나도 한참 토큰을 태운 뒤에야 멈춥니다.</li>
+<li><strong>적당히</strong>(5~10): 대부분의 작업은 몇 스텝이면 끝나므로, 이 정도면 정상 작업은 통과시키고 사고는 막습니다.</li>
+</ul>
+<p>작업의 성격에 맞게 정하면 됩니다. 재고 확인 같은 2~3스텝 작업엔 6 정도가 넉넉합니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>Agent Loop = 5강의 "결정→실행→전달"을 <code>while</code>(또는 <code>for</code>)로 <strong>반복</strong>.</li>
+<li>종료 조건 둘: <strong>모델이 도구를 안 부름</strong>(정상) + <strong>max_steps 도달</strong>(안전장치).</li>
+<li><code>max_steps</code>는 <strong>무한 루프·비용 폭탄을 막는 필수 안전장치</strong>.</li>
+<li>다음 절에서 이 루프를 실제 코드로 구현합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="02_ReAct-패턴-생각-행동-관찰.html"><span class="lbl">← 이전 절</span>02. ReAct 패턴 생각 행동 관찰</a><a class="nxt" href="04_따라하기-미니-에이전트-루프-구현.html"><span class="lbl">다음 절 →</span>04. 따라하기 미니 에이전트 루프 구현</a></div>
+</div>
+</body></html>

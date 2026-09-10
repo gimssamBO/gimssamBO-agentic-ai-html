@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제23강 — 실습문제와 해답</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제23강 · coding agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제23강 · coding agent — 세부 목차</b><a class="" href="01_이-스크립트-왜-안돌지.html">01. 이 스크립트 왜 안돌지</a><a class="" href="02_코딩-에이전트의-핵심-루프.html">02. 코딩 에이전트의 핵심 루프</a><a class="" href="03_안전과-책임.html">03. 안전과 책임</a><a class="" href="04_따라하기-버그-읽고-수정-요청.html">04. 따라하기 버그 읽고 수정 요청</a><a class="" href="05_따라하기-저장하고-실행해-검증.html">05. 따라하기 저장하고 실행해 검증</a><a class="" href="06_재귀적-버그수정-오류-피드백-루프.html">06. 재귀적 버그수정 오류 피드백 루프</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="cur" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">실습문제와 해답</h1>
+<p>직접 코드를 고쳐 보며 23강 내용을 손에 익힙니다. 먼저 <strong>스스로 풀어 본 뒤</strong> 해답을 펼쳐 보세요. (이 실습은 <code>GOOGLE_API_KEY</code>가 필요합니다.)</p>
+<hr/>
+<h2 id="1">문제 1 — 변경 요약 출력 추가</h2>
+<p><code>code/ch23_coding.py</code>를 복사해 <code>code/ch23_ex_summary.py</code>를 만드세요. <code>ask_fix</code>의 프롬프트를 확장해 수정 코드와 함께 <strong>"어떤 버그를 왜 고쳤는지" 변경 요약</strong>을 받아오게 하되, 요약은 <strong>콘솔에만</strong> 출력하고 <code>data/fixed_script.py</code>에는 <strong>코드만</strong> 저장하도록 분리하세요.</p>
+<ul>
+<li>사용 파일: <code>data/buggy_script.py</code></li>
+<li>기대 결과: 콘솔에 버그 3건(인코딩·문자열 합산·문자열 비교)에 대한 변경 요약이 출력되고, 저장 파일은 정상 실행된다.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+
+핵심은 LLM에게 **요약 + 코드블록**을 함께 받고, 코드블록만 `extract_code`로 뽑아 저장하는 것입니다. 요약은 코드블록 바깥 텍스트라 자연스럽게 분리됩니다.
+
+
+<pre><code class="language-python"># -*- coding: utf-8 -*-
+# 실행: python code/ch23_ex_summary.py
+import sys, pathlib, subprocess, re
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_chat, DATA
+from ch23_coding import read_code, extract_code, save_and_run, TARGET, FIXED
+
+def ask_fix_with_summary(source: str) -&gt; tuple[str, str]:
+    """수정 코드와 변경 요약을 함께 받아 (코드, 요약)으로 분리해 반환한다."""
+    llm = get_chat(temperature=0)
+    prompt = (
+        "다음 파이썬 스크립트의 버그를 모두 고쳐라. 출력 형식은 정확히 다음과 같이 하라:\n"
+        "먼저 '### 변경 요약'으로 시작해 고친 버그를 번호로 나열(무엇을 왜 고쳤는지),\n"
+        "그 다음 수정한 **전체 코드**를 하나의 ```python 코드블록```으로 출력하라.\n\n"
+        f"```python\n{source}\n```"
+    )
+    out = llm.invoke(prompt).content
+    code = extract_code(out)                          # 코드블록만 추출 → 저장용
+    # 요약 = 코드블록을 제거한 나머지 텍스트
+    summary = re.sub(r"```(?:python)?\s*.*?```", "", out, flags=re.DOTALL).strip()
+    return code, summary
+
+if __name__ == "__main__":
+    source = read_code(TARGET)
+    code, summary = ask_fix_with_summary(source)
+    print("[변경 요약]")                              # 요약은 콘솔에만
+    print(summary)
+    print("=" * 60)
+    rc, output = save_and_run(code)                   # 코드만 저장·실행
+    print("[실행] 종료코드:", rc, "(0=정상)")
+    print(output)
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">[변경 요약]
+### 변경 요약
+1. (인코딩) open()에 encoding="utf-8-sig" 추가 — 한글 CSV의 BOM 처리
+2. (문자열 합산) total += int(r["sales"]) — CSV 값은 문자열이라 정수 변환 필요
+3. (문자열 비교) int()로 비교 — "9"&gt;"100"의 사전식 비교 오류 방지
+============================================================
+[실행] 종료코드: 0 (0=정상)
+평균 매출: 152437.5
+최대 매출일: 2024-01-01
+</code></pre>
+
+
+**해설**: 핵심은 **출력을 두 부분으로 설계**한 것입니다 — 코드블록 안은 저장용 코드, 바깥은 사람용 요약. `extract_code`로 코드를 뽑고, `re.sub`로 코드블록을 **제거한** 나머지를 요약으로 씁니다. 이렇게 하면 저장 파일은 깨끗한 코드만 들어가고(실행 가능), 사람은 "AI가 뭘 왜 고쳤는지" 콘솔에서 확인합니다. 03번에서 강조한 "사람이 검토하는 제안 형태"를 구현한 셈이죠.
+
+</details>
+<hr/>
+<h2 id="2">문제 2 — 새 버그 스크립트 작성·수정</h2>
+<p><code>data/my_buggy.py</code>를 직접 만들어 의도적 버그 2개(예: 0으로 나누기, 잘못된 인덱싱)를 넣으세요. <code>code/ch23_coding.py</code>의 <code>TARGET</code>을 <code>data/my_buggy.py</code>로 바꿔(또는 인자로 받게 수정) 실행하세요.</p>
+<ul>
+<li>검증: 에이전트가 출력·저장한 코드를 직접 실행해 두 버그가 모두 사라지고 <strong>정상 종료(종료코드 0)</strong> 되는지 확인.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+
+**1) 버그 스크립트 만들기** — `data/my_buggy.py`
+
+
+<pre><code class="language-python"># data/my_buggy.py (의도적 버그 2개)
+nums = [10, 20, 30, 0]
+total = sum(nums)
+count = nums.count(0)                  # 0의 개수 = 1
+avg_of_zeros = total / count           # 버그1? count가 0이면 ZeroDivisionError
+# 일부러 0으로 나누기 유발
+empty = []
+print("평균:", sum(empty) / len(empty))   # 버그1: ZeroDivisionError (len=0)
+print("세 번째:", nums[5])                # 버그2: IndexError (인덱스 5는 범위 밖)
+</code></pre>
+
+
+**2) TARGET을 인자로 받게 수정** — `code/ch23_coding.py`를 살짝 고칩니다.
+
+
+<pre><code class="language-python">import sys, pathlib
+# ... 기존 임포트 ...
+# 명령행 인자로 대상 파일을 받을 수 있게 (없으면 기본 buggy_script.py)
+if len(sys.argv) &gt; 1:
+    TARGET = pathlib.Path(sys.argv[1]).resolve()
+    FIXED = TARGET.with_name("fixed_" + TARGET.name)
+</code></pre>
+
+
+**3) 실행**
+
+
+<pre><code class="language-bash">python code/ch23_coding.py data/my_buggy.py
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">[1] 원본 코드 읽기: my_buggy.py
+[2] LLM에게 버그 수정 요청 중...
+[3] 새 파일로 저장 후 실행 검증: fixed_my_buggy.py
+============================================================
+[실행 결과] 종료코드: 0 (0=정상)
+평균: 0    (또는 빈 리스트 안내 메시지)
+세 번째: 30   (또는 안전한 인덱스 처리)
+============================================================
+성공: 버그가 수정되어 정상 동작합니다 → /Users/.../data/fixed_my_buggy.py
+</code></pre>
+
+
+**해설**: 핵심은 **에이전트가 두 종류의 새 버그(ZeroDivisionError, IndexError)도 같은 루프로 잡는다**는 점입니다. 23강의 코딩 에이전트는 특정 버그에 특화된 게 아니라, "읽고→고치고→실행 검증"하는 **범용 구조**라 새 버그에도 그대로 작동하죠. `TARGET`을 인자로 받게 한 작은 수정으로, 어떤 스크립트든 고칠 수 있는 **재사용 가능한 CLI 도구**가 됐습니다. LLM이 빈 리스트·범위 밖 인덱스를 어떻게 방어적으로 고치는지(예: `len(x) and sum(x)/len(x)`, 인덱스 범위 체크) 수정본을 직접 비교해 보세요.
+
+&gt; **팁**: 만약 한 번에 두 버그가 다 안 잡히면, 06번의 **재귀 루프**(`MAX_TRIES`) 버전으로 돌리면 오류 피드백으로 더 확실히 잡힙니다.
+
+</details>
+<hr/>
+<h2 id="_2">정리</h2>
+<ul>
+<li>문제 1로 <strong>변경 요약 분리</strong>(코드는 저장, 요약은 콘솔)를 구현했습니다.</li>
+<li>문제 2로 <strong>새 버그 스크립트</strong>(0 나누기·인덱싱)에 에이전트를 적용했습니다.</li>
+</ul>
+<p>두 문제 모두 23강 코딩 에이전트가 <strong>범용 구조</strong>임을 보여 줍니다 — 버그 종류나 대상 파일이 달라져도 "읽고→고치고→검증"은 그대로죠.</p>
+<p>이것으로 23강을 마칩니다. 다음 24강에서 비즈니스 리포트 에이전트를 만듭니다!</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="07_정리-체크리스트.html"><span class="lbl">← 이전 절</span>07. 정리 체크리스트</a><span class="nxt off"><span class="lbl"> </span> </span></div>
+</div>
+</body></html>

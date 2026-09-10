@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제19강 — 방금 말한 걸 또 묻는 봇</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제19강 · agent memory</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제19강 · agent memory — 세부 목차</b><a class="cur" href="01_방금-말한걸-또-묻는-봇.html">01. 방금 말한걸 또 묻는 봇</a><a class="" href="02_LLM은-stateless다.html">02. LLM은 stateless다</a><a class="" href="03_InMemorySaver와-thread_id.html">03. InMemorySaver와 thread_id</a><a class="" href="04_따라하기-기억하는-상담봇.html">04. 따라하기 기억하는 상담봇</a><a class="" href="05_따라하기-같은세션-vs-다른세션.html">05. 따라하기 같은세션 vs 다른세션</a><a class="" href="06_긴-대화-메시지-관리.html">06. 긴 대화 메시지 관리</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">방금 말한 걸 또 묻는 봇</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>지금까지 만든 에이전트는 <strong>대화를 기억하지 못합니다.</strong> "내 이름은 민준이야" 다음에 "내 이름 뭐랬지?"라고 물으면 "모르겠어요"라고 답하죠. 원인은 LLM이 <strong>stateless(무상태)</strong> 라서입니다. 이 강에서 <strong>단기 기억</strong>을 붙입니다.</p>
+<hr/>
+<h2 id="1">1. 금붕어 같은 봇</h2>
+<p>지금까지의 에이전트로 이런 대화를 해 보면 문제가 드러납니다.</p>
+<pre><code class="language-text">사용자: 내 이름은 민준이야.
+봇:    네, 민준님 반갑습니다!
+사용자: 내 이름 뭐랬지?
+봇:    죄송하지만 성함을 알려주지 않으셨어요.   ← 방금 들었는데 잊어버림!
+</code></pre>
+<p>방금 "민준"이라고 말했는데, 다음 질문에서 까먹습니다. 마치 <strong>금붕어</strong>처럼 3초 전을 기억 못 하죠. 이래선 상담봇으로 쓸 수 없습니다. "방금 말한 주문번호로 환불해줘"라고 하면 "어떤 주문번호요?"라고 되묻을 테니까요.</p>
+<hr/>
+<h2 id="2">2. 왜 기억을 못 하나</h2>
+<p>원인은 단순합니다. <strong>LLM API는 상태를 저장하지 않습니다(stateless).</strong> 매 호출은 완전히 백지에서 시작합니다.</p>
+<pre><code class="language-text">호출 1: "내 이름은 민준이야" → "반갑습니다"  (호출 끝, 다 잊음)
+호출 2: "내 이름 뭐랬지?"    → "모르겠어요"  (백지에서 시작, 호출 1을 모름)
+</code></pre>
+<p>호출 2는 호출 1을 전혀 모릅니다. 각 호출이 독립적이거든요. 백엔드 개발자라면 익숙할 겁니다 — <strong>세션이 없는 순수 함수(stateless HTTP)</strong> 와 같죠. 이전 요청을 기억하지 못합니다.</p>
+<blockquote>
+<p>비유: 매번 기억이 지워지는 영화 주인공 같습니다(메멘토). 방금 만난 사람도 다음 순간 처음 보는 사람이 되죠. 그래서 매번 "저는 누구입니다"를 다시 말해 줘야 합니다.</p>
+</blockquote>
+<hr/>
+<h2 id="3-chatgpt">3. ChatGPT는 어떻게 기억하는가</h2>
+<p>"ChatGPT는 대화를 기억하잖아?"라고 생각할 수 있습니다. 사실 <strong>ChatGPT도 LLM 자체는 기억 못 합니다.</strong> 비결은 따로 있습니다.</p>
+<p>ChatGPT 내부에서는, 호출 2 때 <strong>지금까지의 모든 대화를 매번 다시 보냅니다.</strong></p>
+<blockquote>
+<p>호출 2 입력 = <code>["내 이름은 민준", "반갑습니다", "내 이름 뭐랬지?"]</code></p>
+</blockquote>
+<p>ChatGPT는 <strong>지금까지의 대화 전체를 매번 다시 전송</strong>합니다. 모델이 기억하는 게 아니라, <strong>애플리케이션이 대화 기록을 들고 있다가 매 호출에 끼워 넣는</strong> 거죠. 그래서 기억하는 "것처럼" 보입니다.</p>
+<hr/>
+<h2 id="4">4. 해법 — 대화를 누적해 주입</h2>
+<p>기억을 만들려면 우리가 직접 <strong>이전 대화를 매번 다시 실어 보내야</strong> 합니다.</p>
+<ul>
+<li><strong>기억 없음</strong>: 호출2 = <code>["내 이름 뭐랬지?"]</code> → 모름</li>
+<li><strong>기억 있음</strong>: 호출2 = <code>["내 이름은 민준", "반갑습니다", "내 이름 뭐랬지?"]</code> → "민준님!" <em>(이전 대화를 누적해 함께 보냄)</em></li>
+</ul>
+<p>직접 구현하면 "메시지 리스트를 매번 append 해서 보내는" 코드가 됩니다. 번거롭죠. LangGraph의 <strong>InMemorySaver</strong>가 이 누적·저장·재주입을 <strong>자동화</strong>해 줍니다. 우리는 그냥 thread_id만 넘기면 되죠.</p>
+<hr/>
+<h2 id="5">5. 이 강에서 배울 것</h2>
+<table>
+<thead>
+<tr>
+<th>목차</th>
+<th>내용</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>02</td>
+<td>LLM은 stateless — 맥락은 우리가 넣는다</td>
+</tr>
+<tr>
+<td>03</td>
+<td>InMemorySaver와 thread_id</td>
+</tr>
+<tr>
+<td>04~05</td>
+<td>기억하는 상담봇 → 세션 격리</td>
+</tr>
+<tr>
+<td>06</td>
+<td>긴 대화 메시지 관리 (트리밍·요약, 신규)</td>
+</tr>
+</tbody>
+</table>
+<p>이 강은 <strong>단기 기억</strong>(한 대화 세션 안의 맥락)을 다룹니다. 세션이 끝나면 사라지는 임시 기억이죠. "어제 말한 것"까지 영구히 기억하는 <strong>장기 기억</strong>은 다음 20강입니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>지금까지 에이전트는 <strong>대화를 기억 못 함</strong>(금붕어).</li>
+<li>원인: LLM은 <strong>stateless</strong> — 매 호출이 백지에서 시작.</li>
+<li>ChatGPT도 LLM은 기억 못 하고, <strong>앱이 대화를 매번 주입</strong>.</li>
+<li>해법: 이전 대화를 <strong>누적해 주입</strong> → InMemorySaver가 자동화.</li>
+<li>이 강은 <strong>단기 기억</strong>(세션 내 맥락), 20강은 장기 기억.</li>
+<li>다음 절에서 stateless를 자세히 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><span class="prv off"><span class="lbl"> </span> </span><a class="nxt" href="02_LLM은-stateless다.html"><span class="lbl">다음 절 →</span>02. LLM은 stateless다</a></div>
+</div>
+</body></html>

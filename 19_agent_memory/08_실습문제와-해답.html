@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제19강 — 실습문제와 해답</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제19강 · agent memory</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제19강 · agent memory — 세부 목차</b><a class="" href="01_방금-말한걸-또-묻는-봇.html">01. 방금 말한걸 또 묻는 봇</a><a class="" href="02_LLM은-stateless다.html">02. LLM은 stateless다</a><a class="" href="03_InMemorySaver와-thread_id.html">03. InMemorySaver와 thread_id</a><a class="" href="04_따라하기-기억하는-상담봇.html">04. 따라하기 기억하는 상담봇</a><a class="" href="05_따라하기-같은세션-vs-다른세션.html">05. 따라하기 같은세션 vs 다른세션</a><a class="" href="06_긴-대화-메시지-관리.html">06. 긴 대화 메시지 관리</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="cur" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">실습문제와 해답</h1>
+<p>직접 코드를 고쳐 보며 19강 내용을 손에 익힙니다. 먼저 <strong>스스로 풀어 본 뒤</strong> 해답을 펼쳐 보세요. (이 실습은 <code>GOOGLE_API_KEY</code>가 필요합니다.)</p>
+<hr/>
+<h2 id="1-thread_id">문제 1 — thread_id로 대화 이어가기</h2>
+<p><code>InMemorySaver</code>를 단 에이전트를 만들고, 같은 <code>thread_id="u1"</code>로 "내 이름은 지표야" → "내 이름 뭐야?"를 연달아 호출하세요.</p>
+<ul>
+<li>기대 결과: 두 번째 답에 "지표"가 포함되면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_chat
+from langchain.agents import create_agent
+from langgraph.checkpoint.memory import InMemorySaver
+
+agent = create_agent(
+    get_chat(temperature=0.3),
+    tools=[],
+    system_prompt="너는 친절한 상담원이다. 한국어 존댓말로 답하라.",
+    checkpointer=InMemorySaver(),
+)
+
+cfg = {"configurable": {"thread_id": "u1"}}
+
+# 1턴: 이름 알려주기
+agent.invoke({"messages": [{"role": "user", "content": "내 이름은 지표야."}]}, cfg)
+
+# 2턴: 같은 thread_id로 물어보기
+out = agent.invoke({"messages": [{"role": "user", "content": "내 이름 뭐야?"}]}, cfg)
+answer = out["messages"][-1].text
+print("봇:", answer)
+print("'지표' 포함?", "지표" in answer)
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">봇: 지표님이라고 하셨습니다!
+'지표' 포함? True
+</code></pre>
+
+
+**해설**: `checkpointer=InMemorySaver()`와 같은 `thread_id="u1"` 덕분에, 1턴의 "지표"를 2턴에서 기억합니다. 우리가 대화 기록을 직접 관리하지 않았는데도요. `checkpointer`가 매 호출 끝에 대화를 저장하고, 같은 thread_id의 다음 호출 때 자동 복원하기 때문이죠.
+
+</details>
+<hr/>
+<h2 id="2">문제 2 — 스레드 격리 확인</h2>
+<p>위 코드에 <code>thread_id="u2"</code>로 "내 이름 뭐야?"를 한 번 더 호출하는 부분을 추가하세요.</p>
+<ul>
+<li>기대 결과: u2에서는 이름을 모른다고 답해, thread_id별로 기억이 분리됨을 검증하면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_chat
+from langchain.agents import create_agent
+from langgraph.checkpoint.memory import InMemorySaver
+
+agent = create_agent(get_chat(temperature=0.3), tools=[],
+    system_prompt="너는 친절한 상담원이다. 한국어 존댓말로 답하라.",
+    checkpointer=InMemorySaver())
+
+# u1: 이름 알려주고 물어보기
+cfg1 = {"configurable": {"thread_id": "u1"}}
+agent.invoke({"messages": [{"role": "user", "content": "내 이름은 지표야."}]}, cfg1)
+out1 = agent.invoke({"messages": [{"role": "user", "content": "내 이름 뭐야?"}]}, cfg1)
+print("[u1] 봇:", out1["messages"][-1].text)
+
+# u2: 다른 thread_id로 물어보기 → 모를 것
+cfg2 = {"configurable": {"thread_id": "u2"}}
+out2 = agent.invoke({"messages": [{"role": "user", "content": "내 이름 뭐야?"}]}, cfg2)
+print("[u2] 봇:", out2["messages"][-1].text)
+
+print("\n격리 확인:")
+print("  u1은 '지표' 앎:", "지표" in out1["messages"][-1].text)
+print("  u2는 '지표' 모름:", "지표" not in out2["messages"][-1].text)
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">[u1] 봇: 지표님이라고 하셨습니다!
+[u2] 봇: 죄송하지만 아직 성함을 알려주지 않으셨어요.
+
+격리 확인:
+  u1은 '지표' 앎: True
+  u2는 '지표' 모름: True
+</code></pre>
+
+
+**해설**: 같은 에이전트 객체인데, u1은 "지표"를 알고 u2는 모릅니다. thread_id가 다르니 대화가 **완전히 격리**됐기 때문이죠. InMemorySaver는 thread_id별로 대화를 따로 저장하니까요. 이 격리가 멀티 사용자 서비스의 핵심입니다 — u1 사용자의 정보가 u2 사용자에게 새어 나가지 않습니다. 만약 격리가 안 되면 개인정보 유출 사고가 나죠.
+
+</details>
+<hr/>
+<h2 id="_2">정리</h2>
+<ul>
+<li>문제 1로 <strong>thread_id로 대화가 이어짐</strong>을 확인했습니다.</li>
+<li>문제 2로 <strong>thread_id별 격리</strong>(멀티 사용자 안전)를 검증했습니다.</li>
+</ul>
+<p>이것으로 19강을 마칩니다. 다음 20강에서 영속 장기 기억을 만듭니다!</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="07_정리-체크리스트.html"><span class="lbl">← 이전 절</span>07. 정리 체크리스트</a><span class="nxt off"><span class="lbl"> </span> </span></div>
+</div>
+</body></html>

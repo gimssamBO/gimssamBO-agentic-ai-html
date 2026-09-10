@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제18강 — 따라하기 — 실시간 데이터 도구 (DB/CSV)</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제18강 · rag tool agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제18강 · rag tool agent — 세부 목차</b><a class="" href="01_문서검색과-실시간데이터를-한-에이전트에.html">01. 문서검색과 실시간데이터를 한 에이전트에</a><a class="" href="02_모든-능력을-도구로-통일.html">02. 모든 능력을 도구로 통일</a><a class="" href="03_멀티스텝-처리.html">03. 멀티스텝 처리</a><a class="" href="04_도구-설계-원칙.html">04. 도구 설계 원칙</a><a class="" href="05_따라하기-정책검색-도구.html">05. 따라하기 정책검색 도구</a><a class="cur" href="06_따라하기-실시간-데이터-도구.html">06. 따라하기 실시간 데이터 도구</a><a class="" href="07_따라하기-RAG와-도구-동시-사용.html">07. 따라하기 RAG와 도구 동시 사용</a><a class="" href="08_읽기-도구와-쓰기-도구의-차이.html">08. 읽기 도구와 쓰기 도구의 차이</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="dbcsv">따라하기 — 실시간 데이터 도구 (DB/CSV)</h1>
+<h2 id="_1">목표</h2>
+<p>주문 상태·재고를 조회하는 실시간 데이터 도구 두 개를 만듭니다. 04번의 설계 원칙(입력 검증·예외 처리·결정적 반환)을 적용합니다.</p>
+<hr/>
+<h2 id="1">1. 주문 상태 조회 도구</h2>
+<p><code>orders.csv</code>에서 주문번호로 상태를 조회합니다.</p>
+<pre><code class="language-python">import pandas as pd
+from langchain_core.tools import tool
+from common import DATA
+
+orders = pd.read_csv(DATA / "orders.csv")
+
+@tool
+def get_order_status(order_id: str) -&gt; str:
+    """주문번호(order_id)로 주문 상태/상품/날짜를 조회한다. 예: 'O000902'"""
+    # 없는 주문번호여도 예외로 죽지 않고 안내 문자열을 돌려준다(결정적·안전)
+    row = orders[orders["order_id"] == order_id.strip()]
+    if row.empty:
+        return f"주문번호 {order_id} 를 찾을 수 없습니다."
+    r = row.iloc[0]
+    return (f"주문 {order_id}: 상품='{r['product_name']}', 상태='{r['status']}', "
+            f"주문일={r['order_date']}, 수량={r['quantity']}")
+</code></pre>
+<p>04번 원칙들이 다 들어 있습니다.</p>
+<ul>
+<li><strong>명확한 설명</strong>: "예: 'O000902'" 입력 형식 명시</li>
+<li><strong>입력 검증</strong>: <code>.strip()</code>으로 공백 제거</li>
+<li><strong>예외 처리</strong>: 없으면 안내 메시지(안 죽음)</li>
+<li><strong>결정적</strong>: 같은 주문번호 → 같은 결과</li>
+</ul>
+<hr/>
+<h2 id="2">2. 재고 조회 도구</h2>
+<p><code>products.csv</code>에서 상품명으로 재고를 조회합니다.</p>
+<pre><code class="language-python">products = pd.read_csv(DATA / "products.csv")
+
+@tool
+def get_stock(product_name: str) -&gt; str:
+    """상품명으로 현재 재고 수량을 조회한다. 예: '무선 이어버드'"""
+    # str.contains: 정확히 일치가 아니라 '포함'으로 찾는다(고객이 일부만 말해도 매칭)
+    row = products[products["product_name"].str.contains(product_name.strip(), na=False)]
+    if row.empty:
+        return f"'{product_name}' 상품을 찾을 수 없습니다."
+    r = row.iloc[0]
+    return f"'{r['product_name']}' 재고: {r['stock']}개"
+</code></pre>
+<p><code>str.contains</code>로 <strong>부분 일치</strong> 검색을 합니다(5강 복습). 고객이 "이어버드"라고만 해도 "승승 무선 블루투스 이어버드 SE"를 찾죠. 정확한 전체 이름을 몰라도 되게요.</p>
+<hr/>
+<h2 id="3">3. 두 도구 모두 '읽기 전용'</h2>
+<p>중요한 점: 이 두 도구는 <strong>모두 읽기(조회)</strong> 입니다. 데이터를 <strong>바꾸지 않습니다.</strong></p>
+<pre><code class="language-text">get_order_status("O000902")  → 조회만 (orders.csv 안 바뀜)
+get_stock("이어버드")        → 조회만 (products.csv 안 바뀜)
+</code></pre>
+<p>그래서 안전합니다 — 에이전트가 잘못 호출해도 데이터가 훼손되지 않죠(04번 멱등성). "상태 변경"은 일부러 안 넣었습니다. 쓰기 도구의 위험성은 08번에서 따로 다룹니다.</p>
+<hr/>
+<h2 id="4">4. 도구 단독 테스트</h2>
+<p>에이전트에 붙이기 전 각각 테스트합니다.</p>
+<pre><code class="language-python">print(get_order_status.invoke({"order_id": "O000902"}))
+print(get_stock.invoke({"product_name": "이어버드"}))
+
+# 없는 경우도 테스트
+print(get_order_status.invoke({"order_id": "X9999"}))   # 안전한 안내
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">주문 O000902: 상품='승승 무선 블루투스 이어버드 SE', 상태='배송완료', 주문일=2024-03-29, 수량=1
+'승승 무선 블루투스 이어버드 SE' 재고: 225개
+주문번호 X9999 를 찾을 수 없습니다.
+</code></pre>
+<p>정상 케이스는 데이터를 돌려주고, 없는 케이스(X9999)는 안전한 안내를 합니다. 04번 원칙이 작동하는 거죠.</p>
+<hr/>
+<h2 id="5">5. 세 도구가 모였다</h2>
+<p>이제 세 도구가 준비됐습니다.</p>
+<table>
+<thead>
+<tr>
+<th>도구</th>
+<th>출처</th>
+<th>담당 질문</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>policy_search</code> (05번)</td>
+<td>정책 문서(RAG)</td>
+<td>"환불 절차?", "VIP 등급?"</td>
+</tr>
+<tr>
+<td><code>get_order_status</code> (06번)</td>
+<td>orders.csv(DB)</td>
+<td>"주문 상태?"</td>
+</tr>
+<tr>
+<td><code>get_stock</code> (06번)</td>
+<td>products.csv(DB)</td>
+<td>"재고?"</td>
+</tr>
+</tbody>
+</table>
+<p>출처는 제각각(문서/DB)이지만, 에이전트에겐 똑같은 도구 3개입니다(02번). 다음 절에서 이 셋을 한 에이전트에 합쳐, RAG와 DB를 동시에 쓰는 질문을 처리합니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li><code>get_order_status</code>, <code>get_stock</code>은 CSV 조회 도구.</li>
+<li>04번 원칙 적용: <strong>입력 검증·예외 처리·결정적 반환</strong>.</li>
+<li><code>str.contains</code>로 <strong>부분 일치</strong>(고객이 일부만 말해도 매칭).</li>
+<li>두 도구 모두 <strong>읽기 전용</strong>(데이터 안 바꿈, 안전).</li>
+<li>policy_search(RAG) + 데이터 도구 2개 = <strong>세 도구 준비 완료</strong>.</li>
+<li>다음 절에서 셋을 합쳐 동시에 씁니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="05_따라하기-정책검색-도구.html"><span class="lbl">← 이전 절</span>05. 따라하기 정책검색 도구</a><a class="nxt" href="07_따라하기-RAG와-도구-동시-사용.html"><span class="lbl">다음 절 →</span>07. 따라하기 RAG와 도구 동시 사용</a></div>
+</div>
+</body></html>

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제13강 — 청크 크기와 오버랩 튜닝</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제13강 · rag concept</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제13강 · rag concept — 세부 목차</b><a class="" href="01_검색으로-근거를-찾아-답하기.html">01. 검색으로 근거를 찾아 답하기</a><a class="" href="02_LLM의-세가지-한계.html">02. LLM의 세가지 한계</a><a class="" href="03_RAG-파이프라인-5단계.html">03. RAG 파이프라인 5단계</a><a class="" href="04_왜-청킹하는가.html">04. 왜 청킹하는가</a><a class="" href="05_따라하기-PDF-로드하기.html">05. 따라하기 PDF 로드하기</a><a class="" href="06_따라하기-청킹하기.html">06. 따라하기 청킹하기</a><a class="cur" href="07_청크-크기와-오버랩-튜닝.html">07. 청크 크기와 오버랩 튜닝</a><a class="" href="08_다양한-문서-로더.html">08. 다양한 문서 로더</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">청크 크기와 오버랩 튜닝</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>청크 설정(<code>chunk_size</code>, <code>chunk_overlap</code>)은 <strong>검색 품질을 좌우하는 핵심 하이퍼파라미터</strong>입니다. 여러 조합으로 청크 수·평균 길이·키워드 포함 청크 수를 비교해, 어떤 설정이 검색에 유리한지 감을 잡습니다.</p>
+<hr/>
+<h2 id="1">1. "정답 설정"은 없다</h2>
+<p>06번에서 <code>(500, 50)</code>을 썼지만, 이건 출발점일 뿐 <strong>정답이 아닙니다.</strong> 문서 종류와 질문 패턴에 따라 최적 설정이 다릅니다.</p>
+<ul>
+<li>조항이 짧은 정책 문서 → 작은 청크가 유리</li>
+<li>맥락이 긴 설명서 → 큰 청크가 유리</li>
+</ul>
+<p>그래서 여러 설정을 <strong>직접 비교해 보며</strong> 감을 잡아야 합니다. 이게 "튜닝(tuning)"입니다.</p>
+<hr/>
+<h2 id="2">2. 여러 설정 비교하기</h2>
+<p>(실습 파일: <code>sections/13_rag_concept/07_청크-크기와-오버랩-튜닝.py</code>) — 임베딩 없이, 문자열 포함만으로 비교합니다.</p>
+<pre><code class="language-python">from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from common import DOCS
+
+docs = PyPDFLoader(str(DOCS / "환불교환정책.pdf")).load()
+keyword = "환불"   # 같은 키워드가 포함된 청크 수로 '검색 명중률'을 가늠
+
+# 비교할 (chunk_size, overlap) 조합들
+configs = [(300, 0), (500, 50), (1000, 100)]
+
+print(f"{'설정(size,overlap)':&lt;22}{'청크수':&gt;8}{'평균길이':&gt;10}{'키워드포함':&gt;12}")
+for size, overlap in configs:
+    splitter = RecursiveCharacterTextSplitter(chunk_size=size, chunk_overlap=overlap)
+    chunks = splitter.split_documents(docs)
+    n = len(chunks)
+    avg_len = sum(len(c.page_content) for c in chunks) / n if n else 0
+    hits = sum(1 for c in chunks if keyword in c.page_content)
+    print(f"({size}, {overlap}){'':&lt;10}{n:&gt;8}{avg_len:&gt;10.0f}{hits:&gt;12}")
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">설정(size,overlap)      청크수     평균길이      키워드포함
+(300, 0)                  16        280           7
+(500, 50)                  9        450           4
+(1000, 100)                5        720           3
+</code></pre>
+<hr/>
+<h2 id="3-chunk_size">3. 결과 읽기 — chunk_size의 영향</h2>
+<p>표를 보면 경향이 보입니다.</p>
+<ul>
+<li><strong>chunk_size가 작을수록</strong> (300):</li>
+<li>청크 수가 <strong>많아짐</strong>(16개), 평균 길이 <strong>짧아짐</strong>(280자)</li>
+<li>→ 조각이 잘게 쪼개져 <strong>"핀포인트" 검색</strong>에 유리</li>
+<li>
+<p>→ 단, 맥락이 잘릴 위험 (한 조항이 여러 조각으로 분산)</p>
+</li>
+<li>
+<p><strong>chunk_size가 클수록</strong> (1000):</p>
+</li>
+<li>청크 수가 <strong>적어짐</strong>(5개), 평균 길이 <strong>길어짐</strong>(720자)</li>
+<li>→ 한 청크에 <strong>맥락이 풍부</strong></li>
+<li>→ 단, 무관한 내용도 함께 섞임 (signal vs noise)</li>
+</ul>
+<blockquote>
+<p>비유: 작은 청크는 <strong>포스트잇 메모</strong>(짧고 핀포인트), 큰 청크는 <strong>한 페이지 요약</strong>(맥락 풍부하지만 군더더기 포함)입니다. 둘 다 장단이 있죠.</p>
+</blockquote>
+<hr/>
+<h2 id="4-overlap">4. overlap의 역할</h2>
+<p><code>chunk_overlap</code>은 04번에서 배운 대로 <strong>경계에 걸친 정보를 보존</strong>합니다.</p>
+<pre><code class="language-text">overlap=0  : 경계에서 문장이 잘리면 "왕복 배송비는 고객 부담"이 두 조각으로 분리
+overlap=50 : 경계 부분이 양쪽 청크에 겹쳐 들어가 정보 보존
+</code></pre>
+<p>overlap이 클수록 정보 보존은 좋아지지만, 중복이 늘어 <strong>저장 공간·임베딩 비용</strong>이 약간 증가합니다. 보통 chunk_size의 10~20%(500이면 50~100)가 적당합니다.</p>
+<hr/>
+<h2 id="5">5. "키워드 포함 수"의 함정</h2>
+<p>표에서 작은 청크일수록 "키워드 포함" 수가 큽니다(7 &gt; 4 &gt; 3). 그렇다고 <strong>무조건 작은 게 좋은 건 아닙니다.</strong></p>
+<pre><code class="language-text">[경고] 한 답을 여러 청크로 쪼개면, 정작 검색 시 근거가 분산된다.
+</code></pre>
+<p>예를 들어 "환불 절차"가 원래 한 단락인데 4개 청크로 쪼개지면, 검색으로 1개만 찾았을 때 <strong>불완전한 답</strong>이 됩니다. 키워드가 많이 잡힌다고 좋은 게 아니라, <strong>하나의 완결된 의미가 한 청크에 담기는</strong> 게 좋습니다.</p>
+<p>그래서 결론은: <strong>(500, 50)이 무난한 출발점</strong>이고, 문서를 보며 조정합니다. 정책 조항이 짧으면 좀 작게, 설명이 길면 좀 크게요.</p>
+<hr/>
+<h2 id="6">6. 튜닝의 자세</h2>
+<p>청크 튜닝은 "한 번 정하고 끝"이 아닙니다.</p>
+<ol>
+<li>무난한 값(500, 50)으로 시작</li>
+<li>실제 질문으로 검색해 보고 답 품질 확인</li>
+<li>답이 잘리거나 부정확하면 → 청크 크기 조정</li>
+<li>반복</li>
+</ol>
+<p>이건 3강 "오분류 분석 → 처방"과 같은 개선 순환입니다. RAG도 <strong>측정하고 조정하며</strong> 품질을 높입니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>청크 설정은 <strong>검색 품질을 좌우하는 하이퍼파라미터</strong> — 정답은 없다.</li>
+<li><strong>작은 청크</strong>: 핀포인트 검색 유리, 맥락 잘림 위험.</li>
+<li><strong>큰 청크</strong>: 맥락 풍부, 무관 내용 섞임.</li>
+<li><code>overlap</code>은 경계 정보 보존(보통 size의 10~20%).</li>
+<li>키워드 많이 잡힌다고 좋은 게 아니다 — <strong>완결된 의미가 한 청크에</strong>.</li>
+<li>(500, 50)에서 시작해 <strong>측정하며 조정</strong>한다.</li>
+<li>다음 절에서 PDF 외 다양한 문서 로더를 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_따라하기-청킹하기.html"><span class="lbl">← 이전 절</span>06. 따라하기 청킹하기</a><a class="nxt" href="08_다양한-문서-로더.html"><span class="lbl">다음 절 →</span>08. 다양한 문서 로더</a></div>
+</div>
+</body></html>

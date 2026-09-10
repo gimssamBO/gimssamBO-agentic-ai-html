@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제28강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제28강 · project design</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제28강 · project design — 세부 목차</b><a class="" href="01_바로-코딩이-망하는-이유.html">01. 바로 코딩이 망하는 이유</a><a class="" href="02_요구사항-정의와-기능-분해.html">02. 요구사항 정의와 기능 분해</a><a class="" href="03_구성요소-필요성-판단.html">03. 구성요소 필요성 판단</a><a class="" href="04_아키텍처와-인터페이스-설계.html">04. 아키텍처와 인터페이스 설계</a><a class="" href="05_따라하기-설계를-코드-스켈레톤으로.html">05. 따라하기 설계를 코드 스켈레톤으로</a><a class="" href="06_트레이드오프-판단-RAG-멀티에이전트.html">06. 트레이드오프 판단 RAG 멀티에이전트</a><a class="cur" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="_2">이번 강에서 배운 것</h2>
+<p>28강은 코드를 거의 안 짜고 <strong>설계 사고법</strong>을 배웠습니다. 흩어진 기술들을 하나의 서비스로 묶기 전에, <strong>무엇을·어떻게 만들지</strong> 먼저 정하는 단계입니다.</p>
+<ul>
+<li><strong>바로 코딩의 위험 (01번)</strong> — 설계 없이 짜면 책임 혼재·인터페이스 불명확·비용/실패 누락·과잉 구성. 에이전트도 <strong>백엔드 서비스</strong> — 설계 → 구현 순서를 지킨다.</li>
+<li><strong>요구사항·기능 분해 (02번)</strong> — "무엇을 해결하나"를 <strong>사용자 시나리오(R1~R5)</strong> 로 적고, 각각을 <strong>함수(입력→출력)</strong> 로 쪼갠다.</li>
+<li><strong>구성요소 판단 (03번, 가장 중요)</strong> — 도구·RAG·메모리·멀티에이전트 중 <strong>필요한 것만</strong> 기준으로 선별. <strong>필요 없는 건 넣지 않는다.</strong></li>
+<li><strong>아키텍처·인터페이스 (04번)</strong> — 전체 그림을 그리고, <strong>단일 진입점 <code>answer(message, thread_id)</code></strong> 로 외부 계약을 정한다.</li>
+<li><strong>코드 스켈레톤 (05번)</strong> — 설계를 시그니처 + TODO로 박제한 <strong>살아있는 설계 문서</strong>(<code>ch28_design.py</code>).</li>
+<li><strong>트레이드오프 자동화 (06번)</strong> — 구성요소 판단을 <strong>규칙 도우미</strong>로 만들어 다른 프로젝트에도 일관 적용.</li>
+</ul>
+<hr/>
+<h2 id="5">5단계 설계 절차 한눈에</h2>
+<pre><code class="language-text">1. 요구사항 정의    "무엇을 해결하나" → 사용자 시나리오 (R1~R5)
+2. 기능 분해        요구사항 → 함수(입력→출력)
+3. 구성요소 판단    도구·RAG·메모리·멀티에이전트 중 필요한 것만  ← 가장 중요
+4. 아키텍처         전체 그림(데이터 흐름 다이어그램)
+5. 인터페이스       외부 계약 (answer 진입점·thread_id·엔드포인트·실패·비용)
+</code></pre>
+<hr/>
+<h2 id="_3">구성요소 판단 기준 (핵심 표)</h2>
+<table>
+<thead>
+<tr>
+<th>구성요소</th>
+<th>"필요하다"는 기준</th>
+<th>통합 CS 에이전트</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>도구</td>
+<td>실시간·구조화 데이터 조회/행동</td>
+<td>✅ 주문·재고·FAQ</td>
+</tr>
+<tr>
+<td>RAG</td>
+<td>양 많고 자주 바뀌는 <strong>문서</strong> 근거</td>
+<td>✅ 정책 PDF</td>
+</tr>
+<tr>
+<td>단기 메모리</td>
+<td>한 대화 안 맥락 참조</td>
+<td>✅ "아까 그거"</td>
+</tr>
+<tr>
+<td>장기 메모리</td>
+<td>세션 넘는 사용자별 기억</td>
+<td>❌ 범위 밖</td>
+</tr>
+<tr>
+<td>멀티에이전트</td>
+<td>도구 5~7개 초과 / 책임 충돌</td>
+<td>❌ 도구 4개 → 단일</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>기억할 한 가지</strong>: 실시간 데이터(주문·재고)는 <strong>RAG가 아니라 도구</strong>다.</p>
+</blockquote>
+<hr/>
+<h2 id="_4">설치 라이브러리</h2>
+<pre><code class="language-bash">conda activate agentic
+pip install pyyaml          # 30강 config 로드 대비 (이번 강은 표준 dataclass만으로도 충분)
+</code></pre>
+<ul>
+<li>이번 강은 <strong>LLM 호출이 없습니다.</strong> <code>dataclass</code>로 설계를 박제하고 실행하면 요약을 출력.</li>
+<li><code>ch28_design.py</code>는 30강 구현의 <strong>스켈레톤</strong> — TODO를 30강에서 채웁니다.</li>
+</ul>
+<hr/>
+<h2 id="_5">체크리스트</h2>
+<ul>
+<li>[ ] 설계 없이 바로 코딩하면 생기는 문제 4가지를 말할 수 있다.</li>
+<li>[ ] 5단계 설계 절차를 순서대로 말할 수 있다.</li>
+<li>[ ] 도구/RAG/단기·장기메모리/멀티에이전트의 <strong>필요성 판단 기준</strong>을 안다.</li>
+<li>[ ] 실시간 데이터는 RAG가 아니라 <strong>도구</strong>임을 안다.</li>
+<li>[ ] 단일 진입점 <code>answer(message, thread_id)</code>로 인터페이스를 설계할 수 있다.</li>
+<li>[ ] 비용·지연·실패 대비를 <strong>설계 단계에서</strong> 고려해야 함을 안다.</li>
+</ul>
+<hr/>
+<h2 id="_6">한 줄 핵심</h2>
+<blockquote>
+<p><strong>"설계 → 구현. 그리고 필요 없는 건 넣지 않는다."</strong> — 좋은 설계는 기능을 더하는 게 아니라, 꼭 필요한 것만 남기는 것이다.</p>
+</blockquote>
+<hr/>
+<h2 id="29">다음 강 예고 — 29강</h2>
+<p>설계를 마쳤으니, 이제 그 에이전트를 <strong>실제로 운영</strong>할 차례입니다. 29강은 "내 PC에선 됐는데요" 문제를 다룹니다 — <strong>설정 분리(.env/config), 구조적 로깅, 예외 처리·재시도(지수 백오프), 비용·지연 관리, FastAPI로 감싸기, 응답 캐싱</strong>. 28강에서 "설계로 미리 챙긴" 운영 고려사항들을 <strong>실제 코드로</strong> 구현합니다. 그리고 30강에서 드디어 이 모든 설계를 <strong>완성형 에이전트</strong>로 구현합니다.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_트레이드오프-판단-RAG-멀티에이전트.html"><span class="lbl">← 이전 절</span>06. 트레이드오프 판단 RAG 멀티에이전트</a><a class="nxt" href="08_실습문제와-해답.html"><span class="lbl">다음 절 →</span>08. 실습문제와 해답</a></div>
+</div>
+</body></html>

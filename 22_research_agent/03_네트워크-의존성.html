@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제22강 — 네트워크 의존성</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제22강 · research agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제22강 · research agent — 세부 목차</b><a class="" href="01_최신-시장동향을-매번-사람이.html">01. 최신 시장동향을 매번 사람이</a><a class="" href="02_리서치-에이전트-패턴.html">02. 리서치 에이전트 패턴</a><a class="cur" href="03_네트워크-의존성.html">03. 네트워크 의존성</a><a class="" href="04_따라하기-리서치-에이전트와-폴백.html">04. 따라하기 리서치 에이전트와 폴백</a><a class="" href="05_따라하기-마크다운-리포트-저장.html">05. 따라하기 마크다운 리포트 저장</a><a class="" href="06_복잡한-주제를-하위질의로-쪼개기.html">06. 복잡한 주제를 하위질의로 쪼개기</a><a class="" href="07_검색결과-교차검증.html">07. 검색결과 교차검증</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">네트워크 의존성</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>검색은 <strong>외부 네트워크에 의존</strong>합니다. 네트워크 단절·검색 차단(rate limit)으로 언제든 실패할 수 있죠. 리서치 에이전트는 <strong>try/except로 감싸고, 실패해도 빈손으로 끝내지 않는 폴백(fallback)</strong> 을 반드시 갖춰야 합니다.</p>
+<hr/>
+<h2 id="1">1. 검색은 언제든 실패할 수 있다</h2>
+<p>LLM 호출은 우리 코드 안에서 돌지만, <strong>웹 검색은 바깥 세상에 의존</strong>합니다.</p>
+<blockquote>
+<p>내 코드 → (HTTP 요청) → 검색 서비스(DuckDuckGo) → 웹 곳곳</p>
+</blockquote>
+<p>이 경로의 <strong>어느 지점에서든 끊기면</strong> 검색이 실패합니다.</p>
+<p>실패 원인은 다양합니다.</p>
+<pre><code class="language-text">- 네트워크 단절 (와이파이 끊김, 사내 방화벽)
+- rate limit (짧은 시간에 너무 자주 호출 → 일시 차단)
+- 검색 서비스 장애 (상대 서버 다운)
+- 타임아웃 (응답이 너무 느림)
+</code></pre>
+<p>이건 <strong>내가 잘못해서가 아니라</strong>, 외부 의존성의 본질입니다. "가끔 실패한다"를 전제로 설계해야 하죠.</p>
+<hr/>
+<h2 id="2">2. 실패하면 서비스가 죽는다 — 나쁜 예</h2>
+<p>폴백 없이 짜면 이렇게 됩니다.</p>
+<pre><code class="language-python"># 나쁜 예: 검색 실패가 그대로 예외로 터진다
+def research(topic):
+    agent = build_research_agent()
+    result = agent.invoke({"messages": [{"role": "user", "content": f"{topic} 리포트"}]})
+    return result["messages"][-1].text
+    # 검색이 rate limit에 걸리면 → 예외 발생 → 함수가 죽음 → 호출한 배치/API도 죽음
+</code></pre>
+<p>매주 월요일 새벽 배치가 돌다가 <strong>검색 차단 한 번에 통째로 실패</strong>하면? 그 주 리포트는 없습니다. API라면 사용자에게 500 에러가 가죠. "외부 한 곳의 실패가 내 서비스 전체를 멈춘다" — 이게 가장 흔한 운영 사고입니다.</p>
+<hr/>
+<h2 id="3">3. 폴백 — 빈손으로 끝내지 않기</h2>
+<p>해결책은 <strong>try/except + 폴백</strong>입니다. 검색이 실패하면, <strong>검색 없이 LLM 지식만으로</strong> 임시 리포트라도 돌려줍니다.</p>
+<pre><code class="language-python">def research(topic: str) -&gt; str:
+    try:
+        # 1순위: 검색 에이전트로 최신 정보 기반 리포트
+        agent = build_research_agent()
+        result = agent.invoke({"messages": [{"role": "user",
+                              "content": f"'{topic}' 시장 동향 리포트를 작성해줘."}]})
+        return result["messages"][-1].text
+    except Exception as e:
+        # 폴백: 검색 실패 → LLM 지식만으로 임시 리포트(최신성은 떨어져도 일단 결과)
+        print(f"[경고] 웹 검색 실패 → 오프라인 폴백 사용: {e}")
+        llm = get_chat(temperature=0.3)
+        prompt = (f"'{topic}'에 대해 아는 범위에서 한국어 마크다운 리포트를 작성하라. "
+                  "'## 개요', '## 핵심 동향', '## 시사점' 세 섹션을 포함하라. "
+                  "맨 위에 최신 정보가 아닐 수 있다는 주의문구 한 줄을 넣어라.")
+        return llm.invoke(prompt).text
+</code></pre>
+<p>핵심 철학(5강·12강 폴백 정신):</p>
+<pre><code class="language-text">최선(검색 기반 최신 리포트)이 안 되면
+  → 차선(LLM 지식 기반 임시 리포트)이라도 돌려준다
+  → 단, "최신이 아닐 수 있다"는 경고를 명시
+</code></pre>
+<p>빈손(에러)보다는 <strong>불완전해도 결과</strong>가 낫습니다. 단, 폴백 결과임을 사용자가 알 수 있게 <strong>경고 문구</strong>를 넣는 게 정직한 설계죠.</p>
+<hr/>
+<h2 id="4">4. 운영에서 더 고려할 것</h2>
+<p>폴백 외에도 외부 API를 다룰 때의 실무 장치들입니다(29강 배포에서 심화).</p>
+<pre><code class="language-text">- 타임아웃: 검색이 10초 넘게 안 오면 끊는다 (무한 대기 방지)
+- 제한적 재시도: 일시적 실패면 1~2회 다시 (단, 무한 재시도는 금물)
+- 로깅: 검색 실패율·폴백 발생 횟수를 기록 → 모니터링
+- 격리: 검색 실패가 다른 기능(예: 주문 조회)까지 멈추지 않게
+</code></pre>
+<blockquote>
+<p><strong>백엔드 관점:</strong> 리서치 에이전트는 <strong>정기 배치</strong>(매주 시장 리포트)나 <strong>온디맨드 엔드포인트</strong>로 노출하기 좋습니다. 단, 검색 실패가 <strong>전체 서비스 장애로 번지지 않도록</strong> 격리·폴백을 설계하세요. "외부 의존성은 반드시 실패한다"를 전제로 짜는 게 핵심입니다.</p>
+</blockquote>
+<hr/>
+<h2 id="5">5. 폴백은 모든 외부 호출의 기본 패턴</h2>
+<p>이 패턴은 검색에만 쓰는 게 아닙니다. <strong>외부에 의존하는 모든 호출</strong>에 적용됩니다.</p>
+<pre><code class="language-text">검색 API     → 실패 시 LLM 지식 폴백 (이번 강)
+결제 API     → 실패 시 "잠시 후 다시" 안내 + 재시도 큐
+DB 조회      → 실패 시 캐시된 값 사용
+LLM API 자체 → 실패 시 다른 모델·간단 응답으로 폴백
+</code></pre>
+<p>"외부에 무언가를 요청하는 코드"를 짤 때마다 <strong>"이게 실패하면?"</strong> 을 먼저 생각하는 습관 — 이게 견고한 백엔드 개발자의 기본기입니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>웹 검색은 <strong>외부 네트워크 의존</strong> → 단절·rate limit·타임아웃으로 언제든 실패.</li>
+<li>폴백 없이 짜면 <strong>외부 한 곳의 실패가 서비스 전체를 멈춤</strong>.</li>
+<li><strong>try/except + 폴백</strong>: 검색 실패 시 LLM 지식만으로 임시 리포트(경고 명시).</li>
+<li>빈손(에러)보다 <strong>불완전해도 결과</strong>가 낫다(5·12강 폴백 정신).</li>
+<li>타임아웃·재시도·로깅·격리도 함께 고려(29강 심화).</li>
+<li>이 패턴은 <strong>모든 외부 호출</strong>의 기본기. 다음 절부터 코드로 구현합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="02_리서치-에이전트-패턴.html"><span class="lbl">← 이전 절</span>02. 리서치 에이전트 패턴</a><a class="nxt" href="04_따라하기-리서치-에이전트와-폴백.html"><span class="lbl">다음 절 →</span>04. 따라하기 리서치 에이전트와 폴백</a></div>
+</div>
+</body></html>

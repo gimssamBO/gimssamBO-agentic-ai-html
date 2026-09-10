@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제8강 — 계획이 잘못됐을 때 대응 (검증 → 재계획)</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제8강 · planning agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제8강 · planning agent — 세부 목차</b><a class="" href="01_목표를-단계로-쪼개기.html">01. 목표를 단계로 쪼개기</a><a class="" href="02_Plan-and-Execute란.html">02. Plan and Execute란</a><a class="" href="03_ReAct-vs-Plan-and-Execute.html">03. ReAct vs Plan and Execute</a><a class="" href="04_구조화-출력-Pydantic-스키마.html">04. 구조화 출력 Pydantic 스키마</a><a class="" href="05_따라하기-목표를-하위작업으로-분해.html">05. 따라하기 목표를 하위작업으로 분해</a><a class="" href="06_따라하기-실행-에이전트-구성.html">06. 따라하기 실행 에이전트 구성</a><a class="cur" href="07_계획이-잘못됐을때-대응.html">07. 계획이 잘못됐을때 대응</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">계획이 잘못됐을 때 대응 (검증 → 재계획)</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p><code>make_plan</code>이 만든 계획이 <strong>항상 좋은 건 아닙니다.</strong> 단계가 비었거나 1개뿐이면 분해 실패, 너무 많으면(&gt;8) 과분해입니다. <strong>검증(validate)</strong> 으로 적합성을 판정하고, 부적합하면 <strong>무엇이 문제인지 피드백을 붙여 재계획(replan)</strong> 을 요청합니다.</p>
+<hr/>
+<h2 id="1">1. 계획도 틀릴 수 있다</h2>
+<p>Plan-and-Execute의 약점은 03번에서 봤듯 <strong>"초기 계획이 틀리면 비효율적"</strong> 이라는 점입니다. LLM이 만든 계획이 이상할 수 있습니다.</p>
+<pre><code class="language-python"># 나쁜 계획 예시들
+Plan(goal="가을 패딩 출시", steps=["그냥 출시한다"])          # 1개뿐 → 분해 실패
+Plan(goal="...", steps=["a", "", "c"])                       # 빈 단계 섞임
+Plan(goal="...", steps=[1번, 2번, ..., 15번])               # 너무 많음 → 과분해
+</code></pre>
+<p>이런 계획을 그대로 실행하면 낭패입니다. 그래서 <strong>계획을 실행하기 전에 검증</strong>하고, 이상하면 다시 짜게 합니다. 사람도 일정표를 짠 뒤 "이거 너무 대충인데?" 하고 다시 짜잖아요.</p>
+<hr/>
+<h2 id="2-validate_plan">2. validate_plan — 계획 검증</h2>
+<p>좋은 계획의 조건을 <strong>규칙으로 못 박습니다</strong>. (실습 파일: <code>sections/08_planning_agent/07_계획이-잘못됐을때-대응.py</code>)</p>
+<pre><code class="language-python">MIN_STEPS, MAX_STEPS = 2, 8
+
+def validate_plan(plan: Plan):
+    """계획의 적합성을 판정한다. (적합여부 bool, 사유 str)를 돌려준다."""
+    n = len(plan.steps)
+    if n &lt; MIN_STEPS:
+        return False, f"단계가 {n}개뿐입니다 — 목표 분해가 부족합니다(최소 {MIN_STEPS}개)."
+    if n &gt; MAX_STEPS:
+        return False, f"단계가 {n}개로 너무 많습니다 — 과분해입니다(최대 {MAX_STEPS}개)."
+    if any(not s.strip() for s in plan.steps):
+        return False, "빈 단계가 포함되어 있습니다 — 실행 불가능한 단계입니다."
+    return True, "적합한 계획입니다."
+</code></pre>
+<p>세 가지를 검사합니다.</p>
+<ul>
+<li><strong>너무 적음</strong>(&lt; 2): 목표를 제대로 못 쪼갬(분해 실패).</li>
+<li><strong>너무 많음</strong>(&gt; 8): 과분해. 단계마다 실패 지점이 늘어 비효율.</li>
+<li><strong>빈 단계</strong>: <code>"".strip()</code>이 빈 문자열인 껍데기 단계.</li>
+</ul>
+<p><code>(적합여부, 사유)</code> 튜플을 돌려주는 게 포인트입니다. <strong>사유</strong>가 다음 단계(재계획)의 피드백이 됩니다.</p>
+<hr/>
+<h2 id="3-replan">3. replan — 피드백을 주고 다시 짜기</h2>
+<p>검증에 실패한 <strong>이유를 알려 주며</strong> 다시 계획하게 합니다.</p>
+<pre><code class="language-python">def replan(goal: str, reason: str) -&gt; Plan:
+    """검증 실패 이유(reason)를 피드백으로 붙여 계획을 다시 세운다."""
+    planner = llm.with_structured_output(Plan)
+    prompt = (
+        "너는 승승장구몰의 프로젝트 매니저다. 이전 계획이 다음 이유로 부적합 판정을 받았다.\n"
+        f"부적합 사유: {reason}\n"
+        f"이 점을 반드시 고쳐, 목표를 실행 순서대로 {MIN_STEPS}~{MAX_STEPS}개의 "
+        f"구체적 하위 작업으로 다시 분해하라.\n목표: {goal}"
+    )
+    return planner.invoke(prompt)
+</code></pre>
+<p>핵심은 <strong>"무엇이 문제였는지"를 모델에 알려 주는</strong> 것입니다. "단계가 1개뿐이라 부족하다"고 알려 주면, 모델은 같은 실수를 반복하지 않고 더 나은 계획을 냅니다. 이건 3강 오분류 분석(틀린 걸 분석해 처방)과 같은 사고방식입니다.</p>
+<hr/>
+<h2 id="4">4. 전체 파이프라인 — 계획 → 검증 → 재계획</h2>
+<p>이 세 조각을 묶어, <strong>부적합하면 자동으로 다시 짜는</strong> 파이프라인을 만듭니다.</p>
+<pre><code class="language-python">def plan_with_validation(goal: str, max_replan: int = 2) -&gt; Plan:
+    """계획 → 검증 → (부적합 시) 재계획을 최대 max_replan회 반복한다."""
+    plan = make_plan(goal)
+    for attempt in range(1, max_replan + 1):
+        ok, reason = validate_plan(plan)
+        print(f"[STEP {attempt}] 검증: {'적합' if ok else '부적합'} — {reason}")
+        if ok:
+            return plan                       # 통과 → 채택
+        print(f"        → 재계획 요청(피드백: {reason})")
+        plan = replan(goal, reason)           # 부적합 → 다시 짜기
+    return plan
+</code></pre>
+<p><code>max_replan</code>은 7강에서 배운 <code>max_steps</code>와 같은 <strong>안전장치</strong>입니다. 재계획을 무한히 반복하지 않게 상한을 둡니다.</p>
+<hr/>
+<h2 id="5">5. 실행 — 잘못된 계획을 걸러내기</h2>
+<pre><code class="language-python">goal = "승승장구몰 신상품 '가을 패딩' 출시"
+
+# 일부러 단계가 1개뿐인 나쁜 계획을 만들어 검증기가 잡는지 확인
+bad_plan = Plan(goal=goal, steps=["그냥 출시한다"])
+ok, reason = validate_plan(bad_plan)
+print(f"검증: {'적합' if ok else '부적합'} — {reason}")
+# → 부적합 — 단계가 1개뿐입니다...
+
+if not ok:
+    fixed = replan(goal, reason)   # 피드백 주고 재계획
+    for i, s in enumerate(fixed.steps, 1):
+        print(f"  {i}. {s}")
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">검증: 부적합 — 단계가 1개뿐입니다 — 목표 분해가 부족합니다(최소 2개).
+→ 재계획 결과:
+  1. 가을 패딩 시장조사 및 경쟁사 분석
+  2. 상품 콘셉트·가격 확정
+  3. 상세페이지 제작
+  4. 초기 재고 발주
+  5. 출시 마케팅 실행
+</code></pre>
+<p>"그냥 출시한다"는 부실한 계획이 걸러지고, 피드백을 받아 <strong>제대로 된 5단계</strong>로 다시 짜였습니다.</p>
+<hr/>
+<h2 id="6">6. 이 패턴의 의미 — 자가 검증</h2>
+<p>이 "생성 → 검증 → 실패하면 피드백 주고 재시도" 패턴은 <strong>AI 시스템의 핵심 안전장치</strong>입니다. 앞으로 계속 만납니다.</p>
+<ul>
+<li>10강: 코드 실행 실패 → 오류 피드백 → 재시도</li>
+<li>21강: 워크플로우 노드 검증</li>
+<li>27강: 분석 품질 부족 → 다시 수집</li>
+</ul>
+<p>LLM의 출력을 <strong>그냥 믿지 않고 검증</strong>하고, 틀리면 <strong>이유를 알려 고치게</strong> 하는 거죠. 이게 신뢰할 수 있는 에이전트의 조건입니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>LLM이 만든 <strong>계획도 틀릴 수 있다</strong>(단계 부족·과다·빈 단계).</li>
+<li><code>validate_plan</code>으로 적합성을 판정하고 <strong>사유</strong>를 함께 돌려준다.</li>
+<li><code>replan</code>은 <strong>사유를 피드백으로</strong> 줘서 같은 실수를 막는다.</li>
+<li>"생성 → 검증 → 재시도"는 신뢰할 수 있는 에이전트의 핵심 패턴.</li>
+<li>다음 절에서 8강을 정리합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_따라하기-실행-에이전트-구성.html"><span class="lbl">← 이전 절</span>06. 따라하기 실행 에이전트 구성</a><a class="nxt" href="08_정리-체크리스트.html"><span class="lbl">다음 절 →</span>08. 정리 체크리스트</a></div>
+</div>
+</body></html>

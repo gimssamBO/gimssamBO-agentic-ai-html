@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제13강 — 따라하기 — 청킹하기</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제13강 · rag concept</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제13강 · rag concept — 세부 목차</b><a class="" href="01_검색으로-근거를-찾아-답하기.html">01. 검색으로 근거를 찾아 답하기</a><a class="" href="02_LLM의-세가지-한계.html">02. LLM의 세가지 한계</a><a class="" href="03_RAG-파이프라인-5단계.html">03. RAG 파이프라인 5단계</a><a class="" href="04_왜-청킹하는가.html">04. 왜 청킹하는가</a><a class="" href="05_따라하기-PDF-로드하기.html">05. 따라하기 PDF 로드하기</a><a class="cur" href="06_따라하기-청킹하기.html">06. 따라하기 청킹하기</a><a class="" href="07_청크-크기와-오버랩-튜닝.html">07. 청크 크기와 오버랩 튜닝</a><a class="" href="08_다양한-문서-로더.html">08. 다양한 문서 로더</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">따라하기 — 청킹하기</h1>
+<h2 id="_2">목표</h2>
+<p>05번에서 로드한 Document를 <code>RecursiveCharacterTextSplitter</code>로 청킹합니다. 그리고 청크가 "검색 단위"임을 눈으로 확인합니다.</p>
+<hr/>
+<h2 id="1">1. 청킹 도구 준비</h2>
+<pre><code class="language-python"># RecursiveCharacterTextSplitter: 긴 문서를 적당한 크기 조각(청크)으로 나누는 도구
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+splitter = RecursiveCharacterTextSplitter(
+    chunk_size=500,      # 한 조각 최대 500자
+    chunk_overlap=50,    # 인접 조각 50자 겹침(경계에 걸친 맥락 보존)
+)
+</code></pre>
+<p>04번에서 배운 두 파라미터(<code>chunk_size</code>, <code>chunk_overlap</code>)를 넣었습니다. 500자씩, 50자 겹치게 자르겠다는 설정이죠.</p>
+<hr/>
+<h2 id="2">2. 청킹 실행</h2>
+<pre><code class="language-python"># split_documents: 원본 metadata(page 등)를 각 청크에 복사해 출처 추적이 가능하다
+chunks = splitter.split_documents(docs)   # docs는 05번에서 로드한 Document 리스트
+
+print("청크 개수:", len(chunks))
+print("첫 청크 길이:", len(chunks[0].page_content))
+print("첫 청크 내용:")
+print(chunks[0].page_content)
+print("첫 청크 메타데이터:", chunks[0].metadata)
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">청크 개수: 9
+첫 청크 길이: 487
+첫 청크 내용:
+ 승승장구몰 환불·교환 정책
+1. 환불 규정
+단순 변심에 의한 환불은 상품 수령 후 7일 이내 ...
+첫 청크 메타데이터: {'source': '.../환불교환정책.pdf', 'page': 0}
+</code></pre>
+<p>3페이지 PDF가 <strong>9개 청크</strong>로 나뉘었습니다. 각 청크는 약 500자이고요.</p>
+<hr/>
+<h2 id="3-split_documents">3. split_documents의 두 가지 똑똑함</h2>
+<p><code>split_documents</code>는 단순히 글자 수로 자르는 게 아닙니다. 두 가지를 똑똑하게 합니다.</p>
+<h3 id="1_1">① 자연스러운 경계로 자른다</h3>
+<p><code>RecursiveCharacterTextSplitter</code>는 <strong>단락 → 문장 → 단어</strong> 순으로 경계를 우선합니다. 그래서 "환불 규정은 다음과 같습"에서 뚝 끊기지 않고, 가능한 한 문장·단락 끝에서 자릅니다.</p>
+<h3 id="2-metadata">② metadata를 복사한다</h3>
+<p>원본 Document의 <code>metadata</code>(page 등)를 <strong>각 청크에 복사</strong>합니다. 그래서 청크가 몇 페이지에서 왔는지 알 수 있죠.</p>
+<pre><code class="language-python">print(chunks[0].metadata)   # {'source': '...', 'page': 0}  ← 출처 보존!
+</code></pre>
+<p>이 덕분에 나중에 "이 답은 1페이지에서 나왔다"고 추적할 수 있습니다(16강).</p>
+<hr/>
+<h2 id="4">4. 청크가 검색 단위임을 확인</h2>
+<p>청크가 정말 "검색 단위"인지 확인해 봅시다. "환불"이라는 단어가 들어간 청크를 찾아보겠습니다.</p>
+<pre><code class="language-python"># [한계] 지금은 단어가 똑같이 들어간 청크만 찾는다. "돈 돌려받기"로는 못 찾는다.
+keyword = "환불"
+hits = [c for c in chunks if keyword in c.page_content]
+print(f"'{keyword}'을 포함한 청크: {len(hits)}개")
+for i, c in enumerate(hits[:2], 1):
+    print(f"\n[{i}] (page {c.metadata.get('page')})")
+    print(c.page_content[:120], "...")
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">'환불'을 포함한 청크: 4개
+
+[1] (page 0)
+승승장구몰 환불·교환 정책 1. 환불 규정 단순 변심에 의한 환불은 상품 수령 후 7일 이내 ...
+
+[2] (page 1)
+환불 처리는 영업일 기준 3~5일 소요되며 ...
+</code></pre>
+<p>9개 청크 중 "환불"이 들어간 4개를 찾았습니다. 질문이 "환불 관련"이면 이 4개 중에서 답을 찾으면 되죠. 전체 9개가 아니라 관련된 것만 보는 겁니다.</p>
+<hr/>
+<h2 id="5">5. 지금 방식의 한계 — 단어 매칭</h2>
+<p>위 코드는 <strong>단순 문자열 매칭</strong>입니다. "환불"이라는 단어가 <strong>똑같이</strong> 들어간 청크만 찾죠. 여기에 큰 한계가 있습니다.</p>
+<pre><code class="language-python"># "환불"로 검색 → "환불" 들어간 청크 찾음 ✓
+# "돈 돌려받기"로 검색 → "환불"과 같은 뜻인데 못 찾음! ✗
+# "반품하면 결제 취소되나요?"로 검색 → 의미는 환불인데 못 찾음! ✗
+</code></pre>
+<p>사람은 "돈 돌려받기 = 환불"임을 알지만, 단어 매칭은 모릅니다. 글자가 다르면 못 찾죠.</p>
+<p>이 한계를 푸는 게 <strong>14강 임베딩(의미 기반 검색)</strong> 입니다. 임베딩을 쓰면 "돈 돌려받기"로도 "환불" 청크를 찾을 수 있습니다 — <strong>단어가 아니라 의미로</strong> 검색하니까요. 13강은 그 전 단계까지(로드·청킹) 다룬 것입니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li><code>split_documents(docs)</code>로 Document를 청크로 나눈다.</li>
+<li><code>RecursiveCharacterTextSplitter</code>는 <strong>자연스러운 경계</strong>로 자르고 <strong>metadata를 복사</strong>한다.</li>
+<li>각 청크는 하나의 <strong>검색 단위</strong> — 질문 관련 청크만 골라 쓴다.</li>
+<li>지금은 <strong>단어 매칭</strong>이라 "돈 돌려받기"로 "환불"을 못 찾는 한계가 있다.</li>
+<li>이 한계는 <strong>14강 임베딩(의미 검색)</strong> 으로 푼다.</li>
+<li>다음 절에서 청크 크기·오버랩을 튜닝해 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="05_따라하기-PDF-로드하기.html"><span class="lbl">← 이전 절</span>05. 따라하기 PDF 로드하기</a><a class="nxt" href="07_청크-크기와-오버랩-튜닝.html"><span class="lbl">다음 절 →</span>07. 청크 크기와 오버랩 튜닝</a></div>
+</div>
+</body></html>

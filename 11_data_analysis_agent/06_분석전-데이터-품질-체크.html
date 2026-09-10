@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제11강 — 분석 전 데이터 품질 체크</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제11강 · data analysis agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제11강 · data analysis agent — 세부 목차</b><a class="" href="01_자연어로-데이터-분석하기.html">01. 자연어로 데이터 분석하기</a><a class="" href="02_데이터-함정-이상치-처리.html">02. 데이터 함정 이상치 처리</a><a class="" href="03_분석규칙을-시스템-프롬프트로.html">03. 분석규칙을 시스템 프롬프트로</a><a class="" href="04_따라하기-분석-도구와-전처리.html">04. 따라하기 분석 도구와 전처리</a><a class="" href="05_따라하기-자연어-질문으로-분석.html">05. 따라하기 자연어 질문으로 분석</a><a class="cur" href="06_분석전-데이터-품질-체크.html">06. 분석전 데이터 품질 체크</a><a class="" href="07_분석결과-차트로-시각화.html">07. 분석결과 차트로 시각화</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">분석 전 데이터 품질 체크</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>분석을 시작하기 전에, <strong>데이터에 어떤 문제가 있는지 먼저 진단</strong>해야 합니다. 결측치·중복·음수 매출·이상치를 pandas로 한눈에 보는 "품질 리포트"를 만듭니다. 이건 LLM 없이 코드만으로 합니다.</p>
+<hr/>
+<h2 id="1">1. "분석 전에 데이터를 봐라"</h2>
+<p>좋은 분석가의 첫 번째 습관은 <strong>"바로 분석하지 않고 데이터부터 살펴보는 것"</strong> 입니다. 02번에서 데이터 함정을 배웠지만, "이 데이터에 실제로 함정이 몇 개나 있는지"는 직접 봐야 압니다.</p>
+<pre><code class="language-python"># 나쁜 습관: 데이터를 안 보고 바로 집계
+orders['amount'].mean()   # 이상치가 있는지도 모르고 평균을 냄
+
+# 좋은 습관: 먼저 데이터 품질을 진단
+data_quality_report(orders)   # 결측·이상치·중복을 먼저 확인!
+</code></pre>
+<blockquote>
+<p>비유: 요리하기 전에 재료를 살펴보는 것과 같습니다. 상한 재료가 있는지, 양이 충분한지 먼저 확인하고 요리를 시작하죠. 데이터도 마찬가지입니다.</p>
+</blockquote>
+<hr/>
+<h2 id="2">2. 품질 리포트 함수</h2>
+<p>(실습 파일: <code>sections/11_data_analysis_agent/06_분석전-데이터-품질-체크.py</code>) — LLM 없이 pandas만으로, 분석 전 점검할 6가지를 출력합니다.</p>
+<pre><code class="language-python">import pandas as pd
+
+def data_quality_report(df: pd.DataFrame) -&gt; None:
+    """주문 DataFrame을 받아 분석 전에 확인할 품질 지표를 표로 출력한다."""
+    # ① 총 행수
+    print("[1] 총 행수:", f"{len(df):,}행")
+
+    # ② 컬럼별 결측치 수
+    print("[2] 컬럼별 결측치 수")
+    for col, cnt in df.isnull().sum().items():
+        mark = "  &lt;-- 결측 있음" if cnt &gt; 0 else ""
+        print(f"  - {col:&lt;14}: {cnt:&gt;5,}개{mark}")
+
+    # ③ 중복행 수
+    print("[3] 중복행 수:", f"{int(df.duplicated().sum()):,}행")
+
+    # ④ 음수 amount 수
+    neg = int((df["amount"] &lt; 0).sum())
+    print("[4] 음수 amount 행:", f"{neg:,}행  [경고] 집계 전 제외 검토")
+
+    # ⑤ quantity 이상치
+    outlier = df[df["quantity"] &gt;= 999]
+    print("[5] quantity 이상치(999 이상):", f"{len(outlier):,}행")
+
+    # ⑥ status 값 분포
+    print("[6] status 값 분포")
+    for status, cnt in df["status"].value_counts(dropna=False).items():
+        print(f"  - {str(status):&lt;8}: {cnt:&gt;6,}건 ({cnt/len(df)*100:5.1f}%)")
+</code></pre>
+<hr/>
+<h2 id="3-6">3. 6가지 점검 항목 해설</h2>
+<p>각 항목이 무엇을 잡아내는지 봅시다.</p>
+<table>
+<thead>
+<tr>
+<th>항목</th>
+<th>pandas</th>
+<th>무엇을 진단</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>① 총 행수</td>
+<td><code>len(df)</code></td>
+<td>데이터 규모 파악</td>
+</tr>
+<tr>
+<td>② 결측치</td>
+<td><code>df.isnull().sum()</code></td>
+<td>빈 값이 있는 컬럼</td>
+</tr>
+<tr>
+<td>③ 중복행</td>
+<td><code>df.duplicated().sum()</code></td>
+<td>완전히 같은 행</td>
+</tr>
+<tr>
+<td>④ 음수 매출</td>
+<td><code>(df['amount']&lt;0).sum()</code></td>
+<td>환불·오류로 인한 음수</td>
+</tr>
+<tr>
+<td>⑤ 이상치</td>
+<td><code>df[df['quantity']&gt;=999]</code></td>
+<td>입력 실수 같은 극단값</td>
+</tr>
+<tr>
+<td>⑥ status 분포</td>
+<td><code>value_counts()</code></td>
+<td>취소/환불 비중</td>
+</tr>
+</tbody>
+</table>
+<p>특히 ⑥(status 분포)이 유용합니다. "취소·환불이 전체의 몇 %인지" 미리 보면, 매출 집계에서 얼마나 제외해야 할지 감이 옵니다.</p>
+<hr/>
+<h2 id="4">4. 실행 결과</h2>
+<pre><code class="language-python">orders = pd.read_csv(DATA / "orders.csv", encoding="utf-8-sig")
+data_quality_report(orders)
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[1] 총 행수: 2,400행
+[2] 컬럼별 결측치 수
+  - order_id      :     0개
+  - amount        :     0개
+  ...
+[3] 중복행 수: 0행
+[4] 음수 amount 행: 1행  [경고] 집계 전 제외 검토
+[5] quantity 이상치(999↑): 1행
+[6] status 값 분포
+  - 배송완료  : 1,850건 ( 77.1%)
+  - 배송중    :   300건 ( 12.5%)
+  - 취소      :   100건 (  4.2%)
+  - 환불      :    79건 (  3.3%)
+  ...
+</code></pre>
+<p>한눈에 보입니다 — 음수 매출 1건, 이상치 1건, 그리고 취소+환불이 약 7.5%. 이걸 보면 <strong>"매출 집계 시 7.5%를 제외해야 한다"</strong> 는 결론이 바로 나오죠.</p>
+<hr/>
+<h2 id="5-llm">5. 왜 LLM 없이 코드로 하나</h2>
+<p>이 품질 체크는 <strong>LLM을 쓰지 않습니다.</strong> 이유가 있습니다.</p>
+<ul>
+<li><strong>정확성</strong>: 결측·중복·이상치 카운트는 정확해야 하는 계산입니다. pandas가 정확히 셉니다(LLM은 셀 필요도 없죠).</li>
+<li><strong>비용</strong>: 데이터 진단에 LLM을 부를 이유가 없습니다. 빠르고 공짜인 pandas로 충분합니다.</li>
+<li><strong>재사용</strong>: 한 번 만든 <code>data_quality_report</code>는 어떤 데이터에도 재사용할 수 있습니다.</li>
+</ul>
+<p>"모든 걸 LLM에게 시키지 말고, <strong>코드로 충분한 건 코드로</strong>" — 이게 효율적인 에이전트 설계의 원칙입니다(10강 "계산은 코드"의 연장).</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>좋은 분석가는 <strong>분석 전에 데이터를 먼저 진단</strong>한다.</li>
+<li><code>data_quality_report</code>로 <strong>결측·중복·음수·이상치·status 분포</strong>를 한눈에 본다.</li>
+<li>특히 <strong>status 분포</strong>로 취소/환불 비중을 미리 파악한다.</li>
+<li>이런 진단은 <strong>LLM 없이 pandas로</strong> (정확·저렴·재사용).</li>
+<li>다음 절에서 분석 결과를 <strong>차트로 시각화</strong>합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="05_따라하기-자연어-질문으로-분석.html"><span class="lbl">← 이전 절</span>05. 따라하기 자연어 질문으로 분석</a><a class="nxt" href="07_분석결과-차트로-시각화.html"><span class="lbl">다음 절 →</span>07. 분석결과 차트로 시각화</a></div>
+</div>
+</body></html>

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제20강 — 단기 기억 vs 장기 기억</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제20강 · long term memory</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제20강 · long term memory — 세부 목차</b><a class="" href="01_어제-말한걸-기억-못하는-봇.html">01. 어제 말한걸 기억 못하는 봇</a><a class="cur" href="02_단기기억-vs-장기기억.html">02. 단기기억 vs 장기기억</a><a class="" href="03_도구로서의-장기기억.html">03. 도구로서의 장기기억</a><a class="" href="04_따라하기-프로필-영속-저장-도구.html">04. 따라하기 프로필 영속 저장 도구</a><a class="" href="05_따라하기-새-세션에서도-기억.html">05. 따라하기 새 세션에서도 기억</a><a class="" href="06_SQLite로-장기기억-옮기기.html">06. SQLite로 장기기억 옮기기</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="vs">단기 기억 vs 장기 기억</h1>
+<h2 id="_1">한 줄 요약</h2>
+<p><strong>단기 기억</strong>은 한 대화 세션의 "맥락"(메모리, 휘발), <strong>장기 기억</strong>은 사용자에 귀속된 "프로필/지식"(파일·DB, 영속)입니다. 둘은 보완 관계라 보통 함께 씁니다.</p>
+<hr/>
+<h2 id="1">1. 두 기억 비교</h2>
+<table>
+<thead>
+<tr>
+<th>구분</th>
+<th>단기 기억 (Short-Term)</th>
+<th>장기 기억 (Long-Term)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>범위</td>
+<td>한 대화 세션</td>
+<td>사용자 단위, 세션 초월</td>
+</tr>
+<tr>
+<td>저장 위치</td>
+<td>메모리(InMemorySaver)</td>
+<td>파일/DB (영속)</td>
+</tr>
+<tr>
+<td>수명</td>
+<td>프로세스/세션 종료 시 소멸</td>
+<td>명시적으로 지울 때까지 유지</td>
+</tr>
+<tr>
+<td>예시</td>
+<td>"방금 말한 이름"</td>
+<td>"이 고객은 무향 선호"</td>
+</tr>
+<tr>
+<td>백엔드 비유</td>
+<td>HTTP 세션</td>
+<td>사용자 테이블(DB row)</td>
+</tr>
+</tbody>
+</table>
+<hr/>
+<h2 id="2">2. 단기 기억 = 맥락</h2>
+<p>단기 기억(19강)은 <strong>지금 이 대화의 흐름</strong>을 잡습니다.</p>
+<pre><code class="language-text">사용자: "이어버드 재고 있어?"
+봇: "225개 있습니다."
+사용자: "그거 가격은?"           ← "그거" = 방금 말한 이어버드
+봇: "79,000원입니다."             ← 맥락(이어버드)을 단기 기억으로 유지
+</code></pre>
+<p>"그거"가 무엇인지 알려면 방금 대화를 기억해야 하죠. 이게 단기 기억의 역할 — <strong>대화의 맥락 유지</strong>입니다. 대화가 끝나면 이 맥락은 더 이상 필요 없으니 사라져도 됩니다.</p>
+<hr/>
+<h2 id="3">3. 장기 기억 = 프로필/지식</h2>
+<p>장기 기억(20강)은 <strong>사용자에 영구히 귀속된 정보</strong>입니다.</p>
+<pre><code class="language-text">사용자: "저 선크림 알레르기 있어요"
+(며칠 뒤, 새 대화)
+사용자: "화장품 추천해줘"
+봇: "알레르기를 고려해 무향 제품을 추천합니다"   ← 며칠 전 정보를 기억!
+</code></pre>
+<p>"선크림 알레르기"는 대화 맥락이 아니라 <strong>그 사용자의 영구 속성</strong>입니다. 며칠 뒤, 새 세션에서도 기억해야 하죠. 이게 장기 기억 — <strong>프로필/지식의 영구 보존</strong>입니다.</p>
+<hr/>
+<h2 id="4">4. 둘은 함께 쓴다</h2>
+<p>단기와 장기는 대립이 아니라 <strong>보완</strong>입니다. 보통 함께 씁니다.</p>
+<pre><code class="language-text">단기 기억: "지금 이 대화에서 무슨 얘기 중인가" (맥락)
+장기 기억: "이 사용자가 누구이고 뭘 선호하나" (프로필)
+  → 둘 다 있어야 자연스러운 상담
+</code></pre>
+<p>좋은 상담봇은:<br/>
+- <strong>단기</strong>로 "방금 말한 주문번호"를 기억하고,<br/>
+- <strong>장기</strong>로 "이 고객은 VIP에 무향 선호"를 기억합니다.</p>
+<p>그래서 이 강의 에이전트도 <strong>둘 다</strong> 씁니다 — <code>InMemorySaver</code>(단기) + 프로필 도구(장기).</p>
+<blockquote>
+<p>비유: 단기 기억은 <strong>대화 중 머릿속 단기 기억</strong>(방금 들은 전화번호), 장기 기억은 <strong>수첩에 적어 둔 정보</strong>(친구 생일)입니다. 사람도 둘을 함께 쓰죠 — 지금 대화는 머리로, 영구 정보는 수첩으로.</p>
+</blockquote>
+<hr/>
+<h2 id="5">5. 수명에 따른 저장 위치</h2>
+<p>핵심 원칙: <strong>데이터의 수명에 따라 저장 위치를 정한다.</strong></p>
+<pre><code class="language-text">수명이 짧음 (대화 끝나면 불필요)  → 메모리 (단기, 빠르고 휘발)
+수명이 김 (영구 보존 필요)        → 파일/DB (장기, 느리지만 영속)
+</code></pre>
+<p>"방금 말한 것"은 메모리에(빠름), "사용자 프로필"은 파일/DB에(영속). 백엔드에서 캐시(휘발)와 DB(영속)를 구분하는 것과 같습니다. 데이터의 성격을 보고 적절한 곳에 저장하는 거죠.</p>
+<hr/>
+<h2 id="6">6. 장기 기억의 구현 방식</h2>
+<p>장기 기억을 구현하는 방법은 여러 가지입니다. 이 강은 <strong>도구(Tool)로 구현</strong>합니다.</p>
+<pre><code class="language-text">방법 1: 도구로 (이 강) — 에이전트가 필요할 때 저장소를 읽고/쓴다
+방법 2: 자동 주입 — 매 대화에 프로필을 자동으로 끼워 넣는다
+</code></pre>
+<p><strong>도구 방식</strong>을 쓰는 이유: 에이전트가 "지금 프로필을 저장/조회해야겠다"를 <strong>스스로 판단</strong>하게 하면 가장 명확하고 제어 가능합니다(17강 "필요할 때만"의 연장). 다음 절에서 이 도구 방식을 자세히 봅니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li><strong>단기 기억</strong> = 세션 맥락(메모리, 휘발, "방금 말한 것").</li>
+<li><strong>장기 기억</strong> = 사용자 프로필/지식(파일·DB, 영속, "선호·알레르기").</li>
+<li>둘은 <strong>보완</strong> — 좋은 봇은 함께 쓴다.</li>
+<li><strong>데이터 수명</strong>에 따라 저장 위치 결정(캐시 vs DB).</li>
+<li>장기 기억을 <strong>도구로</strong> 구현(에이전트가 필요할 때 읽고/쓰기).</li>
+<li>다음 절에서 도구로서의 장기 기억을 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="01_어제-말한걸-기억-못하는-봇.html"><span class="lbl">← 이전 절</span>01. 어제 말한걸 기억 못하는 봇</a><a class="nxt" href="03_도구로서의-장기기억.html"><span class="lbl">다음 절 →</span>03. 도구로서의 장기기억</a></div>
+</div>
+</body></html>

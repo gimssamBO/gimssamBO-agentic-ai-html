@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제7강 — 따라하기 — 2~3스텝짜리 일 시키기</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제7강 · agent loop</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제7강 · agent loop — 세부 목차</b><a class="" href="01_한번-묻고-끝나지-않는-일.html">01. 한번 묻고 끝나지 않는 일</a><a class="" href="02_ReAct-패턴-생각-행동-관찰.html">02. ReAct 패턴 생각 행동 관찰</a><a class="" href="03_직접-돌리는-루프와-종료조건.html">03. 직접 돌리는 루프와 종료조건</a><a class="" href="04_따라하기-미니-에이전트-루프-구현.html">04. 따라하기 미니 에이전트 루프 구현</a><a class="cur" href="05_따라하기-2-3스텝-작업-실행.html">05. 따라하기 2 3스텝 작업 실행</a><a class="" href="06_무한루프와-반복호출-방지.html">06. 무한루프와 반복호출 방지</a><a class="" href="07_대화기록-누적과-토큰-관리.html">07. 대화기록 누적과 토큰 관리</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="23">따라하기 — 2~3스텝짜리 일 시키기</h1>
+<h2 id="_1">목표</h2>
+<p>04번에서 만든 <code>run_agent</code>를 실제로 돌려, 모델이 <strong>스스로 여러 스텝을 밟는</strong> 모습을 관찰합니다. 그리고 같은 루프가 상황에 따라 다른 판단을 내리는 것도 봅니다.</p>
+<hr/>
+<h2 id="1-23">1. 재고 부족 → 재주문 권유 (2~3스텝)</h2>
+<p>스마트워치는 재고가 부족한 사례입니다. 실행해 봅시다.</p>
+<pre><code class="language-python">run_agent("스마트워치 재고를 확인하고, 재주문이 필요하면 알려줘.")
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[STEP 1] 호출: get_stock {'product_name': '스마트워치'}
+           관찰: 승승 스마트워치 Fit 5 현재 재고 3개
+
+[STEP 2] 호출: get_reorder_level {'product_name': '스마트워치'}
+           관찰: 승승 스마트워치 Fit 5 재주문 기준 30개
+
+[STEP 3] 최종 답변
+Final Answer: 승승 스마트워치 Fit 5 현재 재고는 3개로, 재주문 기준(30개)보다
+              적습니다. 즉시 재주문을 권장합니다.
+</code></pre>
+<hr/>
+<h2 id="2">2. 무슨 일이 일어났나 — 자율성</h2>
+<p>이 출력에서 <strong>가장 중요한 점</strong>을 짚어 봅시다.</p>
+<p>우리는 "재고부터 봐라, 그 다음 기준을 봐라"라고 <strong>순서를 짜 주지 않았습니다.</strong> 그냥 "재고 확인하고 재주문 필요한지 알려줘"라고만 했죠. 그런데 모델은:</p>
+<ol>
+<li>STEP 1에서 재고를 조회했고,</li>
+<li>그 <strong>관찰(재고 3개)</strong> 을 보고 "어, 이게 충분한지 기준을 봐야겠다"고 <strong>스스로 판단</strong>했고,</li>
+<li>STEP 2에서 재주문 기준을 조회했고,</li>
+<li>둘을 비교해 결론을 냈습니다.</li>
+</ol>
+<p><strong>모델이 다음 행동을 스스로 결정했습니다.</strong> 이게 1강에서 말한 "AI 에이전트는 AI가 다음 행동을 결정한다"의 실체입니다. one-shot 도구 호출(5·6강)에서는 볼 수 없던 <strong>자율성</strong>이죠.</p>
+<hr/>
+<h2 id="3">3. 재고 충분 → 재주문 불필요 (같은 루프, 다른 판단)</h2>
+<p>이번엔 재고가 충분한 이어버드로 같은 질문을 해 봅니다.</p>
+<pre><code class="language-python">run_agent("이어버드 재고 확인하고 재주문 필요한지 알려줘.")
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[STEP 1] 호출: get_stock {'product_name': '이어버드'}
+           관찰: 승승 무선 블루투스 이어버드 SE 현재 재고 225개
+
+[STEP 2] 호출: get_reorder_level {'product_name': '이어버드'}
+           관찰: 승승 무선 블루투스 이어버드 SE 재주문 기준 30개
+
+[STEP 3] 최종 답변
+Final Answer: 승승 무선 블루투스 이어버드 SE는 재고가 225개로 재주문 기준(30개)을
+              크게 웃돕니다. 재주문은 필요하지 않습니다.
+</code></pre>
+<p><strong>똑같은 코드, 똑같은 두 도구</strong>인데 결론이 다릅니다. 재고(225) &gt; 기준(30)이므로 "재주문 불필요". 모델이 관찰한 <strong>데이터에 따라</strong> 판단이 달라진 거죠. 이게 하드코딩된 <code>if</code>문과 다른 점입니다 — 우리는 비교 로직을 짜지 않았는데 모델이 알아서 판단합니다.</p>
+<hr/>
+<h2 id="4">4. 루프가 흐르는 모습 다시 보기</h2>
+<p>질문: <strong>"스마트워치 재고 확인하고 재주문 필요한지"</strong></p>
+<ul>
+<li><strong>STEP 1</strong> — 모델 생각: "재고부터 봐야지" → <code>get_stock</code> 호출 → 관찰: "재고 3개" <em>(history에 누적)</em></li>
+<li><strong>STEP 2</strong> — (이전 관찰을 보고) 모델 생각: "3개면 적은데? 기준 확인하자" → <code>get_reorder_level</code> 호출 → 관찰: "기준 30개"</li>
+<li><strong>STEP 3</strong> — 모델 생각: "3 &lt; 30이니 재주문 필요. 이제 답할 수 있다" → 도구 안 부름 → 최종 답변 → 종료</li>
+</ul>
+<p>각 스텝의 관찰이 다음 스텝의 판단 근거가 되는 게 보이시나요? 이게 ReAct 루프의 흐름입니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>같은 <code>run_agent</code>가 <strong>2~3스텝을 스스로</strong> 밟아 다단계 작업을 처리한다.</li>
+<li>우리가 순서를 안 짜도, 모델이 <strong>관찰을 보고 다음 행동을 결정</strong>한다(자율성).</li>
+<li>같은 코드라도 <strong>데이터에 따라 다른 판단</strong>(재주문 필요/불필요)을 낸다.</li>
+<li>다음 절에서 이 루프가 <strong>무한 반복에 빠지지 않게</strong> 막는 법을 배웁니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="04_따라하기-미니-에이전트-루프-구현.html"><span class="lbl">← 이전 절</span>04. 따라하기 미니 에이전트 루프 구현</a><a class="nxt" href="06_무한루프와-반복호출-방지.html"><span class="lbl">다음 절 →</span>06. 무한루프와 반복호출 방지</a></div>
+</div>
+</body></html>

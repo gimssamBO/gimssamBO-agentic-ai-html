@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제16강 — 따라하기 — 모르는 질문엔 모른다고</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제16강 · rag qa</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제16강 · rag qa — 세부 목차</b><a class="" href="01_문서-근거로만-답하고-출처-밝히기.html">01. 문서 근거로만 답하고 출처 밝히기</a><a class="" href="02_QA-체인-구조-LCEL.html">02. QA 체인 구조 LCEL</a><a class="" href="03_환각을-억제하는-프롬프트.html">03. 환각을 억제하는 프롬프트</a><a class="" href="04_출처를-함께-반환하기.html">04. 출처를 함께 반환하기</a><a class="" href="05_따라하기-QA-체인-만들기.html">05. 따라하기 QA 체인 만들기</a><a class="" href="06_따라하기-답변과-출처-모듈화.html">06. 따라하기 답변과 출처 모듈화</a><a class="cur" href="07_따라하기-모르는-질문엔-모른다고.html">07. 따라하기 모르는 질문엔 모른다고</a><a class="" href="08_검색-품질-높이기-k값과-재정렬.html">08. 검색 품질 높이기 k값과 재정렬</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">따라하기 — 모르는 질문엔 모른다고</h1>
+<h2 id="_2">목표</h2>
+<p>환각 억제 프롬프트(03번)가 실제로 작동하는지 확인합니다. 문서에 <strong>없는 내용</strong>을 물었을 때, 에이전트가 지어내지 않고 <strong>"모른다"고 답하는지</strong> 봅니다.</p>
+<hr/>
+<h2 id="1">1. 문서에 없는 질문 던지기</h2>
+<p>환불·멤버십 문서에는 <strong>없는</strong> 내용을 물어봅니다.</p>
+<pre><code class="language-python">print(answer("당일 새벽배송 되나요?")["answer"])
+</code></pre>
+<p>"당일 새벽배송"은 환불 정책·멤버십 정책 문서에 없는 내용입니다. (배송 정책 문서가 따로 있다면 거기 있겠지만, 우리 인덱스엔 없죠.) 일반 챗봇이라면 "네, 새벽배송 가능합니다" 같은 그럴듯한 거짓을 지어낼 수 있습니다.</p>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">제공된 문서에서 찾을 수 없습니다.
+</code></pre>
+<p>지어내지 않고 <strong>"찾을 수 없습니다"</strong> 라고 정직하게 답했습니다! 이게 03번 환각 억제 프롬프트가 의도한 동작입니다.</p>
+<hr/>
+<h2 id="2">2. 왜 이게 중요한가</h2>
+<p>"모른다고 답하는 게 뭐가 대단해?"라고 생각할 수 있습니다. 하지만 이건 <strong>매우 중요</strong>합니다.</p>
+<pre><code class="language-text">나쁜 답: "당일 새벽배송 가능합니다!" (지어냄) → 고객이 믿고 주문 → 배송 안 됨 → 사고!
+좋은 답: "제공된 문서에서 찾을 수 없습니다" → 고객이 다른 경로로 확인 → 안전
+</code></pre>
+<p>CS에서 <strong>틀린 정보를 자신 있게 주는 것</strong>은 모른다고 하는 것보다 훨씬 위험합니다. 고객이 그 거짓을 믿고 행동하니까요. "모른다"는 답은 정직하고, 사고를 막습니다.</p>
+<blockquote>
+<p>비유: 의사가 모르는 병에 "괜찮을 거예요"라고 둘러대면 위험합니다. "정확히 모르겠으니 검사를 해 봅시다"가 맞죠. AI도 모르면 모른다고 해야 안전합니다.</p>
+</blockquote>
+<hr/>
+<h2 id="3">3. 정상 질문과 비교</h2>
+<p>같은 시스템에 <strong>문서에 있는</strong> 질문을 던지면 잘 답합니다.</p>
+<pre><code class="language-python">print(answer("환불 며칠 걸려?")["answer"])
+# → "반품 상품이 물류센터 도착 후 영업일 기준 3일 이내에 환불됩니다." (문서 근거!)
+
+print(answer("당일 새벽배송 되나요?")["answer"])
+# → "제공된 문서에서 찾을 수 없습니다." (문서에 없음)
+</code></pre>
+<p>같은 에이전트가:<br/>
+- <strong>문서에 있으면</strong> → 정확히 답하고<br/>
+- <strong>문서에 없으면</strong> → 모른다고 합니다</p>
+<p>이 "있으면 답, 없으면 모른다"의 구분이 RAG QA의 핵심 동작입니다. 문서 범위 안에서만 신뢰할 수 있는 답을 주는 거죠.</p>
+<hr/>
+<h2 id="4">4. "모른다" 다음의 폴백</h2>
+<p>실무에서는 "모른다"로 끝내지 않고, <strong>다음 행동을 안내</strong>하면 더 좋습니다(12강 폴백 정신).</p>
+<pre><code class="language-python">PROMPT_WITH_FALLBACK = ChatPromptTemplate.from_template(
+    "너는 승승장구몰 CS 상담원이다.\n"
+    "아래 [문서] 내용만 근거로 답하라.\n"
+    "문서에 없으면 '해당 내용은 확인이 어렵습니다. 고객센터(1588-0000)로 문의해 주세요'라고 답하라.\n\n"
+    "[문서]\n{context}\n\n[질문] {question}\n\n[답변]"
+)
+</code></pre>
+<p>이러면 "당일 새벽배송 되나요?"에 "확인이 어렵습니다. 고객센터로 문의해 주세요"라고 안내합니다. 단순히 "모른다"보다 <strong>다음 경로를 제시</strong>하니 고객 경험이 낫죠. 9·12강에서 배운 폴백을 RAG에 적용한 것입니다.</p>
+<hr/>
+<h2 id="5">5. 검증 — 자동 채점</h2>
+<p>RAG QA가 제대로 작동하는지 <strong>자동으로 검증</strong>할 수 있습니다. 정답이 정해진 질문으로 채점하는 거죠(3강 정확도 측정의 RAG 버전).</p>
+<pre><code class="language-python">test_cases = [
+    ("환불 며칠 걸려?", "3일"),           # 문서에 있음 → "3일" 포함해야
+    ("당일 새벽배송 되나요?", "찾을 수 없"),  # 문서에 없음 → "찾을 수 없" 포함해야
+]
+passed = sum(1 for q, expected in test_cases if expected in answer(q)["answer"])
+print(f"통과: {passed}/{len(test_cases)}")
+</code></pre>
+<p>이렇게 "있는 질문엔 정답을, 없는 질문엔 모른다를" 자동 검증하면, 프롬프트나 검색을 바꿨을 때 품질이 유지되는지 확인할 수 있습니다(09번 실습문제).</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>문서에 <strong>없는</strong> 질문엔 지어내지 않고 <strong>"찾을 수 없습니다"</strong> 라고 답함(03번 프롬프트 효과).</li>
+<li><strong>틀린 정보를 자신 있게</strong> 주는 게 모른다보다 위험 — 정직이 안전.</li>
+<li>같은 에이전트가 "있으면 답, 없으면 모른다"를 구분.</li>
+<li>실무는 "모른다" + <strong>다음 경로 안내</strong>(폴백)가 더 좋다.</li>
+<li><strong>자동 채점</strong>으로 RAG 품질을 검증할 수 있다.</li>
+<li>다음 절에서 검색 품질을 높이는 법(k값·재정렬)을 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_따라하기-답변과-출처-모듈화.html"><span class="lbl">← 이전 절</span>06. 따라하기 답변과 출처 모듈화</a><a class="nxt" href="08_검색-품질-높이기-k값과-재정렬.html"><span class="lbl">다음 절 →</span>08. 검색 품질 높이기 k값과 재정렬</a></div>
+</div>
+</body></html>

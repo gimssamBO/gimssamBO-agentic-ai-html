@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제7강 — 대화 기록 누적과 토큰 관리</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제7강 · agent loop</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제7강 · agent loop — 세부 목차</b><a class="" href="01_한번-묻고-끝나지-않는-일.html">01. 한번 묻고 끝나지 않는 일</a><a class="" href="02_ReAct-패턴-생각-행동-관찰.html">02. ReAct 패턴 생각 행동 관찰</a><a class="" href="03_직접-돌리는-루프와-종료조건.html">03. 직접 돌리는 루프와 종료조건</a><a class="" href="04_따라하기-미니-에이전트-루프-구현.html">04. 따라하기 미니 에이전트 루프 구현</a><a class="" href="05_따라하기-2-3스텝-작업-실행.html">05. 따라하기 2 3스텝 작업 실행</a><a class="" href="06_무한루프와-반복호출-방지.html">06. 무한루프와 반복호출 방지</a><a class="cur" href="07_대화기록-누적과-토큰-관리.html">07. 대화기록 누적과 토큰 관리</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">대화 기록 누적과 토큰 관리</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>ReAct 루프는 매 스텝마다 관찰 결과를 <code>history</code>에 덧붙이므로, <strong>메시지와 토큰이 계속 불어납니다.</strong> 토큰은 곧 비용·지연이므로, 오래된 기록을 잘라내는 <strong>트리밍(trimming)</strong> 이 필요합니다. 단, <strong>첫 질문(목표)은 반드시 보존</strong>해야 합니다.</p>
+<hr/>
+<h2 id="1">1. 왜 토큰이 계속 늘어나는가</h2>
+<p>ReAct 루프는 매 스텝마다 <code>history</code>에 두 개씩 메시지를 추가합니다 — 모델의 도구 호출 + 우리의 실행 결과. 그리고 매번 모델을 호출할 때 <strong>history 전체</strong>를 넘깁니다.</p>
+<pre><code class="language-text">STEP 1: history = [질문]                      → 토큰 적음
+STEP 2: history = [질문, 호출1, 결과1]          → 토큰 늘어남
+STEP 3: history = [질문, 호출1, 결과1, 호출2, 결과2] → 더 늘어남
+...
+</code></pre>
+<p>스텝이 진행될수록 history가 길어지고, <strong>매 호출의 입력 토큰이 선형으로 증가</strong>합니다. 긴 대화나 많은 스텝에서는 이게 <strong>비용 폭탄</strong>이 됩니다.</p>
+<blockquote>
+<p>비유: 회의가 길어질수록 "지금까지 얘기 다시 정리하면…"을 매번 반복하면, 회의가 길어질수록 정리 시간이 점점 더 들죠. history도 마찬가지입니다.</p>
+</blockquote>
+<hr/>
+<h2 id="2">2. 토큰 증가를 눈으로 보기</h2>
+<p><code>usage_metadata</code>로 매 스텝의 토큰을 출력하면 증가가 보입니다. (실습 파일: <code>sections/07_agent_loop/07_대화기록-누적과-토큰-관리.py</code>)</p>
+<pre><code class="language-python">for step in range(1, max_steps + 1):
+    resp = client.models.generate_content(model=GEMINI_MODEL, contents=history, config=config)
+
+    um = resp.usage_metadata
+    print(f"[STEP {step}] history {len(history)}개 | "
+          f"입력 {um.prompt_token_count} + 출력 {um.candidates_token_count} "
+          f"= 누적 {um.total_token_count} 토큰")
+
+    if not resp.function_calls:
+        break
+    # ... history.append(...) 로 기록 추가 ...
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[STEP 1] history 1개 | 입력 120 + 출력 18 = 누적 138 토큰
+[STEP 2] history 3개 | 입력 185 + 출력 20 = 누적 205 토큰   ← 입력 토큰 늘어남
+[STEP 3] history 5개 | 입력 250 + 출력 45 = 누적 295 토큰   ← 더 늘어남
+</code></pre>
+<p><code>history</code> 개수가 늘면서 <strong>입력 토큰(<code>prompt_token_count</code>)이 계속 증가</strong>하는 게 보입니다.</p>
+<hr/>
+<h2 id="3-trimming">3. 해결책 — 트리밍(trimming)</h2>
+<p>오래된 중간 기록은 대개 최종 판단에 덜 중요합니다. 그래서 <strong>최근 몇 개만 남기고 잘라냅니다.</strong> 단, 한 가지 절대 규칙이 있습니다.</p>
+<blockquote>
+<p><strong>첫 질문(원래 목표)은 반드시 보존한다.</strong> 이게 사라지면 모델이 "내가 무슨 일을 하던 중이었지?"를 잊어버립니다.</p>
+</blockquote>
+<pre><code class="language-python">def trim_history(history, keep: int = 4):
+    """시스템/첫 사용자 메시지는 보존하고 '최근 keep개'만 유지한다."""
+    if len(history) &lt;= keep + 1:
+        return history                  # 자를 게 없으면 그대로
+    head = history[:1]                  # 첫 사용자 메시지(원래 목표) 보존
+    tail = history[-keep:]              # 최근 keep개만 유지
+    return head + tail
+</code></pre>
+<p><code>head</code>(첫 질문) + <code>tail</code>(최근 N개)를 합쳐 돌려줍니다. 가운데의 오래된 관찰들은 버리는 거죠.</p>
+<hr/>
+<h2 id="4">4. 트리밍 적용</h2>
+<pre><code class="language-python">print(f"트리밍 전: {len(history)}개")
+trimmed = trim_history(history, keep=2)
+print(f"트리밍 후: {len(trimmed)}개 (첫 질문 + 최근 2개 보존)")
+# → 다음 호출부터 입력 토큰이 줄어 비용·지연 감소
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">트리밍 전: 5개
+트리밍 후: 3개 (첫 질문 + 최근 2개 보존)
+</code></pre>
+<p>5개에서 3개로 줄었습니다. 다음 모델 호출부터는 입력 토큰이 줄어 <strong>비용과 지연이 감소</strong>합니다.</p>
+<hr/>
+<h2 id="5">5. 트리밍의 트레이드오프</h2>
+<p>트리밍은 공짜가 아닙니다. <strong>잘라낸 정보는 모델이 못 봅니다.</strong></p>
+<ul>
+<li><strong>너무 많이 자르면</strong>: 모델이 중요한 중간 관찰을 잊어 잘못 판단할 수 있음.</li>
+<li><strong>너무 적게 자르면</strong>: 토큰 절감 효과가 작음.</li>
+<li><strong>적절히</strong>: 최근 몇 스텝 + 첫 질문을 남기는 게 보통 안전.</li>
+</ul>
+<p>더 정교한 방법으로는 <strong>오래된 대화를 요약해서 압축</strong>하는 기법도 있습니다(19강 메모리에서 다룹니다). 트리밍은 "버리기", 요약은 "압축하기"인 셈이죠.</p>
+<hr/>
+<h2 id="6-2">6. 비용 감각 정리 (2강 복습)</h2>
+<p>2강에서 "토큰 = 비용"이라고 배웠습니다. ReAct 루프에서 이게 현실이 됩니다.</p>
+<ul>
+<li>스텝이 많을수록 → history가 길어짐 → 입력 토큰↑ → 비용↑</li>
+<li>그래서 <strong>트리밍</strong>(이 절) + <strong>반복 방지</strong>(06번) + <strong>max_steps</strong>(03번)로 비용을 통제</li>
+<li>이 세 가지가 <strong>비용 효율적인 에이전트</strong>의 기본기</li>
+</ul>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>ReAct 루프는 history가 쌓여 <strong>입력 토큰이 선형 증가</strong>한다(비용·지연↑).</li>
+<li><code>usage_metadata</code>로 토큰 증가를 직접 확인할 수 있다.</li>
+<li><strong>트리밍</strong>(<code>trim_history</code>)으로 오래된 기록을 잘라 토큰을 줄인다.</li>
+<li>단, <strong>첫 질문(목표)은 반드시 보존</strong>한다.</li>
+<li>더 정교하게는 <strong>요약 압축</strong>(19강)을 쓴다.</li>
+<li>다음 절에서 7강을 정리합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_무한루프와-반복호출-방지.html"><span class="lbl">← 이전 절</span>06. 무한루프와 반복호출 방지</a><a class="nxt" href="08_정리-체크리스트.html"><span class="lbl">다음 절 →</span>08. 정리 체크리스트</a></div>
+</div>
+</body></html>

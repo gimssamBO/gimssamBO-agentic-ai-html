@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제21강 — 노드 실패 처리와 상태 검증</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제21강 · agent workflow</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제21강 · agent workflow — 세부 목차</b><a class="" href="01_자유로운게-항상-좋은건-아니다.html">01. 자유로운게 항상 좋은건 아니다</a><a class="" href="02_에이전트-vs-워크플로우.html">02. 에이전트 vs 워크플로우</a><a class="" href="03_StateGraph의-3요소.html">03. StateGraph의 3요소</a><a class="" href="04_따라하기-상태-스키마와-노드-정의.html">04. 따라하기 상태 스키마와 노드 정의</a><a class="" href="05_따라하기-그래프-조립과-일괄처리.html">05. 따라하기 그래프 조립과 일괄처리</a><a class="" href="06_조건부-분기-add_conditional_edges.html">06. 조건부 분기 add_conditional_edges</a><a class="cur" href="07_노드-실패-처리와-상태-검증.html">07. 노드 실패 처리와 상태 검증</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">노드 실패 처리와 상태 검증</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>LLM 분류 결과가 <strong>허용 카테고리 밖</strong>이면 '기타'로 보정하고, 예외가 나도 <strong>죽지 않도록</strong> <code>state["error"]</code>에 기록한 뒤 파이프라인을 계속 진행합니다. 한 티켓이 실패해도 전체 배치가 멈추지 않는 <strong>견고한 워크플로우</strong>를 만듭니다.</p>
+<hr/>
+<h2 id="1">1. 워크플로우도 실패한다</h2>
+<p>지금까지는 모든 게 잘 되는 경우(happy path)만 봤습니다. 하지만 현실에서는:</p>
+<pre><code class="language-text">- LLM이 허용 밖 카테고리를 반환 ("음... 아마 결제 관련?")
+- LLM API 호출 실패 (네트워크·타임아웃)
+- 빈 티켓 내용 (입력 오류)
+</code></pre>
+<p>이런 일이 생기면 어떻게 될까요? 처리 안 하면 <strong>한 티켓의 실패가 전체 배치를 멈출</strong> 수 있습니다. 1000개 티켓을 처리하다 500번째에서 죽으면 큰일이죠.</p>
+<hr/>
+<h2 id="2-error">2. 상태에 error 필드 추가</h2>
+<p>먼저 State에 <strong>오류를 기록할 필드</strong>를 추가합니다. (실습 파일: <code>sections/21_agent_workflow/07_노드-실패-처리와-상태-검증.py</code>)</p>
+<pre><code class="language-python">class TicketState(BaseState):   # 기존 상태 확장
+    error: str   # 오류 메시지(비어 있으면 정상)
+</code></pre>
+<p><code>error</code>가 비어 있으면 정상, 뭔가 있으면 문제가 있었다는 뜻이죠. 이걸로 "어느 티켓이 어떤 문제였는지" 추적할 수 있습니다.</p>
+<hr/>
+<h2 id="3-llm">3. 검증 — LLM 출력을 믿지 마라</h2>
+<p>LLM 분류 결과를 <strong>검증</strong>합니다. 허용 카테고리 안에 있을 때만 채택하고, 아니면 보정하죠.</p>
+<pre><code class="language-python">def classify_node(state: TicketState) -&gt; dict:
+    """[견고화] 분류 결과를 '검증'하고, 예외가 나도 멈추지 않는다."""
+    try:
+        out = llm.invoke(msg).content.strip()
+        # LLM 출력은 못 믿는다 → 허용 목록 안에 있을 때만 채택
+        if out in CATEGORIES:
+            return {"category": out, "error": ""}
+        for c in CATEGORIES:                 # 문장 속에 카테고리가 섞인 경우도 구제
+            if c in out:
+                return {"category": c, "error": ""}
+        # 검증 실패: 허용 밖 값 → '기타'로 보정하고 사유 기록 (중단 안 함)
+        return {"category": "기타", "error": f"분류값 미허용('{out[:20]}') → 기타 보정"}
+    except Exception as e:
+        # 한 티켓의 LLM 호출 실패해도 전체 배치가 죽으면 안 됨 → 기록 후 계속
+        return {"category": "기타", "error": f"분류 예외: {e}"}
+</code></pre>
+<p>세 단계 방어:</p>
+<ol>
+<li><strong>허용 목록 검증</strong>: <code>if out in CATEGORIES</code> — 정확히 맞으면 채택</li>
+<li><strong>부분 매칭 구제</strong>: 문장에 카테고리가 섞여 있으면(<code>"아마 결제..."</code>) 추출</li>
+<li><strong>보정 + 기록</strong>: 그래도 안 되면 "기타"로 보정하고 사유를 <code>error</code>에 기록</li>
+</ol>
+<p>핵심은 <strong>"LLM 출력을 그냥 믿지 않는다"</strong> 입니다(16강 환각 정신). 검증해서 이상하면 안전한 기본값("기타")으로 보정하죠.</p>
+<hr/>
+<h2 id="4">4. 예외도 잡는다</h2>
+<p><code>try/except</code>로 LLM 호출 자체가 실패해도(네트워크 등) 죽지 않게 합니다.</p>
+<pre><code class="language-python">except Exception as e:
+    # 예외가 나도 '기타'로 보정하고 사유 기록 → 파이프라인 계속
+    return {"category": "기타", "error": f"분류 예외: {e}"}
+</code></pre>
+<p>예외가 나도 <strong>return으로 정상 반환</strong>합니다(예외를 다시 던지지 않음). 그러면 워크플로우가 멈추지 않고 다음 노드로 진행하죠(5·12강 폴백 정신). 한 티켓의 실패가 전체를 멈추지 않게 하는 겁니다.</p>
+<hr/>
+<h2 id="5">5. 죽지 않음을 시연</h2>
+<p>일부러 <strong>깨진 입력</strong>(빈 내용)을 끼워 넣어 죽지 않음을 보여 줍니다.</p>
+<pre><code class="language-python"># 의도적으로 깨진 입력을 끼워 넣어 '죽지 않음'을 시연
+tickets.append({"ticket_id": "TKBAD", "content": ""})
+
+for t in tickets:
+    result = workflow.invoke({"content": t["content"], "error": ""})
+    flag = result.get("error") or "정상"
+    print(f"{t['ticket_id']} {result['category']} {result['priority']} {result['team']} {flag}")
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">TK001  결제     긴급   결제지원팀   정상
+TK002  기타     보통   일반상담팀   정상
+TKBAD  기타     보통   일반상담팀   분류값 미허용('') → 기타 보정    ← 죽지 않고 처리!
+</code></pre>
+<p>빈 티켓(TKBAD)도 <strong>죽지 않고</strong> 처리됐습니다. "기타/일반상담팀"으로 보정되고, <code>error</code>에 사유가 기록됐죠. 전체 배치는 끝까지 완주했습니다.</p>
+<hr/>
+<h2 id="6">6. 노드 단위 견고성의 장점</h2>
+<p>워크플로우가 노드로 나뉘어 있어, <strong>어느 단계에서 실패했는지</strong> 명확합니다.</p>
+<pre><code class="language-text">error: "분류 예외: ..."     → classify_node에서 실패
+error: "우선순위 예외: ..."  → priority_node에서 실패
+</code></pre>
+<p><code>error</code> 메시지만 봐도 어느 노드 문제인지 즉시 압니다. 실무에서는:</p>
+<ul>
+<li><strong>로깅</strong>: 실패한 티켓을 별도 로그에 기록 → 나중에 분석</li>
+<li><strong>재시도</strong>: 일시적 실패면 그 노드만 다시 실행</li>
+<li><strong>알림</strong>: 실패율이 높으면 담당자에게 경고</li>
+<li><strong>수동 검토 큐</strong>: <code>error</code>가 있는 티켓은 "검토필요" 큐로</li>
+</ul>
+<p>노드 단위라 이런 운영 장치를 깔끔히 붙일 수 있죠(02번).</p>
+<hr/>
+<h2 id="7">7. 견고함이 진짜 서비스의 조건</h2>
+<p>happy path만 처리하는 워크플로우는 <strong>장난감</strong>입니다. 진짜 서비스는:</p>
+<pre><code class="language-text">정상 처리(99%)도 잘하고
+실패(1%)도 우아하게 다뤄야 함 (죽지 않고, 기록하고, 복구)
+</code></pre>
+<p>1000개 중 999개가 잘 돼도, 1개에서 죽어 배치 전체가 멈추면 서비스 실패죠. "검증 + 예외 처리 + 기록"으로 견고하게 만드는 게 운영 가능한 워크플로우의 조건입니다. 29강(배포)에서 이 견고성을 더 다룹니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>워크플로우도 <strong>실패</strong>한다(허용 밖 분류·예외·빈 입력).</li>
+<li>State에 <strong><code>error</code> 필드</strong>를 둬 문제를 기록.</li>
+<li><strong>검증</strong>: LLM 출력을 믿지 말고 허용 목록 확인, 이상하면 보정.</li>
+<li><strong>예외 처리</strong>: <code>try/except</code>로 죽지 않고 기록 후 계속.</li>
+<li>노드 단위라 <strong>어느 단계 실패인지</strong> 명확(로깅·재시도·검토 큐).</li>
+<li>견고함이 <strong>진짜 서비스의 조건</strong>.</li>
+<li>다음 절에서 21강을 정리합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_조건부-분기-add_conditional_edges.html"><span class="lbl">← 이전 절</span>06. 조건부 분기 add_conditional_edges</a><a class="nxt" href="08_정리-체크리스트.html"><span class="lbl">다음 절 →</span>08. 정리 체크리스트</a></div>
+</div>
+</body></html>

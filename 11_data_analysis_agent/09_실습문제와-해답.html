@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제11강 — 실습문제와 해답</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제11강 · data analysis agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제11강 · data analysis agent — 세부 목차</b><a class="" href="01_자연어로-데이터-분석하기.html">01. 자연어로 데이터 분석하기</a><a class="" href="02_데이터-함정-이상치-처리.html">02. 데이터 함정 이상치 처리</a><a class="" href="03_분석규칙을-시스템-프롬프트로.html">03. 분석규칙을 시스템 프롬프트로</a><a class="" href="04_따라하기-분석-도구와-전처리.html">04. 따라하기 분석 도구와 전처리</a><a class="" href="05_따라하기-자연어-질문으로-분석.html">05. 따라하기 자연어 질문으로 분석</a><a class="" href="06_분석전-데이터-품질-체크.html">06. 분석전 데이터 품질 체크</a><a class="" href="07_분석결과-차트로-시각화.html">07. 분석결과 차트로 시각화</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="cur" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">실습문제와 해답</h1>
+<p>직접 코드를 고쳐 보며 11강 내용을 손에 익힙니다. 먼저 <strong>스스로 풀어 본 뒤</strong> 해답을 펼쳐 보세요.</p>
+<hr/>
+<h2 id="1">문제 1 — 이상치 제외 도구 만들기</h2>
+<p><code>run_pandas</code>와 별개로 <code>revenue_by_channel()</code> 함수를 직접 작성하세요.</p>
+<ul>
+<li><code>status</code>가 <code>취소</code>/<code>환불</code>인 행과 <code>quantity==999</code>, <code>amount&lt;0</code>인 행을 제외한 뒤</li>
+<li><code>channel</code>별 평균 주문금액을 천단위 콤마로 출력합니다.</li>
+<li>사용 파일: <code>data/orders.csv</code></li>
+<li>기대 결과: 채널별 평균 금액이 출력되고, 같은 질문을 에이전트에 물었을 때와 일치하면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+import pandas as pd
+from common import DATA
+
+orders = pd.read_csv(DATA / "orders.csv", encoding="utf-8-sig")
+
+def revenue_by_channel():
+    """이상치·취소/환불을 제외한 채널별 평균 주문금액을 출력한다."""
+    # 데이터 함정 제거 (02번 규칙)
+    clean = orders[
+        (~orders["status"].isin(["취소", "환불"]))   # 취소/환불 제외
+        &amp; (orders["quantity"] != 999)               # quantity 이상치 제외
+        &amp; (orders["amount"] &gt;= 0)                    # 음수 금액 제외
+    ]
+    avg = clean.groupby("channel")["amount"].mean().sort_values(ascending=False)
+    print("[채널별 평균 주문금액] (이상치·취소/환불 제외)")
+    for channel, val in avg.items():
+        print(f"  - {channel}: {int(val):,}원")
+
+if __name__ == "__main__":
+    revenue_by_channel()
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">[채널별 평균 주문금액] (이상치·취소/환불 제외)
+  - 앱: 152,300원
+  - 웹: 148,700원
+  - 매장: 131,200원
+</code></pre>
+
+
+**해설**: 02번에서 배운 세 함정을 **한 번에** 필터링했습니다. `~`(틸드)는 "아니다"를 뜻하는 부정 연산자로, `~isin(['취소','환불'])`는 "취소·환불이 아닌 것"입니다. 이렇게 함정을 제거한 깨끗한 데이터로 집계하면, 에이전트에게 자연어로 물었을 때와 같은 값이 나옵니다. 코드로 직접 짜 보면 에이전트가 안에서 무슨 일을 하는지 더 잘 이해됩니다.
+
+</details>
+<hr/>
+<h2 id="2-ab">문제 2 — 규칙 유무 A/B 비교 스크립트</h2>
+<p>시스템 프롬프트에서 "취소/환불 제외" 줄을 뺀 <code>agent_no_rule</code>과 원본 <code>agent</code>를 모두 만들고, "카테고리별 총매출"을 두 에이전트에 각각 물어 결과를 나란히 출력하세요.</p>
+<ul>
+<li>사용 파일: <code>data/orders.csv</code></li>
+<li>기대 결과: 규칙을 뺀 쪽의 합계가 더 크게 나오며, 두 값의 차이(취소/환불 금액 합)를 pandas로 직접 계산해 검증하면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+import pandas as pd
+from langchain_core.tools import tool
+from langchain.agents import create_agent
+from common import get_chat, DATA
+
+llm = get_chat(provider="gemini")
+orders = pd.read_csv(DATA / "orders.csv", encoding="utf-8-sig")
+
+@tool
+def run_pandas(expr: str) -&gt; str:
+    """주문 데이터 분석. orders(컬럼: category, amount, status...), pd 사용 가능."""
+    try:
+        return str(eval(expr, {"__builtins__": {}}, {"orders": orders, "pd": pd}))
+    except Exception as e:
+        return f"실행 오류: {e}"
+
+# 규칙 있는 에이전트 vs 없는 에이전트
+agent = create_agent(llm, tools=[run_pandas],
+    system_prompt="너는 데이터 분석가다. 매출 집계 시 status가 '취소','환불'인 행은 제외하라.")
+agent_no_rule = create_agent(llm, tools=[run_pandas],
+    system_prompt="너는 데이터 분석가다.")   # 규칙 없음
+
+q = "카테고리별 총매출을 알려줘."
+print("[규칙 있음]", agent.invoke({"messages": [{"role": "user", "content": q}]})["messages"][-1].content)
+print("[규칙 없음]", agent_no_rule.invoke({"messages": [{"role": "user", "content": q}]})["messages"][-1].content)
+
+# pandas로 직접 차이 검증 (취소/환불 금액 합)
+diff = orders[orders["status"].isin(["취소", "환불"])]["amount"].sum()
+print(f"\n[검증] 취소/환불 금액 합계 = {int(diff):,}원 (이만큼 차이나야 함)")
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">[규칙 있음] 카테고리별 총매출은 가전 6,855만원, 전자기기 4,354만원 ...
+[규칙 없음] 카테고리별 총매출은 가전 7,120만원, 전자기기 4,510만원 ... (더 큼)
+
+[검증] 취소/환불 금액 합계 = 38,200,000원 (이만큼 차이나야 함)
+</code></pre>
+
+
+**해설**: 규칙을 뺀 에이전트는 취소/환불까지 매출에 포함해 **더 큰 합계**를 냅니다. 그 차이가 바로 "취소/환불 금액 합"이죠. pandas로 직접 계산한 차이와 두 에이전트 결과의 차이가 일치하면, 규칙 주입의 효과를 **숫자로** 증명한 겁니다. 03번에서 배운 "규칙이 결과를 바꾼다"를 실험으로 확인한 셈입니다.
+
+</details>
+<hr/>
+<h2 id="_2">정리</h2>
+<ul>
+<li>문제 1로 <strong>데이터 함정을 직접 필터링</strong>하는 코드를 짰습니다.</li>
+<li>문제 2로 <strong>규칙 주입의 효과를 A/B로 측정</strong>했습니다.</li>
+</ul>
+<p>이것으로 11강을 마칩니다. 다음 12강에서는 여러 도구를 한 에이전트에 통합합니다!</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="08_정리-체크리스트.html"><span class="lbl">← 이전 절</span>08. 정리 체크리스트</a><span class="nxt off"><span class="lbl"> </span> </span></div>
+</div>
+</body></html>

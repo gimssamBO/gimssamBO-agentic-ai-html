@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제5강 — 왜 함수 호출이 필요한가 — "두뇌에 손발을 달다"</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제5강 · function calling</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제5강 · function calling — 세부 목차</b><a class="cur" href="01_왜-함수호출이-필요한가.html">01. 왜 함수호출이 필요한가</a><a class="" href="02_LLM은-함수를-직접-실행하지-못한다.html">02. LLM은 함수를 직접 실행하지 못한다</a><a class="" href="03_자동실행-vs-수동루프.html">03. 자동실행 vs 수동루프</a><a class="" href="04_따라하기-도구-함수-만들기.html">04. 따라하기 도구 함수 만들기</a><a class="" href="05_따라하기-자동-function-calling.html">05. 따라하기 자동 function calling</a><a class="" href="06_따라하기-수동-루프로-결정-관찰.html">06. 따라하기 수동 루프로 결정 관찰</a><a class="" href="07_도구-실행-오류-처리.html">07. 도구 실행 오류 처리</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">왜 함수 호출이 필요한가 — "두뇌에 손발을 달다"</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>1~4강에서는 LLM의 <strong>두뇌</strong>를 잘 쓰는 법(프롬프트·추론)을 배웠습니다. 하지만 두뇌만으로는 "내 주문 어디 왔어?", "재고 있어?"에 답할 수 없습니다. 이제 두뇌에 <strong>손발(도구)</strong> 을 달아, LLM이 실제 데이터를 조회하게 만듭니다. 이게 <strong>Function Calling</strong>이고, 에이전트로 가는 <strong>핵심 전환점</strong>입니다.</p>
+<hr/>
+<h2 id="1">1. 두뇌만으로는 안 되는 일</h2>
+<p>1강의 그 문제를 떠올려 봅시다.</p>
+<pre><code class="language-python">ask("승승장구몰 이어버드 지금 재고 있어요?")
+# → "죄송하지만 실시간 재고는 확인할 수 없습니다 ..." (또는 환각)
+</code></pre>
+<p>아무리 프롬프트를 잘 짜고(3강) 단계적으로 생각하게 해도(4강), <strong>재고 데이터 자체에 접근할 수단</strong>이 없으면 답할 수 없습니다. 두뇌는 똑똑하지만 <strong>손발이 없기</strong> 때문입니다.</p>
+<hr/>
+<h2 id="2-tool">2. 도구(Tool)를 쥐여 주면?</h2>
+<p>여기서 <strong>도구</strong>가 등장합니다. 도구는 거창한 게 아니라, <strong>그냥 평범한 파이썬 함수</strong>입니다.</p>
+<pre><code class="language-python">def get_stock(product_name: str) -&gt; str:
+    """상품명을 받아 현재 재고 수량을 반환한다."""
+    # inventory.csv 를 조회해서...
+    return "승승 무선 블루투스 이어버드 SE 재고 225개"
+</code></pre>
+<p>이 함수를 LLM에게 "쓸 수 있는 도구"로 쥐여 주면, LLM은 재고 질문이 왔을 때 <strong>스스로 이 함수를 호출</strong>해서 진짜 데이터를 가져옵니다.</p>
+<pre><code class="language-python">question = "이어버드 재고 있어? 그리고 달러로 환산하려면 환율이 얼마야?"
+# → LLM이 get_stock 도구와 get_exchange_rate 도구를 둘 다 호출하고,
+#   그 결과로 정확한 답을 만든다.
+</code></pre>
+<blockquote>
+<p>비유: 1~4강에서 우리는 똑똑한 직원(LLM)을 채용했습니다. 하지만 그 직원에게 <strong>창고 열쇠(재고 도구)</strong> 와 <strong>환율 단말기(환율 도구)</strong> 를 주지 않으면, 아무리 똑똑해도 "창고에 가서 확인"할 수 없습니다. Function Calling이 바로 그 열쇠와 단말기를 쥐여 주는 일입니다.</p>
+</blockquote>
+<hr/>
+<h2 id="3">3. 이 강에서 배울 것</h2>
+<table>
+<thead>
+<tr>
+<th>목차</th>
+<th>내용</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>02</td>
+<td>LLM은 함수를 <strong>직접 실행하지 못한다</strong> (가장 중요한 개념)</td>
+</tr>
+<tr>
+<td>03</td>
+<td><strong>자동 실행</strong> vs <strong>수동 루프</strong>의 차이</td>
+</tr>
+<tr>
+<td>04~06</td>
+<td>도구 함수 만들기 → 자동 호출 → 수동 루프로 결정 관찰</td>
+</tr>
+<tr>
+<td>07</td>
+<td>도구가 <strong>실패할 때</strong> 우아하게 처리하기</td>
+</tr>
+</tbody>
+</table>
+<hr/>
+<h2 id="4">4. 이 강에서 만들 도구</h2>
+<p>승승장구몰 운영에 필요한 두 가지 도구를 만듭니다.</p>
+<ul>
+<li><strong><code>get_stock(product_name)</code></strong>: 재고 조회 (<code>data/inventory.csv</code>)</li>
+<li><strong><code>get_exchange_rate(currency)</code></strong>: 환율 조회 (<code>data/exchange_rates.csv</code>)</li>
+</ul>
+<p>이 두 도구를 LLM에 연결하면, "이어버드 재고를 달러로 환산하면?" 같은 <strong>복합 질문</strong>도 LLM이 알아서 두 도구를 조합해 답합니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>1~4강은 두뇌(프롬프트·추론), 5강부터는 <strong>손발(도구)</strong>.</li>
+<li>도구 = <strong>평범한 파이썬 함수</strong>. LLM에 쥐여 주면 실제 데이터를 조회한다.</li>
+<li>Function Calling은 LLM의 한계를 깨는 <strong>에이전트의 핵심 전환점</strong>.</li>
+<li>다음 절에서 가장 중요한 개념 — "LLM은 함수를 직접 실행하지 못한다"를 배웁니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><span class="prv off"><span class="lbl"> </span> </span><a class="nxt" href="02_LLM은-함수를-직접-실행하지-못한다.html"><span class="lbl">다음 절 →</span>02. LLM은 함수를 직접 실행하지 못한다</a></div>
+</div>
+</body></html>

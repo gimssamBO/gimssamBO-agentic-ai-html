@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제13강 — 왜 청킹하는가</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제13강 · rag concept</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제13강 · rag concept — 세부 목차</b><a class="" href="01_검색으로-근거를-찾아-답하기.html">01. 검색으로 근거를 찾아 답하기</a><a class="" href="02_LLM의-세가지-한계.html">02. LLM의 세가지 한계</a><a class="" href="03_RAG-파이프라인-5단계.html">03. RAG 파이프라인 5단계</a><a class="cur" href="04_왜-청킹하는가.html">04. 왜 청킹하는가</a><a class="" href="05_따라하기-PDF-로드하기.html">05. 따라하기 PDF 로드하기</a><a class="" href="06_따라하기-청킹하기.html">06. 따라하기 청킹하기</a><a class="" href="07_청크-크기와-오버랩-튜닝.html">07. 청크 크기와 오버랩 튜닝</a><a class="" href="08_다양한-문서-로더.html">08. 다양한 문서 로더</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">왜 청킹하는가</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>긴 PDF를 통째로 쓰면 안 됩니다. <strong>토큰·비용이 폭발</strong>하고, 질문과 무관한 99%가 섞여 <strong>검색 정확도가 떨어집니다.</strong> 그래서 문서를 <strong>의미가 또렷한 작은 조각(청크)</strong> 으로 나눕니다. 조각이 곧 검색 단위입니다.</p>
+<hr/>
+<h2 id="1">1. 통째로 넣으면 안 되는 세 가지 이유</h2>
+<p>100페이지 매뉴얼을 통째로 프롬프트에 넣으면 어떻게 될까요?</p>
+<h3 id="1_1">① 토큰 한계·비용</h3>
+<p>2강에서 배웠듯 토큰이 곧 비용입니다. 100페이지를 <strong>매 질문마다</strong> 통째로 넣으면 토큰이 폭발하고, 모델의 입력 한계를 넘을 수도 있습니다.</p>
+<h3 id="2-signal-vs-noise">② 검색 정확도 (Signal vs Noise)</h3>
+<p>"환불 며칠 걸려요?"라는 질문에 100페이지 전체를 주면, 질문과 <strong>무관한 99%</strong>가 같이 들어갑니다. LLM이 그 속에서 답을 찾느라 헷갈리고, 엉뚱한 부분을 참고할 수 있습니다.</p>
+<h3 id="3">③ 검색 단위</h3>
+<p>임베딩·검색은 "조각 단위"로 합니다. 조각이 적당히 작아야 <strong>의미가 또렷</strong>해 검색이 정확합니다.</p>
+<blockquote>
+<p>비유: 도서관에서 "환불 정책"을 찾는데, 사서가 <strong>책 한 권 전체</strong>를 던져 주면(통째) 그 안에서 또 찾아야 합니다. 하지만 <strong>해당 페이지만 펴서</strong> 주면(청킹) 바로 답을 봅니다. 청킹은 "필요한 페이지만 뽑는" 작업입니다.</p>
+</blockquote>
+<hr/>
+<h2 id="2">2. 청킹이란?</h2>
+<p><strong>청킹(chunking)</strong> 은 긴 문서를 작은 조각(청크, chunk)으로 나누는 것입니다.</p>
+<p>예를 들어 <code>환불교환정책.pdf</code>(3페이지)를 <strong>청킹</strong>하면, 작은 조각 여러 개로 나뉩니다.</p>
+<blockquote>
+<p>청크1: 환불 규정… · 청크2: 교환 규정… · 청크3: 배송비 부담… · … (총 9개 조각)</p>
+</blockquote>
+<p>각 청크는 <strong>하나의 검색 단위</strong>가 됩니다. 질문이 오면 9개 조각 중 가장 관련 있는 것만 골라 LLM에게 줍니다. 100페이지가 아니라 관련된 1~2개 조각만요.</p>
+<hr/>
+<h2 id="3_1">3. 청킹의 핵심 파라미터</h2>
+<p>청킹에는 두 가지 핵심 설정이 있습니다.</p>
+<table>
+<thead>
+<tr>
+<th>파라미터</th>
+<th>의미</th>
+<th>권장값(한국어 정책문서)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>chunk_size</code></td>
+<td>한 조각의 최대 글자 수</td>
+<td>500</td>
+</tr>
+<tr>
+<td><code>chunk_overlap</code></td>
+<td>인접 조각이 겹치는 글자 수</td>
+<td>50</td>
+</tr>
+</tbody>
+</table>
+<h3 id="chunk_size">chunk_size — 조각 크기</h3>
+<p>한 조각을 몇 글자로 자를지입니다. 너무 크면 무관한 내용이 섞이고, 너무 작으면 맥락이 끊깁니다. 500자가 한국어 정책 문서에 무난한 출발점입니다.</p>
+<h3 id="chunk_overlap">chunk_overlap — 겹침</h3>
+<p>인접한 조각을 조금 겹치게 자르는 양입니다. 왜 겹칠까요?</p>
+<hr/>
+<h2 id="4-chunk_overlap">4. chunk_overlap이 필요한 이유</h2>
+<p>문장이 조각 경계에서 <strong>뚝 잘리면</strong> 맥락이 끊깁니다.</p>
+<pre><code class="language-text">겹침 없이 자르면:
+  청크1: "...환불은 상품 수령 후 7일 이내 신청 가능하며 왕복"
+  청크2: "배송비는 고객이 부담합니다..."
+  → "왕복 배송비는 고객 부담"이 두 조각으로 쪼개져, 검색 시 의미가 분산!
+
+겹쳐서 자르면 (overlap=50):
+  청크1: "...환불은 7일 이내 신청 가능하며 왕복 배송비는 고객이 부담합니다"
+  청크2: "왕복 배송비는 고객이 부담합니다. 교환의 경우..."
+  → 경계에 걸친 정보가 양쪽에 다 들어가 보존됨!
+</code></pre>
+<p><code>chunk_overlap</code>은 조각 경계에 걸친 정보가 사라지지 않게 하는 <strong>안전장치</strong>입니다. 50자 정도 겹치면 문장 하나가 통째로 잘리는 일을 막을 수 있죠.</p>
+<blockquote>
+<p>비유: 책을 여러 권으로 나눌 때, 각 권의 마지막 문단을 다음 권 첫머리에 <strong>조금 반복</strong>해 주면, 권이 바뀌어도 "이야기가 어디서 이어지는지" 알 수 있습니다. overlap이 그 역할입니다.</p>
+</blockquote>
+<hr/>
+<h2 id="5-recursivecharactertextsplitter">5. 청킹 도구 — RecursiveCharacterTextSplitter</h2>
+<p>LangChain은 <code>RecursiveCharacterTextSplitter</code>로 청킹합니다. 이름이 길지만 하는 일은 단순합니다.</p>
+<pre><code class="language-python">from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+splitter = RecursiveCharacterTextSplitter(
+    chunk_size=500,      # 한 조각 최대 500자
+    chunk_overlap=50,    # 50자 겹침
+)
+chunks = splitter.split_documents(docs)
+</code></pre>
+<p>"Recursive(재귀적)"라는 이름은, <strong>단락 → 문장 → 단어</strong> 순으로 "자연스러운 경계"를 우선해 자른다는 뜻입니다. 그래서 문장 중간에서 뚝 끊기는 일이 적습니다. 똑똑하게 자르는 거죠. (자세한 사용법은 06번에서.)</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>긴 문서를 통째로 쓰면 <strong>토큰 폭발·검색 부정확</strong>.</li>
+<li><strong>청킹</strong> = 문서를 작은 조각으로 나눠 검색 단위로 만들기.</li>
+<li><code>chunk_size</code>(조각 크기)와 <code>chunk_overlap</code>(겹침)이 핵심 파라미터.</li>
+<li><code>chunk_overlap</code>은 <strong>경계에 걸친 정보</strong>가 사라지지 않게 한다.</li>
+<li><code>RecursiveCharacterTextSplitter</code>가 자연스러운 경계로 똑똑하게 자른다.</li>
+<li>다음 절에서 PDF를 실제로 로드합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="03_RAG-파이프라인-5단계.html"><span class="lbl">← 이전 절</span>03. RAG 파이프라인 5단계</a><a class="nxt" href="05_따라하기-PDF-로드하기.html"><span class="lbl">다음 절 →</span>05. 따라하기 PDF 로드하기</a></div>
+</div>
+</body></html>

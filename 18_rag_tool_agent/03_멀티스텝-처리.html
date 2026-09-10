@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제18강 — 멀티스텝 처리</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제18강 · rag tool agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제18강 · rag tool agent — 세부 목차</b><a class="" href="01_문서검색과-실시간데이터를-한-에이전트에.html">01. 문서검색과 실시간데이터를 한 에이전트에</a><a class="" href="02_모든-능력을-도구로-통일.html">02. 모든 능력을 도구로 통일</a><a class="cur" href="03_멀티스텝-처리.html">03. 멀티스텝 처리</a><a class="" href="04_도구-설계-원칙.html">04. 도구 설계 원칙</a><a class="" href="05_따라하기-정책검색-도구.html">05. 따라하기 정책검색 도구</a><a class="" href="06_따라하기-실시간-데이터-도구.html">06. 따라하기 실시간 데이터 도구</a><a class="" href="07_따라하기-RAG와-도구-동시-사용.html">07. 따라하기 RAG와 도구 동시 사용</a><a class="" href="08_읽기-도구와-쓰기-도구의-차이.html">08. 읽기 도구와 쓰기 도구의 차이</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">멀티스텝 처리</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>복합 질문이 오면 에이전트는 <strong>분해 → 순차 호출 → 종합</strong>의 멀티스텝으로 처리합니다. "환불 절차 + 주문 상태"를 두 도구(RAG, DB)로 차례로 풀고, 두 결과를 모아 하나의 답으로 종합합니다.</p>
+<hr/>
+<h2 id="1">1. 복합 질문의 처리 흐름</h2>
+<p>"환불 절차랑 내 주문 O000902 상태 알려줘"라는 질문은 한 도구로 못 끝납니다. 에이전트는 이렇게 처리합니다.</p>
+<p>질문: <strong>"환불 절차 + 주문 O000902 상태"</strong></p>
+<ol>
+<li><strong>Step 1 — <code>policy_search("환불 절차")</code></strong> — 생각: "환불 절차는 정책 문서에 있겠다" / 관찰: "물류센터 도착 후 영업일 3일 내 환불…"</li>
+<li><strong>Step 2 — <code>get_order_status("O000902")</code></strong> — 생각: "주문 상태는 DB를 봐야겠다" / 관찰: "배송완료"</li>
+<li><strong>Step 3 — 종합</strong> — "환불 절차는 … 이고, 주문 O000902는 '배송완료' 상태입니다."</li>
+</ol>
+<p>세 단계입니다 — <strong>분해</strong>(질문을 둘로), <strong>순차 호출</strong>(도구 2개), <strong>종합</strong>(두 결과를 하나로).</p>
+<hr/>
+<h2 id="2">2. 분해 — 질문을 나누기</h2>
+<p>에이전트는 복합 질문을 <strong>부분 질문들로 분해</strong>합니다.</p>
+<p><strong>"환불 절차랑 내 주문 O000902 상태 알려줘"</strong> 를 두 부분으로 분해합니다.</p>
+<ul>
+<li>부분①: "환불 절차" → 정책 문서 검색이 필요</li>
+<li>부분②: "주문 O000902 상태" → DB 조회가 필요</li>
+</ul>
+<p>우리가 "이건 정책, 저건 DB"라고 나눠 주지 않았습니다. 에이전트가 질문을 읽고 <strong>스스로 분해</strong>했죠. 그리고 각 부분에 맞는 도구를 골랐습니다(라우팅, 12·17강).</p>
+<hr/>
+<h2 id="3">3. 순차 호출 — 도구를 차례로</h2>
+<p>분해한 부분들을 각각 도구로 처리합니다. 7강 ReAct 루프가 반복되는 거죠.</p>
+<pre><code class="language-text">[1번째 루프] policy_search 호출 → 환불 절차 획득
+[2번째 루프] get_order_status 호출 → 주문 상태 획득
+[3번째 루프] 더 부를 도구 없음 → 최종 답
+</code></pre>
+<p><code>create_agent</code>가 이 루프를 내부에서 돌립니다(8강). 각 루프에서 도구를 하나씩 호출하고, 결과를 관찰해 다음을 정하죠. 이게 7강에서 손으로 짠 ReAct 루프의 자동화입니다.</p>
+<hr/>
+<h2 id="4">4. 종합 — 결과를 하나로</h2>
+<p>마지막에 에이전트는 <strong>여러 도구의 결과를 종합</strong>해 하나의 자연스러운 답을 만듭니다.</p>
+<p>두 도구의 결과를 <strong>종합</strong>합니다.</p>
+<ul>
+<li><code>policy_search</code> 결과: "환불은 물류센터 도착 후 3일 내…"</li>
+<li><code>get_order_status</code> 결과: "주문 O000902 배송완료"</li>
+</ul>
+<p>→ <strong>종합 답변</strong>: "환불 절차는 상품 수령 후 7일 이내 신청하시면 물류센터 도착 후 3일 내 환불됩니다. 주문 O000902(이어버드)는 현재 '배송완료' 상태이므로 환불 신청이 가능합니다."</p>
+<p>두 정보를 그냥 나열하는 게 아니라, <strong>맥락에 맞게 엮어</strong> 답합니다. "배송완료 상태이므로 환불 가능"처럼 두 정보를 연결하는 추론까지 하죠. 이게 에이전트가 단순 조회 도구보다 똑똑한 점입니다.</p>
+<hr/>
+<h2 id="5">5. 실행 과정 관찰</h2>
+<p><code>pretty_print</code>로 멀티스텝을 직접 볼 수 있습니다.</p>
+<pre><code class="language-python">out = agent.invoke({"messages": [{"role": "user", "content": q}]})
+for m in out["messages"]:
+    m.pretty_print()
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">Human: 환불 절차랑 내 주문 O000902 상태 알려줘
+Ai: Tool Calls: policy_search({'query': '환불 절차'})        ← Step 1
+Tool: 환불은 상품 수령 후 7일 이내 신청 가능하며...
+Ai: Tool Calls: get_order_status({'order_id': 'O000902'})    ← Step 2
+Tool: 주문 O000902: 상태='배송완료'...
+Ai: [종합 답변] 환불 절차는... 주문 O000902는 배송완료 상태...  ← Step 3
+</code></pre>
+<p>policy_search(RAG) → get_order_status(DB) 순서로 두 도구가 호출되고, 마지막에 종합됐습니다. 12강 멀티툴 연쇄 호출과 같은 구조인데, 이번엔 <strong>RAG 도구가 섞인</strong> 게 차이죠.</p>
+<hr/>
+<h2 id="6">6. 멀티스텝의 힘</h2>
+<p>멀티스텝 처리 덕분에, 사용자는 <strong>자연스럽게 한 문장으로</strong> 복잡한 요청을 할 수 있습니다.</p>
+<pre><code class="language-text">사용자: "환불 절차랑 주문 상태 알려줘" (한 문장)
+  → 에이전트가 알아서 분해·순차·종합
+
+vs.
+
+사용자가 일일이: "환불 절차 알려줘" (답 받고) → "주문 상태도 알려줘" (또 답 받고)
+</code></pre>
+<p>사용자가 질문을 쪼개 여러 번 물을 필요 없이, 한 번에 복합 요청을 하면 에이전트가 다 처리합니다. 이게 멀티스텝 에이전트의 사용자 경험상 가치입니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>복합 질문은 <strong>분해 → 순차 호출 → 종합</strong>의 멀티스텝으로 처리.</li>
+<li><strong>분해</strong>: 질문을 부분들로 나눔(스스로).</li>
+<li><strong>순차 호출</strong>: 각 부분을 도구로(ReAct 루프 반복).</li>
+<li><strong>종합</strong>: 여러 결과를 맥락에 맞게 엮어 하나의 답으로.</li>
+<li>RAG 도구가 섞인 12강 연쇄 호출과 같은 구조.</li>
+<li>사용자는 <strong>한 문장</strong>으로 복잡한 요청 가능.</li>
+<li>다음 절에서 도구 설계 원칙을 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="02_모든-능력을-도구로-통일.html"><span class="lbl">← 이전 절</span>02. 모든 능력을 도구로 통일</a><a class="nxt" href="04_도구-설계-원칙.html"><span class="lbl">다음 절 →</span>04. 도구 설계 원칙</a></div>
+</div>
+</body></html>

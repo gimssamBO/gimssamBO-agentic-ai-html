@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제21강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제21강 · agent workflow</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제21강 · agent workflow — 세부 목차</b><a class="" href="01_자유로운게-항상-좋은건-아니다.html">01. 자유로운게 항상 좋은건 아니다</a><a class="" href="02_에이전트-vs-워크플로우.html">02. 에이전트 vs 워크플로우</a><a class="" href="03_StateGraph의-3요소.html">03. StateGraph의 3요소</a><a class="" href="04_따라하기-상태-스키마와-노드-정의.html">04. 따라하기 상태 스키마와 노드 정의</a><a class="" href="05_따라하기-그래프-조립과-일괄처리.html">05. 따라하기 그래프 조립과 일괄처리</a><a class="" href="06_조건부-분기-add_conditional_edges.html">06. 조건부 분기 add_conditional_edges</a><a class="" href="07_노드-실패-처리와-상태-검증.html">07. 노드 실패 처리와 상태 검증</a><a class="cur" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="21">21강에서 배운 것</h2>
+<p>21강에서는 정해진 흐름을 가진 워크플로우를 LangGraph로 만들었습니다.</p>
+<ul>
+<li><strong>에이전트 vs 워크플로우</strong>: 자유로운 에이전트 vs 정해진 워크플로우(예측·검증 쉬움).</li>
+<li><strong>StateGraph 3요소</strong>: State(공유 데이터)·Node(채우는 함수)·Edge(순서).</li>
+<li><strong>분업</strong>: 분류만 LLM, 우선순위·배정은 규칙(코드).</li>
+<li><strong>조건부 분기</strong>: <code>add_conditional_edges</code>로 상황별 길 가르기.</li>
+<li><strong>노드 실패 처리</strong>: 검증·보정·예외 기록으로 견고하게.</li>
+</ul>
+<hr/>
+<h2 id="_2">한눈에 보는 핵심 코드</h2>
+<pre><code class="language-python">from typing import TypedDict
+from langgraph.graph import StateGraph, START, END
+
+class TicketState(TypedDict):
+    content: str; category: str; priority: str; team: str
+
+def classify_node(state) -&gt; dict:   # LLM
+    return {"category": ...}
+def priority_node(state) -&gt; dict:   # 규칙
+    return {"priority": ...}
+
+g = StateGraph(TicketState)
+g.add_node("classify", classify_node)
+g.add_node("priority", priority_node)
+g.add_edge(START, "classify")
+g.add_edge("classify", "priority")
+# 조건부 분기
+g.add_conditional_edges("priority", route_fn, {"escalate": "escalate", "assign": "assign"})
+workflow = g.compile()
+
+result = workflow.invoke({"content": "결제 오류"})
+</code></pre>
+<hr/>
+<h2 id="_3">이 강에서 설치한 라이브러리</h2>
+<p>추가 설치 없음 — <code>langgraph</code>는 8강에서 설치한 것 사용.</p>
+<hr/>
+<h2 id="_4">체크리스트</h2>
+<ul>
+<li>[ ] 자유 에이전트와 고정 워크플로우의 차이를 설명할 수 있다.</li>
+<li>[ ] <code>StateGraph</code> + <code>TypedDict</code> 상태로 노드·엣지를 구성했다.</li>
+<li>[ ] 노드를 LLM(분류)과 규칙(우선순위·배정)으로 분업했다.</li>
+<li>[ ] <code>add_conditional_edges</code>로 조건부 분기를 만들었다.</li>
+<li>[ ] 노드 실패를 검증·보정·기록으로 견고하게 처리했다.</li>
+</ul>
+<hr/>
+<h2 id="_5">한 줄 핵심</h2>
+<blockquote>
+<p><strong>정해진 순서의 업무는 자유 에이전트보다 워크플로우가 맞다. StateGraph로 흐름을 선언하고, 분기·검증으로 견고하게 만든다.</strong></p>
+</blockquote>
+<hr/>
+<h2 id="_6">다음 강 예고</h2>
+<p>22강부터 다양한 <strong>단일 목적 에이전트</strong>들을 만듭니다. 22강 <strong>Research Agent</strong>에서는 9강 웹 검색을 발전시켜, 시장 정보를 조사하고 <strong>마크다운 리포트를 자동 생성</strong>하는 에이전트를 만듭니다. 복잡한 주제를 하위 질의로 쪼개고, 검색 결과를 교차 검증하는 실전 리서치 기법을 배웁니다.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="07_노드-실패-처리와-상태-검증.html"><span class="lbl">← 이전 절</span>07. 노드 실패 처리와 상태 검증</a><a class="nxt" href="09_실습문제와-해답.html"><span class="lbl">다음 절 →</span>09. 실습문제와 해답</a></div>
+</div>
+</body></html>

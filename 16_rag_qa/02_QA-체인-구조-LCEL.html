@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제16강 — QA 체인 구조 (LCEL)</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제16강 · rag qa</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제16강 · rag qa — 세부 목차</b><a class="" href="01_문서-근거로만-답하고-출처-밝히기.html">01. 문서 근거로만 답하고 출처 밝히기</a><a class="cur" href="02_QA-체인-구조-LCEL.html">02. QA 체인 구조 LCEL</a><a class="" href="03_환각을-억제하는-프롬프트.html">03. 환각을 억제하는 프롬프트</a><a class="" href="04_출처를-함께-반환하기.html">04. 출처를 함께 반환하기</a><a class="" href="05_따라하기-QA-체인-만들기.html">05. 따라하기 QA 체인 만들기</a><a class="" href="06_따라하기-답변과-출처-모듈화.html">06. 따라하기 답변과 출처 모듈화</a><a class="" href="07_따라하기-모르는-질문엔-모른다고.html">07. 따라하기 모르는 질문엔 모른다고</a><a class="" href="08_검색-품질-높이기-k값과-재정렬.html">08. 검색 품질 높이기 k값과 재정렬</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="qa-lcel">QA 체인 구조 (LCEL)</h1>
+<h2 id="_1">한 줄 요약</h2>
+<p><strong>LCEL(LangChain Expression Language)</strong> 은 <code>|</code>(파이프)로 단계를 잇는 방식입니다. RAG QA 체인은 <code>검색 → 프롬프트 조립 → LLM → 문자열화</code>를 한 줄로 엮습니다. 유닉스 파이프(<code>|</code>)처럼 데이터가 단계를 따라 흐릅니다.</p>
+<hr/>
+<h2 id="1-qa">1. QA 체인의 흐름</h2>
+<p>RAG QA는 네 단계가 차례로 흐릅니다.</p>
+<p><strong>질문</strong> 이 네 단계를 차례로 흐릅니다.</p>
+<ol>
+<li><strong>검색</strong> → <code>retriever</code> (청크 k개 → format → context)</li>
+<li><strong>조립</strong> → 프롬프트 ("문서 근거로만 답하라" + context + 질문)</li>
+<li><strong>생성</strong> → LLM (답변 생성)</li>
+<li><strong>변환</strong> → <code>StrOutputParser</code> (문자열로) → <strong>최종 답변</strong></li>
+</ol>
+<p>각 단계의 출력이 다음 단계의 입력이 됩니다. 이걸 코드로 깔끔하게 잇는 게 LCEL입니다.</p>
+<hr/>
+<h2 id="2-lcel">2. LCEL — 파이프로 잇기</h2>
+<p>LCEL은 <code>|</code> 기호로 단계를 연결합니다.</p>
+<pre><code class="language-python">from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
+
+rag_chain = (
+    {"context": retriever | format_docs, "question": RunnablePassthrough()}
+    | PROMPT          # 프롬프트 조립
+    | llm             # LLM 생성
+    | StrOutputParser()   # 문자열로 변환
+)
+
+answer = rag_chain.invoke("환불 며칠 걸려?")
+</code></pre>
+<p><code>|</code>로 이어진 이 한 줄이 곧 "검색 → 조립 → 생성 → 문자열화" 전체입니다.</p>
+<blockquote>
+<p>비유: 유닉스 셸의 파이프와 똑같습니다. <code>cat file | grep "환불" | sort</code>처럼 데이터가 <code>|</code>를 따라 흐르죠. LCEL도 질문이 <code>|</code>를 따라 흘러가며 검색·생성을 거칩니다. 한 줄로 파이프라인을 표현하는 거죠.</p>
+</blockquote>
+<hr/>
+<h2 id="3">3. 첫 단계 뜯어보기</h2>
+<p>가장 헷갈리는 첫 단계를 자세히 봅시다.</p>
+<pre><code class="language-python">{"context": retriever | format_docs, "question": RunnablePassthrough()}
+</code></pre>
+<p>이건 <strong>딕셔너리</strong>인데, 두 키를 채웁니다.</p>
+<ul>
+<li><strong><code>"context"</code>: <code>retriever | format_docs</code></strong><br/>
+  질문을 <code>retriever</code>에 넣어 청크를 검색하고, <code>format_docs</code>로 하나의 문자열로 합칩니다. → 프롬프트의 <code>{context}</code> 자리에 들어갈 값</li>
+<li><strong><code>"question"</code>: <code>RunnablePassthrough()</code></strong><br/>
+  입력(질문)을 <strong>그대로 흘려보냅니다.</strong> → 프롬프트의 <code>{question}</code> 자리에 들어갈 값</li>
+</ul>
+<p>즉, 질문 하나가 들어오면 → context(검색 결과)와 question(원본 질문)을 동시에 만들어, 프롬프트의 두 빈칸을 채웁니다.</p>
+<hr/>
+<h2 id="4-runnablepassthrough">4. RunnablePassthrough란?</h2>
+<p><code>RunnablePassthrough()</code>는 이름 그대로 <strong>입력을 그대로 통과시키는</strong> 부품입니다.</p>
+<pre><code class="language-python">"question": RunnablePassthrough()
+# 질문이 들어오면 → 가공 없이 그대로 {question} 자리로
+</code></pre>
+<p><code>context</code>는 검색·포맷 가공이 필요하지만, <code>question</code>은 <strong>원본 질문 그대로</strong> 프롬프트에 넣어야 합니다. 그래서 "아무것도 하지 말고 통과시켜"라는 <code>RunnablePassthrough()</code>를 씁니다. 데이터를 손대지 않고 다음으로 넘기는 거죠.</p>
+<hr/>
+<h2 id="5-format_docs">5. format_docs — 청크를 문자열로</h2>
+<p><code>retriever</code>가 돌려주는 건 <code>Document</code> 리스트입니다. 하지만 프롬프트에는 <strong>문자열</strong>이 들어가야 하죠. 그래서 <code>format_docs</code>로 변환합니다.</p>
+<pre><code class="language-python">def format_docs(docs):
+    """검색된 Document들의 본문을 한 덩어리 문자열(context)로 합친다."""
+    return "\n\n".join(d.page_content for d in docs)
+</code></pre>
+<p>청크 4개의 <code>page_content</code>를 줄바꿈 두 개로 이어 붙여 하나의 긴 문자열을 만듭니다. 이게 프롬프트의 <code>{context}</code> 자리에 들어가는 "근거 문서"입니다.</p>
+<hr/>
+<h2 id="6-lcel">6. LCEL의 장점</h2>
+<p>"그냥 함수로 차례로 호출하면 안 되나?"라고 생각할 수 있습니다. LCEL을 쓰면 좋은 점이 있습니다.</p>
+<ul>
+<li><strong>선언적</strong>: 파이프라인 구조가 한눈에 보임 (검색→프롬프트→LLM→파서)</li>
+<li><strong>재사용</strong>: 만든 체인(<code>rag_chain</code>)을 여러 질문에 그대로 <code>invoke</code></li>
+<li><strong>스트리밍·배치 지원</strong>: 같은 체인으로 <code>stream</code>, <code>batch</code>도 가능</li>
+<li><strong>조립 가능</strong>: 부품을 갈아끼우기 쉬움 (프롬프트만 교체 등)</li>
+</ul>
+<p>LangChain의 권장 방식이고, 일단 익숙해지면 매우 편합니다. 처음엔 <code>|</code>가 낯설지만, "데이터가 흐른다"는 직관만 잡으면 됩니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li><strong>LCEL</strong> = <code>|</code>로 단계를 잇는 방식(유닉스 파이프처럼).</li>
+<li>RAG QA 체인: <code>{context, question} | 프롬프트 | LLM | 파서</code>.</li>
+<li><code>retriever | format_docs</code> → 검색 후 문자열로(=context).</li>
+<li><code>RunnablePassthrough()</code> → 질문을 <strong>그대로 통과</strong>(=question).</li>
+<li><code>format_docs</code> → 청크 리스트를 <strong>하나의 문자열</strong>로.</li>
+<li>다음 절에서 환각을 억제하는 프롬프트를 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="01_문서-근거로만-답하고-출처-밝히기.html"><span class="lbl">← 이전 절</span>01. 문서 근거로만 답하고 출처 밝히기</a><a class="nxt" href="03_환각을-억제하는-프롬프트.html"><span class="lbl">다음 절 →</span>03. 환각을 억제하는 프롬프트</a></div>
+</div>
+</body></html>

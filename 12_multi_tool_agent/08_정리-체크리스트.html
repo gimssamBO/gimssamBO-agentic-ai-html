@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제12강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제12강 · multi tool agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제12강 · multi tool agent — 세부 목차</b><a class="" href="01_여러-도구를-통합하다.html">01. 여러 도구를 통합하다</a><a class="" href="02_도구-라우팅.html">02. 도구 라우팅</a><a class="" href="03_따라하기-도구-3종-정의.html">03. 따라하기 도구 3종 정의</a><a class="" href="04_따라하기-하나의-에이전트로-통합.html">04. 따라하기 하나의 에이전트로 통합</a><a class="" href="05_따라하기-연쇄-호출-질문.html">05. 따라하기 연쇄 호출 질문</a><a class="" href="06_도구-실패시-폴백-처리.html">06. 도구 실패시 폴백 처리</a><a class="" href="07_도구-입력-검증.html">07. 도구 입력 검증</a><a class="cur" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="12">12강에서 배운 것</h2>
+<p>12강에서는 1부의 도구들을 한 에이전트에 통합한 종합편을 다뤘습니다.</p>
+<ul>
+<li><strong>도구 라우팅</strong>: LLM이 docstring을 보고 적절한 도구를 스스로 고름.</li>
+<li><strong>연쇄 호출</strong>: 앞 도구의 결과(product_id)를 다음 도구 입력으로 이어 씀.</li>
+<li><strong>폴백 처리</strong>: 도구 실패를 신호 문자열로 반환 + 시스템 프롬프트로 대체 안내.</li>
+<li><strong>입력 검증</strong>: 형식이 틀린 입력을 정규화·검증으로 걸러냄.</li>
+</ul>
+<hr/>
+<h2 id="_2">한눈에 보는 핵심 코드</h2>
+<pre><code class="language-python">from langchain_core.tools import tool
+from langchain.agents import create_agent
+from common import get_chat, DATA
+import pandas as pd
+
+llm = get_chat(provider="gemini")
+orders = pd.read_csv(DATA / "orders.csv")        # 모듈 로드 시 1회
+
+@tool
+def get_order_status(customer_id: str) -&gt; str:
+    """고객 최근 주문 상태. 반환에 product_id 포함(연쇄용)."""
+    if df.empty:
+        return f"[조회실패] ..."                  # 폴백 신호
+    ...
+
+TOOLS = [get_order_status, get_stock, run_pandas]
+SYSTEM = ("너는 운영 비서다. 앞 도구 결과를 다음 입력으로 이어 써라. "
+          "도구가 [조회실패]면 대체 안내하라.")
+agent = create_agent(llm, tools=TOOLS, system_prompt=SYSTEM)
+
+# 연쇄 호출 관찰
+for step in agent.stream({"messages": [...]}, stream_mode="values"):
+    step["messages"][-1].pretty_print()
+</code></pre>
+<hr/>
+<h2 id="_3">이 강에서 설치한 라이브러리</h2>
+<pre><code class="language-bash">pip install langchain langchain-google-genai langgraph pandas
+</code></pre>
+<p>새로 설치할 라이브러리는 없습니다.</p>
+<hr/>
+<h2 id="_4">체크리스트</h2>
+<ul>
+<li>[ ] 실무 에이전트가 여러 도구를 갖는 이유를 설명할 수 있다.</li>
+<li>[ ] LLM이 docstring을 보고 도구를 라우팅한다는 것을 이해했다.</li>
+<li>[ ] 도구 3종을 한 에이전트에 통합하고 연쇄 호출을 관찰했다.</li>
+<li>[ ] 도구 실패 시 폴백(신호 문자열 + 대체 안내)을 구현했다.</li>
+<li>[ ] 입력 검증/정규화로 잘못된 인자를 걸러냈다.</li>
+</ul>
+<hr/>
+<h2 id="_5">한 줄 핵심</h2>
+<blockquote>
+<p><strong>여러 도구를 한 에이전트에 통합하면 LLM이 알아서 라우팅·연쇄한다. 폴백과 입력 검증을 더하면 진짜 서비스가 된다.</strong></p>
+</blockquote>
+<hr/>
+<h2 id="1">🎉 1부 종합 완료</h2>
+<p>12강으로 <strong>에이전트의 기본기(도구 활용)</strong> 가 완성됐습니다. 이제 여러분은 도구를 만들고, 통합하고, 실패에 대비하는 법까지 압니다. 진짜 상담봇의 뼈대가 갖춰진 거죠.</p>
+<h2 id="rag">다음 강 예고 (RAG 시작)</h2>
+<p>13강부터는 <strong>RAG(검색 증강 생성)</strong> 를 배웁니다. 지금까지 도구는 "구조화된 데이터(CSV)"를 다뤘습니다. 하지만 환불 정책, 제품 매뉴얼 같은 <strong>문서(PDF)</strong> 는 어떻게 다룰까요? RAG는 문서를 검색해 그 내용을 근거로 답하는 기술입니다. 13강에서 RAG의 개념과 첫 단계(문서 로드·청킹)를 배웁니다.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="07_도구-입력-검증.html"><span class="lbl">← 이전 절</span>07. 도구 입력 검증</a><a class="nxt" href="09_실습문제와-해답.html"><span class="lbl">다음 절 →</span>09. 실습문제와 해답</a></div>
+</div>
+</body></html>

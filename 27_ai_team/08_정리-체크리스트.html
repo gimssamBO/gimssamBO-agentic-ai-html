@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제27강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제27강 · ai team</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제27강 · ai team — 세부 목차</b><a class="" href="01_if문-대신-그래프로-흐름-선언.html">01. if문 대신 그래프로 흐름 선언</a><a class="" href="02_Researcher-Analyst-Writer-파이프라인.html">02. Researcher Analyst Writer 파이프라인</a><a class="" href="03_공유상태와-그래프-구성요소.html">03. 공유상태와 그래프 구성요소</a><a class="" href="04_따라하기-3개-노드-에이전트.html">04. 따라하기 3개 노드 에이전트</a><a class="" href="05_따라하기-StateGraph로-연결.html">05. 따라하기 StateGraph로 연결</a><a class="" href="06_조건부-분기로-품질-재검토.html">06. 조건부 분기로 품질 재검토</a><a class="" href="07_중간-산출물-저장.html">07. 중간 산출물 저장</a><a class="cur" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="_2">이번 강에서 배운 것</h2>
+<p>27강은 <strong>여러 에이전트를 LangGraph <code>StateGraph</code>로 잇는</strong> AI 팀 협업을 다뤘습니다.</p>
+<ul>
+<li><strong>왜 그래프인가 (01번)</strong> — <code>for</code>/<code>if</code>로 흐름을 제어하면 갈림길이 늘수록 스파게티가 됩니다. <code>StateGraph</code>는 흐름을 <strong>노드·엣지로 선언</strong>해 한눈에 보이게 합니다. <strong>일직선이면 <code>for</code>, 갈림길이면 StateGraph.</strong></li>
+<li><strong>파이프라인 (02번)</strong> — <strong>Researcher(사실) → Analyst(분석) → Writer(보고서)</strong> 직렬 협업. 각 역할은 <strong>앞 단계 산출물만</strong> 받습니다(느슨한 결합).</li>
+<li><strong>공유 상태 (03번)</strong> — <code>TypedDict</code>로 State의 칸을 정의하고, 노드는 <strong>바꿀 칸만 dict로 반환</strong>하면 LangGraph가 병합합니다. 그래프 4요소: <strong>State·노드·엣지·START/END</strong>.</li>
+<li><strong>노드 정의 (04번)</strong> — 세 역할 모두 "앞 칸 꺼내기 → <code>llm.invoke</code> → 자기 칸 반환" 패턴. <code>SystemMessage</code>로 역할 고정.</li>
+<li><strong>그래프 연결 (05번)</strong> — <code>add_node</code> → <code>add_edge</code> → <code>compile</code>. <code>stream(stream_mode="values")</code> <strong>한 번</strong>으로 진행과 결과를 함께(invoke 또 부르면 비용 2배).</li>
+<li><strong>조건부 분기 (06번)</strong> — <code>add_conditional_edges</code>로 <strong>검수 후 갈림길</strong>(부실→재조사 루프 / 충분→진행). <code>retries</code> 카운터 + <code>MAX_RETRIES</code>로 무한루프 방지. <strong>여기서 그래프의 진가가 드러남.</strong></li>
+<li><strong>중간 산출물 저장 (07번)</strong> — 저장 래퍼 노드로 각 단계 결과를 <code>reports/</code>에 파일로 남겨 디버깅·재현·감사에 활용.</li>
+</ul>
+<hr/>
+<h2 id="_3">핵심 코드 한눈에</h2>
+<pre><code class="language-python"># 1) 공유 상태
+class TeamState(TypedDict):
+    raw: str; analysis: str; report: str
+
+# 2) 노드 = 앞 칸 꺼내 → invoke → 자기 칸 반환
+def analyst(state) -&gt; dict:
+    out = llm.invoke([SystemMessage("너는 분석가다..."),
+                      HumanMessage(f"[사실]\n{state['raw']}")]).content
+    return {"analysis": out}
+
+# 3) 그래프 = 노드 등록 + 엣지 연결 + 컴파일
+g = StateGraph(TeamState)
+g.add_node("researcher", researcher); g.add_node("analyst", analyst); g.add_node("writer", writer)
+g.add_edge(START, "researcher"); g.add_edge("researcher", "analyst")
+g.add_edge("analyst", "writer"); g.add_edge("writer", END)
+team = g.compile()
+
+# 4) 조건부 분기 (06번)
+g.add_conditional_edges("check", route_after_check, {"redo": "redo", "ok": "writer"})
+
+# 5) 실행 — stream 한 번
+final = initial
+for state in team.stream(initial, stream_mode="values"):
+    final = state
+</code></pre>
+<hr/>
+<h2 id="_4">설치 라이브러리</h2>
+<pre><code class="language-bash">conda activate agentic
+pip install -U langgraph langchain-google-genai
+</code></pre>
+<ul>
+<li><code>langgraph</code>: <code>StateGraph</code>, <code>START</code>, <code>END</code>, <code>add_conditional_edges</code> — 이번 강의 핵심.</li>
+<li><code>langchain-google-genai</code>: <code>get_chat</code>이 내부에서 쓰는 Gemini 챗 모델.</li>
+<li>데이터: <code>data/competitor_data.csv</code>. (07번 저장 실습은 <code>reports/</code> 폴더를 자동 생성)</li>
+</ul>
+<hr/>
+<h2 id="_5">체크리스트</h2>
+<ul>
+<li>[ ] <code>for</code> 루프 대신 StateGraph를 쓰는 이유(흐름 선언·갈림길)를 설명할 수 있다.</li>
+<li>[ ] Researcher/Analyst/Writer가 <strong>앞 단계 산출물만</strong> 받는 구조를 안다.</li>
+<li>[ ] <code>TypedDict</code> State에서 노드가 <strong>바꿀 칸만 반환</strong>한다는 규칙을 안다.</li>
+<li>[ ] <code>add_node</code>·<code>add_edge</code>·<code>compile</code>로 파이프라인을 조립할 수 있다.</li>
+<li>[ ] <code>stream</code>을 <strong>한 번만</strong> 써야 비용이 2배 안 된다는 걸 안다.</li>
+<li>[ ] <code>add_conditional_edges</code>로 분기·루프를 만들고 <strong>무한루프를 막을</strong> 수 있다.</li>
+</ul>
+<hr/>
+<h2 id="_6">한 줄 핵심</h2>
+<blockquote>
+<p><strong>"흐름이 일직선이면 <code>for</code> 루프, 갈림길이 생기면 StateGraph."</strong> — 노드(작업)와 엣지(연결)로 협업을 선언하면, 분기·반복도 한눈에 보인다.</p>
+</blockquote>
+<hr/>
+<h2 id="28">다음 강 예고 — 28강</h2>
+<p>27강까지로 <strong>개별 기술</strong>(도구·RAG·메모리·멀티에이전트·워크플로우)을 다 갖췄습니다. 28강부터는 이걸 <strong>실제 제품으로 묶는 설계</strong>로 넘어갑니다. "바로 코딩"이 왜 망하는지, 요구사항을 어떻게 기능으로 분해하는지, <strong>RAG·멀티에이전트를 언제 도입할지 트레이드오프</strong>로 판단하는 법을 배웁니다. 즉, <strong>"만들 줄 안다"에서 "무엇을 어떻게 만들지 정한다"</strong> 로 한 단계 올라섭니다.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="07_중간-산출물-저장.html"><span class="lbl">← 이전 절</span>07. 중간 산출물 저장</a><a class="nxt" href="09_실습문제와-해답.html"><span class="lbl">다음 절 →</span>09. 실습문제와 해답</a></div>
+</div>
+</body></html>

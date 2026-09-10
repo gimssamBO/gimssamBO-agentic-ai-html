@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제20강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제20강 · long term memory</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제20강 · long term memory — 세부 목차</b><a class="" href="01_어제-말한걸-기억-못하는-봇.html">01. 어제 말한걸 기억 못하는 봇</a><a class="" href="02_단기기억-vs-장기기억.html">02. 단기기억 vs 장기기억</a><a class="" href="03_도구로서의-장기기억.html">03. 도구로서의 장기기억</a><a class="" href="04_따라하기-프로필-영속-저장-도구.html">04. 따라하기 프로필 영속 저장 도구</a><a class="" href="05_따라하기-새-세션에서도-기억.html">05. 따라하기 새 세션에서도 기억</a><a class="" href="06_SQLite로-장기기억-옮기기.html">06. SQLite로 장기기억 옮기기</a><a class="cur" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="20">20강에서 배운 것</h2>
+<p>20강에서는 사용자 정보를 영속 저장하는 장기 기억을 만들었습니다.</p>
+<ul>
+<li><strong>단기 vs 장기</strong>: 단기는 세션 맥락(메모리), 장기는 사용자 프로필(파일·DB).</li>
+<li><strong>도구로서의 장기 기억</strong>: get_profile(읽기)·update_profile(쓰기)로 구현.</li>
+<li><strong>영속성</strong>: 새 에이전트(재시작)에도 파일에 쓴 정보가 살아남음.</li>
+<li><strong>저장 계층 교체</strong>: 도구 시그니처 고정, 내부만 JSON→SQLite(의존성 역전).</li>
+<li><strong>SQLite 보안</strong>: 컬럼명 화이트리스트, 값 <code>?</code> 파라미터(인젝션 방지).</li>
+</ul>
+<hr/>
+<h2 id="_2">한눈에 보는 핵심 코드</h2>
+<pre><code class="language-python">import json
+from langchain_core.tools import tool
+from langchain.agents import create_agent
+from langgraph.checkpoint.memory import InMemorySaver
+
+@tool
+def get_profile(customer_id: str) -&gt; str:
+    """프로필 조회(읽기)."""
+    return json.dumps(_load().get(customer_id, {}), ensure_ascii=False)
+
+@tool
+def update_profile(customer_id: str, field: str, value: str) -&gt; str:
+    """프로필 갱신(쓰기, 영속)."""
+    data = _load(); data.setdefault(customer_id, {})[field] = value
+    _save(data)                      # ← 파일에 쓰기 = 장기 기억
+    return f"저장했습니다."
+
+# 장기(도구) + 단기(InMemorySaver) 함께
+agent = create_agent(llm, tools=[get_profile, update_profile],
+                     system_prompt="선호 말하면 update_profile로 저장, 응대 전 get_profile로 확인",
+                     checkpointer=InMemorySaver())
+</code></pre>
+<hr/>
+<h2 id="_3">이 강에서 설치한 라이브러리</h2>
+<p>추가 설치 없음 — <code>json</code>, <code>sqlite3</code>는 파이썬 표준 라이브러리입니다.</p>
+<hr/>
+<h2 id="_4">기억의 전체 그림</h2>
+<table>
+<thead>
+<tr>
+<th>구분</th>
+<th>단기 기억 (19강)</th>
+<th>장기 기억 (20강)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>저장소</td>
+<td>InMemorySaver</td>
+<td>파일/DB (JSON → SQLite)</td>
+</tr>
+<tr>
+<td>기억 대상</td>
+<td>"방금 말한 것"</td>
+<td>"사용자 프로필"</td>
+</tr>
+<tr>
+<td>지속성</td>
+<td>재시작 시 소멸</td>
+<td>영속 (재시작에도 유지)</td>
+</tr>
+</tbody>
+</table>
+<p>→ <strong>둘을 함께 쓰면 진짜 상담봇</strong>이 됩니다.</p>
+<hr/>
+<h2 id="_5">체크리스트</h2>
+<ul>
+<li>[ ] 단기 기억(세션)과 장기 기억(영속)의 차이를 표로 설명할 수 있다.</li>
+<li>[ ] <code>get_profile</code>/<code>update_profile</code> 도구로 파일에 읽고 쓰는 장기 기억을 구현했다.</li>
+<li>[ ] 에이전트를 새로 만들어도 파일에 저장된 정보가 유지됨을 확인했다.</li>
+<li>[ ] 저장 계층(JSON→SQLite) 교체 시 도구 시그니처는 유지함을 안다.</li>
+<li>[ ] SQLite에서 컬럼명 화이트리스트·<code>?</code> 파라미터로 인젝션을 막는다.</li>
+</ul>
+<hr/>
+<h2 id="_6">한 줄 핵심</h2>
+<blockquote>
+<p><strong>단기 기억은 세션 맥락(메모리, 휘발), 장기 기억은 사용자 프로필(파일·DB, 영속). 도구로 구현하면 저장소를 자유롭게 갈아탈 수 있다.</strong></p>
+</blockquote>
+<hr/>
+<h2 id="3rag">🎉 3부(RAG·메모리)를 마치며</h2>
+<p>13~20강으로 <strong>지식(RAG)과 기억(메모리)</strong> 을 다루는 능력이 완성됐습니다. 이제 에이전트는 사내 문서를 검색하고, 대화 맥락을 유지하고, 사용자를 영구히 기억합니다. 진짜 사람 같은 상담봇이죠.</p>
+<h2 id="4">다음 강 예고 (4부 시작)</h2>
+<p>21강부터 <strong>4부</strong>입니다. 지금까지 에이전트는 "자유롭게 도구를 골라" 일했습니다. 하지만 어떤 업무는 <strong>정해진 순서</strong>가 중요합니다(예: 티켓 분류 → 우선순위 → 배정). 21강 <strong>Agent Workflow</strong>에서는 LangGraph의 <code>StateGraph</code>로 "정해진 흐름"을 가진 워크플로우를 만듭니다. 자유로운 에이전트와 정해진 워크플로우, 둘의 차이를 배웁니다.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_SQLite로-장기기억-옮기기.html"><span class="lbl">← 이전 절</span>06. SQLite로 장기기억 옮기기</a><a class="nxt" href="08_실습문제와-해답.html"><span class="lbl">다음 절 →</span>08. 실습문제와 해답</a></div>
+</div>
+</body></html>

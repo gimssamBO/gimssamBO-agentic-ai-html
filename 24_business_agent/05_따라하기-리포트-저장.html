@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제24강 — 따라하기 — 리포트 저장</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제24강 · business agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제24강 · business agent — 세부 목차</b><a class="" href="01_숫자는-있는데-보고서가-없다.html">01. 숫자는 있는데 보고서가 없다</a><a class="" href="02_계산은-코드-서술은-LLM.html">02. 계산은 코드 서술은 LLM</a><a class="" href="03_따라하기-핵심수치-집계.html">03. 따라하기 핵심수치 집계</a><a class="" href="04_따라하기-LLM에게-서술-맡기기.html">04. 따라하기 LLM에게 서술 맡기기</a><a class="cur" href="05_따라하기-리포트-저장.html">05. 따라하기 리포트 저장</a><a class="" href="06_예외처리-데이터-누락-대응.html">06. 예외처리 데이터 누락 대응</a><a class="" href="07_차트로-시각화-더하기.html">07. 차트로 시각화 더하기</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">따라하기 — 리포트 저장</h1>
+<h2 id="_2">목표</h2>
+<p>서술된 리포트를 <strong>월별 파일명으로 저장</strong>하고, 집계→서술→저장 전체를 <strong>단일 진입점 함수</strong>로 묶어 배치·API에서 한 번에 호출할 수 있게 만듭니다.</p>
+<hr/>
+<h2 id="1">1. 저장 함수</h2>
+<p><code>code/ch24_business.py</code>에 <code>save_report</code>를 추가합니다.</p>
+<pre><code class="language-python">def save_report(facts: dict, body: str) -&gt; pathlib.Path:
+    """리포트를 reports/ 폴더에 월별 파일명으로 저장하고 경로를 반환한다."""
+    out_dir = pathlib.Path(__file__).resolve().parent.parent / "reports"
+    out_dir.mkdir(exist_ok=True)        # reports/ 폴더가 없으면 생성
+    path = out_dir / f"monthly_sales_{facts['month']}.md"
+    header = (f"# {facts['month']} 월간 매출 보고서\n\n"
+              f"&gt; 생성일: {datetime.date.today().isoformat()} (자동 생성)\n\n")
+    path.write_text(header + body, encoding="utf-8")
+    return path
+</code></pre>
+<p><strong>짚어 둘 점</strong></p>
+<ul>
+<li><code>f"monthly_sales_{facts['month']}.md"</code> — <strong>월별 파일명</strong>(<code>monthly_sales_2026-05.md</code>). 달마다 다른 파일이라 덮어쓰이지 않고 누적됩니다.</li>
+<li><code>header</code> — 제목·생성일을 본문 위에 붙여 완성된 문서로.</li>
+<li><code>encoding="utf-8"</code> — 한글 보존(22·23강과 동일 원칙).</li>
+<li>22강 리서치 리포트와 같은 패턴이지만, 파일명이 <strong>월 기준</strong>이라 매월 리포트가 차곡차곡 쌓이죠.</li>
+</ul>
+<hr/>
+<h2 id="2-generate_monthly_report">2. 단일 진입점 — generate_monthly_report</h2>
+<p>집계→서술→저장을 <strong>한 함수</strong>로 묶습니다. 배치·API는 이 함수 하나만 부르면 됩니다.</p>
+<pre><code class="language-python">def generate_monthly_report() -&gt; pathlib.Path:
+    """집계 → 서술 → 저장 전체 파이프라인. 배치/엔드포인트에서 이 함수 하나만 호출하면 된다.
+
+    [왜 단일 진입점] 매월 1일 자동 실행 같은 배치는 이 함수 하나만 부르면 끝나도록
+    파이프라인을 한 함수로 묶어 운영을 단순화한다.
+    """
+    facts = load_facts()            # 1) 코드로 정확히 집계
+    body = write_report(facts)      # 2) LLM이 서술
+    return save_report(facts, body) # 3) .md 저장
+</code></pre>
+<p>세 함수(<code>load_facts</code>/<code>write_report</code>/<code>save_report</code>)를 순서대로 호출할 뿐입니다. 하지만 이 <strong>한 함수로 묶는 것</strong>이 운영을 단순하게 만들죠.</p>
+<pre><code class="language-text">[배치 스케줄러]   매월 1일 → generate_monthly_report()  ← 이 한 줄이면 끝
+[API 핸들러]      GET /reports/monthly → generate_monthly_report()
+</code></pre>
+<p>cron이든 웹 핸들러든 <strong><code>generate_monthly_report()</code> 한 줄</strong>만 부르면 리포트가 생성됩니다. 내부 단계(집계·서술·저장)는 신경 안 써도 되죠.</p>
+<hr/>
+<h2 id="3">3. 전체 실행</h2>
+<pre><code class="language-python">if __name__ == "__main__":
+    facts = load_facts()
+    print("[집계된 핵심 수치]")
+    print(f"  대상 월 : {facts['month']}")
+    print(f"  총매출  : {facts['total']:,}원 (전월 대비 {facts['growth_pct']}%)")
+    print(f"  1위     : {facts['top_category']} {facts['top_value']:,}원")
+
+    print("\n[LLM 리포트 생성 중...]")
+    body = write_report(facts)
+    path = save_report(facts, body)
+
+    print("=" * 60)
+    print(body)
+    print("=" * 60)
+    print("[저장 완료]", path)
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[집계된 핵심 수치]
+  대상 월 : 2026-05
+  총매출  : 12,404,300원 (전월 대비 27.1%)
+  1위     : 전자기기 4,449,850원
+
+[LLM 리포트 생성 중...]
+============================================================
+## 총평
+2026년 5월 총매출은 12,404,300원으로 전월 대비 27.1% 증가하며 ...
+## 카테고리 분석
+- 전자기기가 4,449,850원으로 전체를 견인했고 ...
+## 다음 달 제언
+전자기기·가전의 호조를 ...
+============================================================
+[저장 완료] /Users/.../reports/monthly_sales_2026-05.md
+</code></pre>
+<hr/>
+<h2 id="4">4. 저장된 파일 확인</h2>
+<pre><code class="language-bash">cat reports/monthly_sales_2026-05.md
+</code></pre>
+<pre><code class="language-markdown"># 2026-05 월간 매출 보고서
+
+&gt; 생성일: 2026-06-07 (자동 생성)
+
+## 총평
+2026년 5월 총매출은 12,404,300원으로 ...
+
+## 카테고리 분석
+...
+
+## 다음 달 제언
+...
+</code></pre>
+<p>제목·생성일 헤더 + 본문이 합쳐진 <strong>완성된 경영 보고서</strong>입니다. 이대로 슬랙에 올리거나, HTML/PDF로 변환하거나, 메일로 보낼 수 있죠.</p>
+<hr/>
+<h2 id="5">5. 운영 안정성 더하기 (예고)</h2>
+<p>이 기본 파이프라인을 실무에 올리려면 <strong>방어 로직</strong>이 더 필요합니다.</p>
+<pre><code class="language-text">- 집계 단계 예외: 파일 없음·컬럼 변경 → 06번에서 다룸
+- 생성 실패 시: 직전 달 리포트로 폴백하거나 알림 발송
+- 같은 달 재요청: 캐싱으로 저장된 리포트 반환 (29강)
+</code></pre>
+<blockquote>
+<p><strong>운영 팁:</strong> <code>generate_monthly_report()</code> 한 함수만 cron(매월 1일)이나 API 핸들러에 연결하면 됩니다. 집계 단계에서 예외(파일 없음·컬럼 변경)를 잡아 로그를 남기고, 생성 실패 시 직전 달 리포트로 폴백하거나 알림을 보내는 방어 로직을 더하면 운영 안정성이 올라갑니다.</p>
+</blockquote>
+<p>다음 절(06번)에서 바로 이 <strong>예외 처리</strong>를 구현합니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li><code>save_report()</code>: <strong>월별 파일명</strong>(<code>monthly_sales_YYYY-MM.md</code>)으로 저장 → 누적.</li>
+<li>헤더(제목·생성일) + 본문, <code>encoding="utf-8"</code>로 한글 보존.</li>
+<li><code>generate_monthly_report()</code>: 집계→서술→저장을 <strong>단일 진입점</strong>으로 묶음.</li>
+<li>배치·API는 이 <strong>한 함수만 호출</strong> → 운영 단순화.</li>
+<li>저장된 <code>.md</code>는 슬랙·메일·HTML/PDF로 활용.</li>
+<li>다음 절에서 데이터 누락·컬럼 변경에 대한 예외 처리를 더합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="04_따라하기-LLM에게-서술-맡기기.html"><span class="lbl">← 이전 절</span>04. 따라하기 LLM에게 서술 맡기기</a><a class="nxt" href="06_예외처리-데이터-누락-대응.html"><span class="lbl">다음 절 →</span>06. 예외처리 데이터 누락 대응</a></div>
+</div>
+</body></html>

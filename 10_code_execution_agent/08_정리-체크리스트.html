@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제10강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제10강 · code execution agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제10강 · code execution agent — 세부 목차</b><a class="" href="01_LLM은-계산기가-아니다.html">01. LLM은 계산기가 아니다</a><a class="" href="02_코드-생성-실행-루프.html">02. 코드 생성 실행 루프</a><a class="" href="03_안전한-실행-네임스페이스-제한.html">03. 안전한 실행 네임스페이스 제한</a><a class="" href="04_따라하기-pandas-식-실행-도구.html">04. 따라하기 pandas 식 실행 도구</a><a class="" href="05_따라하기-자연어로-집계-질문.html">05. 따라하기 자연어로 집계 질문</a><a class="" href="06_코드-실행-실패시-재시도.html">06. 코드 실행 실패시 재시도</a><a class="" href="07_보안-주의사항과-실무-대안.html">07. 보안 주의사항과 실무 대안</a><a class="cur" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="10">10강에서 배운 것</h2>
+<p>10강에서는 LLM이 코드를 생성하고 실행해 <strong>정확한 계산</strong>을 하게 만들었습니다.</p>
+<ul>
+<li><strong>LLM은 계산기가 아니다</strong>: 큰 데이터 집계에 약함 → 코드에게 맡긴다.</li>
+<li><strong>생성-실행 루프</strong>: ① LLM 코드 생성 → ② 도구 실행 → ③ LLM 해석.</li>
+<li><strong>안전한 실행</strong>: 빌트인 차단(<code>{"__builtins__": {}}</code>) + 화이트리스트(<code>df, pd</code>).</li>
+<li><strong>자가교정</strong>: 코드 실패 시 오류를 피드백해 스스로 고친다.</li>
+<li><strong>보안</strong>: 화이트리스트는 완벽하지 않아, 외부 서비스는 샌드박스 필수.</li>
+</ul>
+<hr/>
+<h2 id="_2">한눈에 보는 핵심 코드</h2>
+<pre><code class="language-python">import pandas as pd
+from langchain_core.tools import tool
+from langchain.agents import create_agent
+from common import get_chat, DATA
+
+llm = get_chat(provider="gemini")
+df = pd.read_csv(DATA / "sales_daily.csv")
+
+@tool
+def run_pandas(expr: str) -&gt; str:
+    """일별 매출 df(컬럼: date, sales)에 pandas 식을 실행한다. df, pd 만 사용 가능."""
+    try:
+        result = eval(expr, {"__builtins__": {}}, {"df": df, "pd": pd})  # 안전장치
+    except Exception as e:
+        return f"실행 오류: {e}"
+    return str(result)
+
+agent = create_agent(llm, tools=[run_pandas],
+    system_prompt="너는 데이터 분석가다. 계산은 반드시 run_pandas로 하라.")
+result = agent.invoke({"messages": [{"role": "user", "content": "총 매출은?"}]})
+</code></pre>
+<hr/>
+<h2 id="_3">이 강에서 설치한 라이브러리</h2>
+<pre><code class="language-bash">pip install langchain langchain-google-genai langgraph pandas
+</code></pre>
+<p>새로 설치할 라이브러리는 없습니다(8강에서 설치한 것 사용).</p>
+<hr/>
+<h2 id="_4">체크리스트</h2>
+<ul>
+<li>[ ] LLM이 직접 계산하면 왜 위험한지 설명할 수 있다.</li>
+<li>[ ] "코드 생성 → 실행 → 해석" 루프를 이해했다.</li>
+<li>[ ] <code>eval</code>의 위험과 화이트리스트 네임스페이스 안전장치를 안다.</li>
+<li>[ ] 코드 실패 시 오류를 피드백해 재시도하는 자가교정을 구현했다.</li>
+<li>[ ] 외부 서비스에는 샌드박스가 필요한 이유를 안다.</li>
+</ul>
+<hr/>
+<h2 id="_5">한 줄 핵심</h2>
+<blockquote>
+<p><strong>"무엇을 계산할지는 LLM, 정확한 계산은 코드." LLM이 pandas 식을 만들고 우리가 안전하게 실행해, 정확하고 친절한 분석을 한다.</strong></p>
+</blockquote>
+<hr/>
+<h2 id="1">🎉 1부를 마치며</h2>
+<p>축하합니다! <strong>1부(1~10강)</strong> 를 완주했습니다. 여기까지 배운 것을 돌아봅시다.</p>
+<ul>
+<li><strong>1~4강</strong>: LLM의 두뇌 — 호출, 프롬프트, 추론</li>
+<li><strong>5~7강</strong>: 손발과 심장 — 도구, 도구 선택, ReAct 루프 (raw SDK로 원리 체득)</li>
+<li><strong>8강</strong>: LangChain 도입 — 계획 에이전트</li>
+<li><strong>9~10강</strong>: 실전 도구 — 검색, 코드 실행</li>
+</ul>
+<p>이제 여러분은 <strong>에이전트의 핵심 원리</strong>를 모두 압니다. LLM에 도구를 붙이고, 루프를 돌리고, 안전하게 코드를 실행하는 법까지요.</p>
+<h2 id="2">다음 강 예고 (2부 시작)</h2>
+<p>11강부터 <strong>2부</strong>가 시작됩니다. 11강 <strong>Data Analysis Agent</strong>에서는 10강의 코드 실행을 발전시켜, 실제 주문 데이터를 분석합니다. 특히 <strong>데이터 함정(이상치·결측치)</strong> 을 다루는 실무 기법과, 분석 결과를 <strong>차트로 시각화</strong>하는 법을 배웁니다. 진짜 데이터 분석가처럼요.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="07_보안-주의사항과-실무-대안.html"><span class="lbl">← 이전 절</span>07. 보안 주의사항과 실무 대안</a><a class="nxt" href="09_실습문제와-해답.html"><span class="lbl">다음 절 →</span>09. 실습문제와 해답</a></div>
+</div>
+</body></html>

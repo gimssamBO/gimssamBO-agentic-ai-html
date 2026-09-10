@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제26강 — Planner / Worker 협업 구조</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제26강 · role based agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제26강 · role based agent — 세부 목차</b><a class="" href="01_무엇을-할지와-어떻게-할지-나누기.html">01. 무엇을 할지와 어떻게 할지 나누기</a><a class="cur" href="02_Planner-Worker-협업구조.html">02. Planner Worker 협업구조</a><a class="" href="03_Supervisor-vs-Planner-Worker.html">03. Supervisor vs Planner Worker</a><a class="" href="04_따라하기-Planner-작업-분해.html">04. 따라하기 Planner 작업 분해</a><a class="" href="05_따라하기-Worker-작업-실행.html">05. 따라하기 Worker 작업 실행</a><a class="" href="06_따라하기-오케스트레이터-취합.html">06. 따라하기 오케스트레이터 취합</a><a class="" href="07_Worker-실패-처리와-재시도.html">07. Worker 실패 처리와 재시도</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="planner-worker">Planner / Worker 협업 구조</h1>
+<h2 id="_1">한 줄 요약</h2>
+<p>Planner는 전략가(무엇을 할지), Worker는 실무자(어떻게 할지)입니다. Planner가 작업을 <strong>JSON 리스트</strong>로 쪼개면 Worker가 <strong>한 작업씩</strong> 충실히 수행하고, 마지막에 산출물을 <strong>취합</strong>합니다. 에이전트 간 데이터는 <strong>구조화 출력(JSON)</strong> 으로 안전하게 주고받습니다.</p>
+<hr/>
+<h2 id="1">1. 세 단계 구조</h2>
+<p><strong>캠페인 1건</strong> 이 세 단계를 거칩니다.</p>
+<ol>
+<li><strong>[Planner]</strong> 전략가 — 실행은 안 하고 '무엇을 할지' 결정 → <code>["타깃 분석", "카피 작성", "예산 배분"]</code> (구조화 출력 JSON)</li>
+<li><strong>[Worker]</strong> 실무자 — 받은 '한 작업만' 충실히 수행(반복): 작업1 → 산출물1, 작업2 → 산출물2, 작업3 → 산출물3</li>
+<li><strong>[취합]</strong> Worker 산출물을 모아 최종 실행안으로 정리</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>역할</th>
+<th>하는 일</th>
+<th>특징</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Planner</td>
+<td>무엇을 할지 결정 → 하위 작업 리스트</td>
+<td>실행 안 함, 계획만</td>
+</tr>
+<tr>
+<td>Worker</td>
+<td>받은 한 작업만 수행</td>
+<td>재사용·병렬화 가능</td>
+</tr>
+<tr>
+<td>취합</td>
+<td>산출물을 모아 정리</td>
+<td>최종 결과 생성</td>
+</tr>
+</tbody>
+</table>
+<hr/>
+<h2 id="2-planner">2. Planner — 전략가</h2>
+<p>Planner는 <strong>실행하지 않습니다.</strong> 오직 "무엇을 할지"만 정하죠.</p>
+<pre><code class="language-python">PLANNER_SYSTEM = (
+    "너는 마케팅 캠페인 '기획 설계자(Planner)'다. "
+    "주어진 캠페인 브리프를 보고, 실행에 필요한 하위 작업을 3~4개로 쪼개라. "
+    "작업은 서로 겹치지 않게, 한 문장 명령형으로 작성하라. 실행은 하지 마라."  # ← 실행 금지!
+)
+</code></pre>
+<p>프롬프트의 <strong>"실행은 하지 마라"</strong> 가 핵심입니다. Planner가 욕심내서 직접 카피까지 쓰면 안 됩니다 — 쪼개기만 하고 실행은 Worker에게 넘겨야 역할 분리가 유지되죠. 또 <strong>"서로 겹치지 않게"</strong> 로 작업 중복을 막고, <strong>"한 문장 명령형"</strong> 으로 Worker가 받기 좋은 형태를 강제합니다.</p>
+<hr/>
+<h2 id="3-worker">3. Worker — 실무자</h2>
+<p>Worker는 <strong>받은 한 작업만</strong> 깊이 수행합니다.</p>
+<pre><code class="language-python">WORKER_SYSTEM = (
+    "너는 마케팅 '실무 작업자(Worker)'다. "
+    "주어진 캠페인 브리프 맥락에서, 지정된 '하나의 작업'만 구체적으로 수행하라. "  # ← 한 작업만!
+    "결과는 5줄 이내로 실무에 바로 쓸 수 있게 작성하라."
+)
+</code></pre>
+<p><strong>"지정된 하나의 작업만"</strong> 이 핵심입니다. Worker는 전체 캠페인을 보지 않고, <strong>자기에게 주어진 작업 하나</strong>에만 집중하죠. 그래서:</p>
+<pre><code class="language-text">- 같은 Worker 함수를 작업마다 재사용 (work(brief, 작업1), work(brief, 작업2)...)
+- 작업이 독립적이라 병렬 실행 가능
+- 한 작업 실패해도 그것만 재시도 (07번)
+</code></pre>
+<p>Worker는 캠페인 브리프(맥락)와 자기 작업 하나를 받아 결과를 냅니다. 맥락을 주는 건 "전체 그림 안에서 이 작업을 하라"는 뜻이죠.</p>
+<hr/>
+<h2 id="4">4. 에이전트 간 데이터는 "구조화"로</h2>
+<p>가장 중요한 설계 포인트입니다. Planner가 작업을 <strong>자연어 문단</strong>으로 주면 Worker에게 넘길 때 깨집니다.</p>
+<pre><code class="language-text">[나쁜 예 — 자유 텍스트]
+Planner: "먼저 타깃을 분석하고, 그 다음 카피를 쓰고, 예산도 배분하세요."
+   → 코드가 이 문장을 어떻게 작업 리스트로 쪼개지? (파싱 지옥)
+
+[좋은 예 — 구조화 출력]
+Planner: ["타깃 분석", "카피 작성", "예산 배분"]   (JSON list)
+   → for task in subtasks: work(task)  (바로 반복 가능!)
+</code></pre>
+<p>그래서 Planner 출력을 <strong>JSON 리스트로 강제</strong>합니다(8강 <code>with_structured_output</code>).</p>
+<pre><code class="language-python">from pydantic import BaseModel, Field
+
+class Plan(BaseModel):
+    """Planner가 만드는 실행 계획(구조화 출력 스키마)."""
+    subtasks: list[str] = Field(description="이 캠페인을 위해 필요한 하위 작업 3~4개")
+</code></pre>
+<p><code>list[str]</code>로 강제하면, LLM이 무슨 말을 하든 결과가 <strong>리스트</strong>로 보장됩니다. 코드는 <code>for task in plan.subtasks</code>로 바로 돌리죠. <strong>파싱 실수가 사라집니다.</strong></p>
+<p>이건 백엔드에서 서비스 간 통신에 <strong>JSON 스키마(DTO)</strong> 를 쓰는 것과 똑같은 원칙입니다 — "자유 텍스트 말고 정해진 형식으로 주고받자."</p>
+<hr/>
+<h2 id="5-temperature">5. 온도(temperature) 분리</h2>
+<p>Planner와 Worker는 <strong>다른 temperature</strong>를 씁니다.</p>
+<pre><code class="language-python">llm_plan = get_chat(temperature=0)      # 계획은 일관성·재현성이 중요 → 0
+llm_work = get_chat(temperature=0.5)    # 카피 등 창의 작업은 다양성이 도움 → 0.5
+</code></pre>
+<pre><code class="language-text">Planner (temperature=0):
+   계획은 매번 비슷해야 함 (재현성) → 무작위성 제거
+Worker (temperature=0.5):
+   카피·아이디어는 창의성·다양성이 필요 → 약간 높임
+</code></pre>
+<p>같은 LLM이라도 <strong>역할에 맞게 온도를 조절</strong>합니다. 분류·계획은 0, 창작은 0.5~0.7 — 이 감각이 중요하죠(2강 temperature).</p>
+<hr/>
+<h2 id="6">6. 취합 — 산출물 모으기</h2>
+<p>Worker들의 산출물을 모아 하나의 문서로 정리합니다.</p>
+<pre><code class="language-python">report = [f"# 캠페인 실행안\n\n&gt; {brief_text}\n"]
+for i, (task, output) in enumerate(outputs, 1):
+    report.append(f"## {i}. {task}\n{output}\n")
+final = "\n".join(report)
+</code></pre>
+<p>각 작업을 <code>## 1. 타깃 분석</code>, <code>## 2. 카피 작성</code>처럼 <strong>섹션으로</strong> 묶어 읽기 좋은 실행안을 만듭니다. Planner가 쪼갠 작업이 그대로 <strong>문서의 목차</strong>가 되는 셈이죠.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li><strong>Planner</strong>(전략가): 실행 안 하고 작업을 <strong>JSON 리스트로 분해</strong>("실행 금지" 명시).</li>
+<li><strong>Worker</strong>(실무자): 받은 <strong>한 작업만</strong> 깊이 수행(재사용·병렬·재시도 유리).</li>
+<li>에이전트 간 데이터는 <strong>구조화 출력</strong>(<code>list[str]</code>)으로 → 파싱 실수 제거(DTO 원칙).</li>
+<li>온도 분리: Planner는 <strong>0</strong>(재현성), Worker는 <strong>0.5</strong>(창의성).</li>
+<li>취합: Worker 산출물을 <strong>섹션으로 묶어</strong> 최종 실행안.</li>
+<li>다음 절에서 Supervisor(25강)와 Planner/Worker를 비교합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="01_무엇을-할지와-어떻게-할지-나누기.html"><span class="lbl">← 이전 절</span>01. 무엇을 할지와 어떻게 할지 나누기</a><a class="nxt" href="03_Supervisor-vs-Planner-Worker.html"><span class="lbl">다음 절 →</span>03. Supervisor vs Planner Worker</a></div>
+</div>
+</body></html>

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제18강 — 따라하기 — 정책 검색 도구 (RAG)</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제18강 · rag tool agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제18강 · rag tool agent — 세부 목차</b><a class="" href="01_문서검색과-실시간데이터를-한-에이전트에.html">01. 문서검색과 실시간데이터를 한 에이전트에</a><a class="" href="02_모든-능력을-도구로-통일.html">02. 모든 능력을 도구로 통일</a><a class="" href="03_멀티스텝-처리.html">03. 멀티스텝 처리</a><a class="" href="04_도구-설계-원칙.html">04. 도구 설계 원칙</a><a class="cur" href="05_따라하기-정책검색-도구.html">05. 따라하기 정책검색 도구</a><a class="" href="06_따라하기-실시간-데이터-도구.html">06. 따라하기 실시간 데이터 도구</a><a class="" href="07_따라하기-RAG와-도구-동시-사용.html">07. 따라하기 RAG와 도구 동시 사용</a><a class="" href="08_읽기-도구와-쓰기-도구의-차이.html">08. 읽기 도구와 쓰기 도구의 차이</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="rag">따라하기 — 정책 검색 도구 (RAG)</h1>
+<h2 id="_1">목표</h2>
+<p>정책 문서를 인덱싱해 RAG 검색 도구(<code>policy_search</code>)를 만듭니다. 17강의 <code>create_retriever_tool</code>을 그대로 씁니다. 실제 파일은 <code>code/ch18_rag_tool.py</code> 입니다.</p>
+<hr/>
+<h2 id="0">0. 실습 준비 (설치)</h2>
+<pre><code class="language-bash">conda activate agentic
+
+# 18강에 필요한 라이브러리 (앞 강에서 설치했다면 생략 가능)
+pip install langchain langgraph langchain-community langchain-google-genai faiss-cpu pypdf pandas
+</code></pre>
+<p>이번 강은 정책 PDF(<code>환불교환정책.pdf</code>, <code>멤버십정책.pdf</code>)와 <code>orders.csv</code>, <code>products.csv</code>를 씁니다.</p>
+<hr/>
+<h2 id="1-1">1. 데이터는 1회만 로드</h2>
+<p>CSV는 모듈 로드 시 한 번만 읽습니다(11·12강 원칙).</p>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_chat, get_embeddings, DOCS, DATA
+import pandas as pd
+
+# 데이터 1회 로드(요청마다 재로딩 금지)
+orders = pd.read_csv(DATA / "orders.csv")
+products = pd.read_csv(DATA / "products.csv")
+</code></pre>
+<hr/>
+<h2 id="2">2. 정책 검색 도구 만들기</h2>
+<p>17강의 <code>build_retriever</code> + <code>create_retriever_tool</code>을 합쳐, 정책 검색 도구를 만듭니다.</p>
+<pre><code class="language-python">from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import FAISS
+from langchain_core.tools.retriever import create_retriever_tool
+
+def build_policy_tool():
+    """정책 문서를 인덱싱해 RAG 검색 도구로 변환."""
+    docs = []
+    for f in ["환불교환정책.pdf", "멤버십정책.pdf"]:
+        docs.extend(PyPDFLoader(str(DOCS / f)).load())
+    chunks = RecursiveCharacterTextSplitter(
+        chunk_size=500, chunk_overlap=50).split_documents(docs)
+    retriever = FAISS.from_documents(chunks, get_embeddings()).as_retriever(
+        search_kwargs={"k": 4})
+    # retriever를 'policy_search' 도구로 변환 (설명이 라우팅 기준)
+    return create_retriever_tool(
+        retriever,
+        "policy_search",
+        "승승장구몰 환불/교환/멤버십 정책 문서를 검색한다. 정책·절차·규정 질문에 사용.")
+</code></pre>
+<p>13~17강에서 배운 모든 게 이 한 함수에 모였습니다.</p>
+<ul>
+<li><strong>로드·청킹</strong>(13강): PDF → 청크</li>
+<li><strong>임베딩·인덱싱</strong>(14·15강): <code>FAISS.from_documents</code></li>
+<li><strong>retriever</strong>(16강): <code>as_retriever</code></li>
+<li><strong>도구화</strong>(17강): <code>create_retriever_tool</code></li>
+</ul>
+<p>이게 RAG 5단계를 하나의 "도구"로 압축한 모습입니다. 밖에서 보면 그냥 <code>policy_search</code>라는 도구 하나죠(02번 추상화).</p>
+<hr/>
+<h2 id="3-description">3. description이 라우팅 기준</h2>
+<p>도구의 description을 다시 봅시다.</p>
+<pre><code class="language-python">"승승장구몰 환불/교환/멤버십 정책 문서를 검색한다. 정책·절차·규정 질문에 사용."
+</code></pre>
+<p>18강에서는 도구가 <strong>여러 개</strong>(정책+주문+재고)라, 이 설명이 <strong>다른 도구와 구별</strong>되어야 합니다(6강 "비슷한 도구 구분"). "정책·절차·규정 질문에"라고 명시해, 에이전트가 "정책 질문 → 이 도구"라고 라우팅하게 합니다. 주문·재고 도구와 헷갈리지 않도록요.</p>
+<hr/>
+<h2 id="4">4. 도구 단독 테스트</h2>
+<p>만든 도구를 직접 호출해 봅니다.</p>
+<pre><code class="language-python">policy_tool = build_policy_tool()
+print(policy_tool.invoke("환불 절차"))
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">환불은 상품 수령 후 7일 이내 신청 가능하며, 반품 상품이 물류센터에 도착한 후
+영업일 기준 3일 이내에 환불됩니다 ...
+</code></pre>
+<p><code>policy_tool.invoke("환불 절차")</code>가 정책 문서에서 관련 청크를 찾아 돌려줍니다. 이게 RAG 검색이 "도구 하나"로 작동하는 모습입니다. 16강의 복잡한 LCEL 체인이 이제 <code>invoke</code> 한 번으로 줄었죠.</p>
+<hr/>
+<h2 id="5-rag">5. RAG 도구의 위치</h2>
+<pre><code class="language-text">이 도구(policy_search)가 다룰 질문:
+  "환불 며칠?", "교환 절차?", "VIP 등급?"  → 정책 문서
+
+다음 절의 도구들이 다룰 질문:
+  "주문 O000902 상태?"  → get_order_status (DB)
+  "이어버드 재고?"      → get_stock (DB)
+</code></pre>
+<p>policy_search는 "문서에 답이 있는 질문"을 담당합니다. 다음 절에서 "DB에 답이 있는 질문"을 위한 데이터 도구들을 만들고, 07번에서 셋을 한 에이전트에 합칩니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li><code>build_policy_tool</code>은 RAG 5단계를 <strong>하나의 도구</strong>로 압축.</li>
+<li>13~17강(로드·청킹·임베딩·검색·도구화)이 이 함수에 모임.</li>
+<li>description을 명확히 써 <strong>다른 도구와 구별</strong>(라우팅 정확도).</li>
+<li><code>policy_tool.invoke("환불 절차")</code>로 단독 테스트.</li>
+<li>RAG 검색이 이제 <strong>도구 하나</strong>(<code>invoke</code> 한 번)로 작동.</li>
+<li>다음 절에서 실시간 데이터 도구를 만듭니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="04_도구-설계-원칙.html"><span class="lbl">← 이전 절</span>04. 도구 설계 원칙</a><a class="nxt" href="06_따라하기-실시간-데이터-도구.html"><span class="lbl">다음 절 →</span>06. 따라하기 실시간 데이터 도구</a></div>
+</div>
+</body></html>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제17강 — 실습문제와 해답</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제17강 · knowledge agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제17강 · knowledge agent — 세부 목차</b><a class="" href="01_필요할때만-검색하게.html">01. 필요할때만 검색하게</a><a class="" href="02_항상검색-vs-필요할때검색.html">02. 항상검색 vs 필요할때검색</a><a class="" href="03_RAG를-도구로-만들기.html">03. RAG를 도구로 만들기</a><a class="" href="04_따라하기-retriever를-도구로.html">04. 따라하기 retriever를 도구로</a><a class="" href="05_따라하기-일상질문-vs-정책질문.html">05. 따라하기 일상질문 vs 정책질문</a><a class="" href="06_도구-선택-실패와-description-개선.html">06. 도구 선택 실패와 description 개선</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="cur" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">실습문제와 해답</h1>
+<p>직접 코드를 고쳐 보며 17강 내용을 손에 익힙니다. 먼저 <strong>스스로 풀어 본 뒤</strong> 해답을 펼쳐 보세요. (이 실습은 <code>GOOGLE_API_KEY</code>가 필요합니다.)</p>
+<hr/>
+<h2 id="1-retriever">문제 1 — retriever 도구화</h2>
+<p><code>create_retriever_tool</code>로 사내 문서 검색 도구를 만들어 에이전트에 붙이세요.</p>
+<ul>
+<li>사용 파일: <code>data/docs/직원핸드북.pdf</code> 기반 FAISS 인덱스</li>
+<li>기대 결과: "연차 며칠이야?" 질문에 에이전트가 retriever 도구를 호출하고 핸드북 조항을 근거로 답하면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_chat, get_embeddings, DOCS
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import FAISS
+from langchain_core.tools.retriever import create_retriever_tool
+from langchain.agents import create_agent
+
+# 핸드북 인덱싱
+docs = PyPDFLoader(str(DOCS / "직원핸드북.pdf")).load()
+chunks = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50).split_documents(docs)
+retriever = FAISS.from_documents(chunks, get_embeddings()).as_retriever(search_kwargs={"k": 4})
+
+# retriever를 도구로
+handbook_tool = create_retriever_tool(
+    retriever,
+    name="employee_handbook_search",
+    description="승승장구몰 직원핸드북(인사·복지·휴가 규정)을 검색한다. 연차·휴가·근무 규정 질문에 사용.")
+
+agent = create_agent(get_chat(temperature=0), tools=[handbook_tool],
+                     system_prompt="너는 인사 담당자다. 규정은 반드시 도구로 검색해 답하라.")
+
+out = agent.invoke({"messages": [{"role": "user", "content": "연차 며칠이야?"}]})
+for m in out["messages"]:
+    m.pretty_print()
+print("\n검색 사용?", any(getattr(m, "tool_calls", None) for m in out["messages"]))
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">Ai Message — Tool Calls: employee_handbook_search({'query': '연차 휴가 일수'})
+Tool Message — 연차 유급휴가는 근속 1년당 15일이 부여되며 ...
+Ai Message — 연차 유급휴가는 근속 1년당 15일이 부여됩니다.
+
+검색 사용? True
+</code></pre>
+
+
+**해설**: 핸드북을 인덱싱해 retriever를 만들고, `create_retriever_tool`로 도구화한 뒤 에이전트에 붙였습니다. "연차 며칠?" 질문에 에이전트가 핸드북 검색 도구를 호출하고, 그 조항(근속 1년당 15일)을 근거로 답했죠. 17강 전체 흐름(인덱싱 → 도구화 → 에이전트)을 직접 구현한 것입니다.
+
+</details>
+<hr/>
+<h2 id="2-description">문제 2 — 도구 description 튜닝</h2>
+<p>retriever 도구의 <code>description</code>을 모호하게("search") 했을 때와 명확하게("사내 인사·복지 규정 검색") 했을 때 도구 호출 여부를 비교하세요.</p>
+<ul>
+<li>사용 파일: 위와 동일</li>
+<li>기대 결과: 같은 질문에서 description이 명확할 때 도구 호출이 일어남을 로그로 보이면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_chat, get_embeddings, DOCS
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import FAISS
+from langchain_core.tools.retriever import create_retriever_tool
+from langchain.agents import create_agent
+
+docs = PyPDFLoader(str(DOCS / "직원핸드북.pdf")).load()
+chunks = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50).split_documents(docs)
+vs = FAISS.from_documents(chunks, get_embeddings())   # 1회 생성, 공유
+
+def make_agent(description):
+    tool = create_retriever_tool(vs.as_retriever(search_kwargs={"k": 4}),
+                                 name="search_tool", description=description)
+    return create_agent(get_chat(temperature=0), tools=[tool],
+                        system_prompt="너는 승승장구몰 상담원이다.")
+
+def used_search(agent, q):
+    out = agent.invoke({"messages": [{"role": "user", "content": q}]})
+    return any(getattr(m, "tool_calls", None) for m in out["messages"])
+
+q = "연차 휴가 며칠이야?"
+print(f"[모호한 description 'search'] 검색함? {used_search(make_agent('search'), q)}")
+print(f"[명확한 description] 검색함? {used_search(make_agent('승승장구몰 직원 인사·복지·휴가 규정을 검색한다. 휴가·근무 규정 질문에 사용.'), q)}")
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">[모호한 description 'search'] 검색함? False (또는 불안정)
+[명확한 description] 검색함? True
+</code></pre>
+
+
+**해설**: 같은 retriever, 같은 질문인데 **description만** 바꿨더니 검색 여부가 달라졌습니다. `"search"`처럼 모호하면 에이전트가 "이 도구가 휴가 질문에 맞나?" 확신하지 못해 검색을 안 하거나 흔들립니다. `"인사·복지·휴가 규정 검색"`처럼 명확하면 "연차 질문엔 이 도구"라고 정확히 판단해 검색하죠. 06번에서 배운 "description = 라우팅 규칙"을 직접 확인한 실험입니다.
+
+</details>
+<hr/>
+<h2 id="_2">정리</h2>
+<ul>
+<li>문제 1로 <strong>RAG를 도구로 만들어 에이전트에 연결</strong>했습니다.</li>
+<li>문제 2로 <strong>description이 도구 호출을 좌우</strong>함을 확인했습니다.</li>
+</ul>
+<p>이것으로 17강을 마칩니다. 다음 18강에서 문서 검색과 실시간 데이터를 한 에이전트에 합칩니다!</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="07_정리-체크리스트.html"><span class="lbl">← 이전 절</span>07. 정리 체크리스트</a><span class="nxt off"><span class="lbl"> </span> </span></div>
+</div>
+</body></html>

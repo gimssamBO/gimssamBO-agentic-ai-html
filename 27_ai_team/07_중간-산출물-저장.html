@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제27강 — [신규] 중간 산출물 저장</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제27강 · ai team</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제27강 · ai team — 세부 목차</b><a class="" href="01_if문-대신-그래프로-흐름-선언.html">01. if문 대신 그래프로 흐름 선언</a><a class="" href="02_Researcher-Analyst-Writer-파이프라인.html">02. Researcher Analyst Writer 파이프라인</a><a class="" href="03_공유상태와-그래프-구성요소.html">03. 공유상태와 그래프 구성요소</a><a class="" href="04_따라하기-3개-노드-에이전트.html">04. 따라하기 3개 노드 에이전트</a><a class="" href="05_따라하기-StateGraph로-연결.html">05. 따라하기 StateGraph로 연결</a><a class="" href="06_조건부-분기로-품질-재검토.html">06. 조건부 분기로 품질 재검토</a><a class="cur" href="07_중간-산출물-저장.html">07. 중간 산출물 저장</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">[신규] 중간 산출물 저장</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>파이프라인이 만든 <strong>중간 산출물</strong>(정리된 사실·분석·리포트)을 화면에만 띄우고 버리지 말고, <strong>파일로 남깁니다.</strong> 디스크에 저장하면 <strong>디버깅·재현·감사</strong>(누가 무엇을 만들었나)에 큰 도움이 됩니다. 각 노드를 감싸는 <strong>저장 래퍼 노드</strong>로 깔끔하게 구현합니다.</p>
+<blockquote>
+<p>실습 파일: <code>sections/27_ai_team/07_중간-산출물-저장.py</code></p>
+</blockquote>
+<hr/>
+<h2 id="1">1. 왜 중간 산출물을 저장하나</h2>
+<p>지금까지는 최종 <code>report</code>만 화면에 출력하고 끝이었습니다. 중간 결과(<code>raw</code>, <code>analysis</code>)는 사라지죠. 하지만 실무에선 중간물이 중요합니다.</p>
+<pre><code class="language-text">- 디버깅: 리포트가 이상하다 → 분석이 문제였나? 사실 정리가 문제였나?
+          중간물이 있어야 어느 단계에서 틀렸는지 추적 가능
+- 재현:   같은 입력으로 다시 안 돌려도, 저장된 중간물을 재사용
+- 감사:   "이 리포트는 어떤 사실·분석을 근거로 나왔나" 를 파일로 증빙
+- 운영:   산출물을 로그처럼 쌓아두는 운영 자산
+</code></pre>
+<p>특히 LLM 파이프라인은 <strong>매 실행이 비용</strong>이라, 중간물을 저장해두면 다시 안 돌려도 됩니다.</p>
+<hr/>
+<h2 id="2">2. 저장 함수 — 타임스탬프 파일로</h2>
+<p>산출물 한 건을 <code>reports/</code> 폴더에 <strong>타임스탬프 이름</strong>으로 저장합니다.</p>
+<pre><code class="language-python">import datetime
+from common import ROOT          # 프로젝트 루트 경로 (common.py 제공)
+
+REPORTS = ROOT / "reports"       # 산출물을 코드와 분리해 한 폴더에 모음
+
+
+def save_artifact(name: str, content: str, ext: str = "md") -&gt; pathlib.Path:
+    """산출물 한 건을 reports/ 아래 타임스탬프 파일로 저장하고 경로를 반환한다."""
+    REPORTS.mkdir(parents=True, exist_ok=True)        # reports/ 자동 생성
+    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = REPORTS / f"{stamp}_{name}.{ext}"
+    path.write_text(content, encoding="utf-8")        # 한글 안전하게 utf-8
+    print(f"  [저장] {name} → {path}")
+    return path
+</code></pre>
+<ul>
+<li><code>REPORTS.mkdir(parents=True, exist_ok=True)</code> — 폴더가 없으면 만들고, 있으면 그냥 넘어감(에러 안 남).</li>
+<li><code>datetime.now().strftime("%Y%m%d_%H%M%S")</code> — <code>20260607_143022</code> 같은 시각 도장. 실행마다 다른 파일명이 되어 <strong>덮어쓰기 방지</strong>.</li>
+<li><code>write_text(..., encoding="utf-8")</code> — 한글이 깨지지 않게 인코딩 지정.</li>
+</ul>
+<blockquote>
+<p>산출물을 <strong>코드와 섞지 않고</strong> <code>reports/</code> 한 폴더에 모으는 게 포인트입니다. 로그처럼 쌓이는 <strong>운영 자산</strong>으로 관리하는 거죠.</p>
+</blockquote>
+<hr/>
+<h2 id="3">3. 저장 래퍼 노드 — 기존 노드를 감싸기</h2>
+<p>기존 노드를 <strong>수정하지 않고</strong>, 실행 후 저장만 덧붙이는 <strong>래퍼 노드</strong>를 만듭니다.</p>
+<pre><code class="language-python">from ch27_ai_team import (              # 기존 노드 그대로 재사용
+    TeamState as BaseState,
+    researcher, analyst, writer, load_competitor_text,
+)
+
+
+def researcher_save(state: BaseState) -&gt; dict:
+    """Researcher 실행 → 정리된 사실(raw)을 .txt로 저장."""
+    upd = researcher(state)                            # 기존 노드 그대로 실행
+    save_artifact("01_raw", upd["raw"], ext="txt")     # 산출물 저장
+    return upd
+
+
+def analyst_save(state: BaseState) -&gt; dict:
+    """Analyst 실행 → 분석 결과(analysis)를 .md로 저장."""
+    upd = analyst(state)
+    save_artifact("02_analysis", upd["analysis"])
+    return upd
+
+
+def writer_save(state: BaseState) -&gt; dict:
+    """Writer 실행 → 최종 리포트(report)를 .md로 저장."""
+    upd = writer(state)
+    save_artifact("03_report", upd["report"])
+    return upd
+</code></pre>
+<p><strong>설계 포인트</strong> — 각 래퍼는 <code>기존 노드 실행 → 결과 저장 → 결과 반환</code>. 기존 <code>researcher</code>/<code>analyst</code>/<code>writer</code>는 <strong>건드리지 않습니다.</strong> 저장이라는 <strong>부가 기능</strong>을 덧입히는 거죠(데코레이터 패턴의 정신). 파일명에 <code>01_</code>, <code>02_</code>, <code>03_</code> 접두사를 붙여 <strong>단계 순서</strong>를 드러냅니다.</p>
+<hr/>
+<h2 id="4">4. 그래프 조립과 실행</h2>
+<p>흐름은 27강 원본과 <strong>똑같고</strong>, 노드만 저장 래퍼로 바꿉니다.</p>
+<pre><code class="language-python">def build_team():
+    """저장 래퍼 노드로 묶은 파이프라인(흐름은 27강과 동일)."""
+    g = StateGraph(BaseState)
+    g.add_node("researcher", researcher_save)   # 래퍼 노드 등록
+    g.add_node("analyst", analyst_save)
+    g.add_node("writer", writer_save)
+
+    g.add_edge(START, "researcher")
+    g.add_edge("researcher", "analyst")
+    g.add_edge("analyst", "writer")
+    g.add_edge("writer", END)
+    return g.compile()
+
+
+if __name__ == "__main__":
+    team = build_team()
+    initial = {"raw": load_competitor_text(), "analysis": "", "report": ""}
+    print(f"저장 위치: {REPORTS}")
+    final = initial
+    for state in team.stream(initial, stream_mode="values"):
+        final = state
+    print(final["report"])
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">저장 위치: /.../reports
+  [저장] 01_raw → /.../reports/20260607_143022_01_raw.txt
+  [저장] 02_analysis → /.../reports/20260607_143041_02_analysis.md
+  [저장] 03_report → /.../reports/20260607_143103_03_report.md
+# 승승장구몰 경쟁사 분석 리포트 ...
+</code></pre>
+<p>실행 후 <code>reports/</code> 폴더에 <strong>3개 파일</strong>이 단계별로 쌓입니다. 리포트가 이상하면 <code>02_analysis.md</code>를 열어 "분석이 부실했나"를 바로 확인할 수 있죠.</p>
+<hr/>
+<h2 id="5">5. 응용 — 한 폴더로 묶기</h2>
+<p>실행마다 타임스탬프가 달라 파일이 흩어진다면, <strong>실행 단위 폴더</strong>로 묶을 수도 있습니다.</p>
+<pre><code class="language-python"># 한 번 실행 = 한 폴더 (선택적 개선)
+run_dir = REPORTS / datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+run_dir.mkdir(parents=True, exist_ok=True)
+# 이후 save_artifact가 run_dir 아래에 01_raw, 02_analysis, 03_report 저장
+</code></pre>
+<p>이러면 <code>reports/20260607_143022/</code> 안에 그 실행의 산출물 3개가 모입니다. "이 실행의 결과물 묶음"을 한눈에 보기 좋죠. (29강 운영 로깅과 연결되는 발상입니다.)</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>중간 산출물을 <strong>파일로 저장</strong>하면 디버깅·재현·감사·운영에 유리.</li>
+<li><code>save_artifact</code>: <code>reports/</code>에 <strong>타임스탬프 파일</strong>로 저장(<code>mkdir(exist_ok=True)</code>, <code>utf-8</code>).</li>
+<li><strong>저장 래퍼 노드</strong>: 기존 노드를 감싸 <code>실행 → 저장 → 반환</code> — 원본 노드는 안 건드림.</li>
+<li>흐름(그래프)은 원본과 동일, <strong>노드만 래퍼로 교체</strong>.</li>
+<li>다음 절에서 27강을 정리합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_조건부-분기로-품질-재검토.html"><span class="lbl">← 이전 절</span>06. 조건부 분기로 품질 재검토</a><a class="nxt" href="08_정리-체크리스트.html"><span class="lbl">다음 절 →</span>08. 정리 체크리스트</a></div>
+</div>
+</body></html>

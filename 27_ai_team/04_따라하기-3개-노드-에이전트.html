@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제27강 — 따라하기 — 3개 노드(에이전트) 정의</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제27강 · ai team</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제27강 · ai team — 세부 목차</b><a class="" href="01_if문-대신-그래프로-흐름-선언.html">01. if문 대신 그래프로 흐름 선언</a><a class="" href="02_Researcher-Analyst-Writer-파이프라인.html">02. Researcher Analyst Writer 파이프라인</a><a class="" href="03_공유상태와-그래프-구성요소.html">03. 공유상태와 그래프 구성요소</a><a class="cur" href="04_따라하기-3개-노드-에이전트.html">04. 따라하기 3개 노드 에이전트</a><a class="" href="05_따라하기-StateGraph로-연결.html">05. 따라하기 StateGraph로 연결</a><a class="" href="06_조건부-분기로-품질-재검토.html">06. 조건부 분기로 품질 재검토</a><a class="" href="07_중간-산출물-저장.html">07. 중간 산출물 저장</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="3">따라하기 — 3개 노드(에이전트) 정의</h1>
+<h2 id="_1">목표</h2>
+<p>공유 상태 <code>TeamState</code>와 입력 로더를 만들고, <strong>Researcher·Analyst·Writer 세 노드</strong>(에이전트 함수)를 정의합니다. 실제 파일은 <code>code/ch27_ai_team.py</code> 입니다.</p>
+<hr/>
+<h2 id="0">0. 실습 준비</h2>
+<pre><code class="language-bash">conda activate agentic
+
+# 27강에서 쓰는 라이브러리
+#  - langgraph              : StateGraph (노드·엣지로 워크플로우 선언)
+#  - langchain-google-genai : Gemini 챗 모델 (get_chat 내부에서 사용)
+pip install -U langgraph langchain-google-genai
+
+python code/common.py        # GOOGLE_API_KEY: True 확인
+</code></pre>
+<ul>
+<li>데이터: <code>data/competitor_data.csv</code> (컬럼: <code>company, main_category, rating, strength, weakness</code>).</li>
+</ul>
+<hr/>
+<h2 id="1">1. 시작부 &amp; 공유 상태</h2>
+<p><code>code/ch27_ai_team.py</code>를 만듭니다.</p>
+<pre><code class="language-python"># -*- coding: utf-8 -*-
+# 실행: python code/ch27_ai_team.py
+import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))  # code/ 를 import 경로에
+from common import get_chat, DATA
+
+import pandas as pd
+from typing import TypedDict
+from langchain_core.messages import SystemMessage, HumanMessage
+# StateGraph: 노드(에이전트)들을 엣지로 이어 정해진 순서로 흐르게 하는 상태머신.
+from langgraph.graph import StateGraph, START, END
+
+
+class TeamState(TypedDict):
+    """팀이 공유하는 상태. 각 노드가 자기 칸을 채워 다음 노드로 넘긴다."""
+    raw: str        # Researcher 산출물(정리된 사실)
+    analysis: str   # Analyst 산출물(강약점 분석)
+    report: str     # Writer 산출물(최종 리포트)
+</code></pre>
+<p><code>TeamState</code>는 세 단계가 공유하는 <strong>서류철</strong>입니다(03번). 각 노드가 자기 칸만 채웁니다.</p>
+<hr/>
+<h2 id="2">2. 입력 데이터 → 텍스트</h2>
+<p>경쟁사 CSV를 LLM이 읽기 좋은 한 덩어리 텍스트로 만듭니다.</p>
+<pre><code class="language-python">def load_competitor_text() -&gt; str:
+    """경쟁사 CSV를 읽어 LLM에 넣을 한 덩어리 텍스트로 만든다."""
+    df = pd.read_csv(DATA / "competitor_data.csv")
+    lines = [
+        f"- {r.company}: 주력={r.main_category}, 평점={r.rating}, "
+        f"강점={r.strength}, 약점={r.weakness}"
+        for r in df.itertuples()
+    ]
+    return "승승장구몰 경쟁사 현황:\n" + "\n".join(lines)
+</code></pre>
+<p><code>df.itertuples()</code>로 각 행을 순회하며 <code>- 쾌속마켓: 주력=전자기기, 평점=4.3, ...</code> 형태로 만듭니다. 표를 LLM이 이해하기 쉬운 <strong>불릿 텍스트</strong>로 바꾸는 거죠.</p>
+<hr/>
+<h2 id="3_1">3. 노드 = 에이전트 (세 역할 함수)</h2>
+<p>각 노드는 <strong><code>state</code>를 받아 → 바꿀 칸만 dict로 반환</strong>합니다(03번 규칙).</p>
+<pre><code class="language-python"># 각 노드는 'state를 받아 → 바꿀 칸만 dict로 반환'한다. LangGraph가 그 칸을 병합한다.
+llm = get_chat(temperature=0.2)   # 사실 정리·분석 위주라 낮은 온도
+
+
+def researcher(state: TeamState) -&gt; dict:
+    """원천 데이터를 해석 없이 사실 위주로 정리한다(1단계)."""
+    out = llm.invoke([
+        SystemMessage("너는 리서처다. 주어진 데이터를 해석 없이 '사실'만 항목별로 깔끔히 정리하라."),
+        HumanMessage(state["raw"]),    # 최초엔 원천 텍스트가 들어 있음
+    ]).content
+    return {"raw": out}                # 정리된 사실로 raw 칸 갱신 → 다음 노드가 사용
+
+
+def analyst(state: TeamState) -&gt; dict:
+    """정리된 사실로 강점·약점·기회를 분석한다(2단계)."""
+    out = llm.invoke([
+        SystemMessage("너는 시장 분석가다. 경쟁사별 강점/약점과 승승장구몰의 기회를 분석하라."),
+        HumanMessage(f"[정리된 사실]\n{state['raw']}"),   # 앞 노드가 채운 raw 를 입력으로
+    ]).content
+    return {"analysis": out}            # analysis 칸 채우기
+
+
+def writer(state: TeamState) -&gt; dict:
+    """분석 결과를 임원 보고용 마크다운 리포트로 작성한다(3단계)."""
+    out = llm.invoke([
+        SystemMessage("너는 보고서 작성자다. 분석 내용을 임원 보고용 마크다운 리포트로 작성하라. "
+                      "제목, 요약, 경쟁사별 정리, 결론(전략 제언) 순으로."),
+        HumanMessage(f"[분석 결과]\n{state['analysis']}"),  # 앞 노드의 analysis 를 입력으로
+    ]).content
+    return {"report": out}              # report 칸 채우기 = 최종 산출물
+</code></pre>
+<hr/>
+<h2 id="4">4. 세 노드의 공통 패턴</h2>
+<p>세 함수가 <strong>똑같은 모양</strong>임에 주목하세요.</p>
+<pre><code class="language-text">def 노드(state):
+    1) 앞 단계 산출물을 state에서 꺼냄        (입력)
+    2) 역할 SystemMessage + 데이터 HumanMessage 로 llm.invoke   (처리)
+    3) 결과를 '자기 칸'만 dict로 반환          (출력)
+</code></pre>
+<ul>
+<li><strong>입력이 다름</strong>: researcher는 <code>state["raw"]</code>(원천), analyst는 <code>state["raw"]</code>(정리된 사실), writer는 <code>state["analysis"]</code>. <strong>앞 단계 결과만</strong> 받습니다(02번).</li>
+<li><strong>SystemMessage가 역할을 고정</strong>: "너는 리서처다 / 분석가다 / 작성자다". 같은 LLM이지만 역할에 따라 다르게 일합니다.</li>
+<li><strong>반환이 자기 칸만</strong>: <code>{"raw": ...}</code>, <code>{"analysis": ...}</code>, <code>{"report": ...}</code>.</li>
+</ul>
+<blockquote>
+<p><strong>주의 — <code>researcher</code>의 입력도 <code>state["raw"]</code></strong>: 최초 실행 때 <code>raw</code>에는 <em>원천 텍스트</em>가 들어 있고(05번 초기 상태), researcher가 그걸 <em>정리된 사실</em>로 덮어씁니다. 같은 칸을 "원천 → 정리본"으로 바꿔 쓰는 것이죠.</p>
+</blockquote>
+<hr/>
+<h2 id="5-temperature02">5. 왜 temperature=0.2인가</h2>
+<pre><code class="language-python">llm = get_chat(temperature=0.2)
+</code></pre>
+<p>이번 작업은 <strong>사실 정리·분석</strong> 위주라, 창의성보다 <strong>일관성·정확성</strong>이 중요합니다. 그래서 낮은 온도(0.2)로 둡니다. (26강 Worker가 카피 작성에 0.5를 쓴 것과 대비 — 작업 성격에 맞춰 온도를 고릅니다.)</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li><code>TeamState</code>(공유 서류철)와 <code>load_competitor_text</code>(입력 로더)를 정의했다.</li>
+<li>세 노드(<code>researcher</code>·<code>analyst</code>·<code>writer</code>)는 모두 <strong>"앞 칸 꺼내기 → llm.invoke → 자기 칸 반환"</strong> 패턴.</li>
+<li><code>SystemMessage</code>로 <strong>역할을 고정</strong>, 입력은 <strong>앞 단계 산출물만</strong>.</li>
+<li>사실·분석 위주라 <strong>temperature=0.2</strong>(일관성 우선).</li>
+<li>다음 절에서 이 노드들을 <strong>StateGraph로 연결</strong>하고 실행합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="03_공유상태와-그래프-구성요소.html"><span class="lbl">← 이전 절</span>03. 공유상태와 그래프 구성요소</a><a class="nxt" href="05_따라하기-StateGraph로-연결.html"><span class="lbl">다음 절 →</span>05. 따라하기 StateGraph로 연결</a></div>
+</div>
+</body></html>

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제16강 — 따라하기 — 답변과 출처를 함께: answer() 함수로 모듈화</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제16강 · rag qa</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제16강 · rag qa — 세부 목차</b><a class="" href="01_문서-근거로만-답하고-출처-밝히기.html">01. 문서 근거로만 답하고 출처 밝히기</a><a class="" href="02_QA-체인-구조-LCEL.html">02. QA 체인 구조 LCEL</a><a class="" href="03_환각을-억제하는-프롬프트.html">03. 환각을 억제하는 프롬프트</a><a class="" href="04_출처를-함께-반환하기.html">04. 출처를 함께 반환하기</a><a class="" href="05_따라하기-QA-체인-만들기.html">05. 따라하기 QA 체인 만들기</a><a class="cur" href="06_따라하기-답변과-출처-모듈화.html">06. 따라하기 답변과 출처 모듈화</a><a class="" href="07_따라하기-모르는-질문엔-모른다고.html">07. 따라하기 모르는 질문엔 모른다고</a><a class="" href="08_검색-품질-높이기-k값과-재정렬.html">08. 검색 품질 높이기 k값과 재정렬</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="answer">따라하기 — 답변과 출처를 함께: answer() 함수로 모듈화</h1>
+<h2 id="_1">목표</h2>
+<p>04번에서 설계한 대로, 답변과 출처를 함께 반환하는 <code>answer(question) -&gt; dict</code> 함수를 만듭니다. 백엔드 핸들러에 바로 쓸 수 있는 형태로요.</p>
+<hr/>
+<h2 id="1-1-15">1. 서비스 객체는 1회만 생성 (15강 원칙)</h2>
+<p>retriever와 llm을 만드는 건 비쌉니다(인덱싱·인증). 요청마다 만들면 안 되죠. <strong>전역에 캐시</strong>해 재사용합니다.</p>
+<pre><code class="language-python"># 서비스 객체는 1회만 생성해 재사용
+_retriever = None
+_llm = None
+
+def _ensure():
+    """retriever·llm을 최초 1회만 생성(지연 초기화). 이후는 재사용."""
+    global _retriever, _llm
+    if _retriever is None:
+        _retriever = build_retriever()
+        _llm = get_chat(temperature=0)
+</code></pre>
+<p><code>_ensure()</code>는 <strong>지연 초기화(lazy init)</strong> 패턴입니다. 처음 호출될 때만 retriever·llm을 만들고, 이후엔 만들어 둔 걸 재사용합니다. 15강의 "인덱싱은 1회, 서비스는 검색만" 원칙을 코드로 구현한 거죠.</p>
+<hr/>
+<h2 id="2-answer">2. answer 함수</h2>
+<p>04번에서 설계한 <code>answer</code> 함수입니다. 검색을 먼저 하고, 답변 생성 후, 출처를 묶습니다.</p>
+<pre><code class="language-python">def answer(question: str) -&gt; dict:
+    """질문 -&gt; {answer, sources}. FastAPI/Flask 핸들러에서 그대로 return 가능."""
+    _ensure()
+    docs = _retriever.invoke(question)   # ① 검색: 근거 청크 확보 (docs 보관!)
+    context = format_docs(docs)          # ② 조립: 청크를 context 문자열로
+    # ③ 생성: 프롬프트 | LLM | 파서를 LCEL로 한 번에 실행
+    text = (PROMPT | _llm | StrOutputParser()).invoke(
+        {"context": context, "question": question}
+    )
+    # ④ 출처 추출 + 중복 제거 (04번)
+    uniq, seen = [], set()
+    for d in docs:
+        src = d.metadata.get("source", "?").split("/")[-1]
+        page = d.metadata.get("page")
+        key = (src, page)
+        if key not in seen:
+            seen.add(key)
+            uniq.append({"source": src, "page": page})
+    return {"answer": text, "sources": uniq}
+</code></pre>
+<p>핵심은 <code>docs</code>를 먼저 잡아 두는 것(①)입니다. 그래야 답변 생성 후에도 <code>docs</code>로 출처를 뽑죠(④).</p>
+<hr/>
+<h2 id="3">3. 실행</h2>
+<pre><code class="language-python">res = answer("VIP 등급 조건은?")
+print("답변:", res["answer"])
+print("출처:")
+for s in res["sources"]:
+    print(f"  - {s['source']} p.{s['page']}")
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">답변: VIP 등급은 최근 6개월 누적 구매금액 100만원 이상일 때 부여됩니다 ...
+출처:
+  - 멤버십정책.pdf p.0
+  - 환불교환정책.pdf p.1
+</code></pre>
+<p>답변과 함께 <strong>어느 문서 몇 페이지</strong> 근거인지 나왔습니다. 고객은 답변을 보고, 의심되면 출처 문서를 확인할 수 있죠. 신뢰가 가는 답변입니다.</p>
+<hr/>
+<h2 id="4">4. 백엔드 핸들러에 바로 연결</h2>
+<p><code>answer</code>가 <code>dict</code>를 반환하므로, 웹 서버에 바로 꽂을 수 있습니다.</p>
+<pre><code class="language-python"># FastAPI 예시 (29강에서 제대로 다룸)
+from fastapi import FastAPI
+app = FastAPI()
+
+@app.post("/qa")
+def qa_endpoint(question: str):
+    return answer(question)   # dict → JSON 응답 자동 변환!
+</code></pre>
+<p><code>answer(question)</code>이 돌려주는 dict가 그대로 <strong>JSON 응답</strong>이 됩니다. 프론트엔드는 <code>answer</code> 필드를 본문에, <code>sources</code> 필드를 출처 표시에 쓰면 되죠. 이렇게 모듈화하면 RAG QA를 실제 API로 만들기 쉽습니다.</p>
+<hr/>
+<h2 id="5">5. 모듈화의 가치</h2>
+<p><code>answer</code> 함수 하나로 RAG의 모든 단계를 감쌌습니다.</p>
+<p><code>answer(question)</code> 한 함수가 네 단계를 처리합니다.</p>
+<ol>
+<li><strong>① 검색</strong> (retriever)</li>
+<li><strong>② 조립</strong> (format_docs)</li>
+<li><strong>③ 생성</strong> (LCEL 체인)</li>
+<li><strong>④ 출처</strong> (metadata)</li>
+</ol>
+<p>→ 반환: <code>{answer, sources}</code></p>
+<p>복잡한 RAG 파이프라인을 <strong>함수 하나</strong>로 추상화한 거죠. 이걸 쓰는 쪽(API 핸들러)은 내부 복잡성을 몰라도 <code>answer(q)</code>만 부르면 됩니다. 좋은 모듈화의 예입니다 — 복잡한 걸 단순한 인터페이스 뒤에 숨기는 것.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>retriever·llm은 <strong>1회 생성 후 재사용</strong>(<code>_ensure</code> 지연 초기화).</li>
+<li><code>answer(q)</code>: ① 검색(docs 보관) → ② 조립 → ③ 생성 → ④ 출처 묶기.</li>
+<li>반환은 <code>{"answer": ..., "sources": [...]}</code> dict.</li>
+<li>dict라서 <strong>FastAPI/Flask에 바로 연결</strong>(JSON 자동 변환).</li>
+<li>복잡한 RAG를 <strong>함수 하나로 모듈화</strong> → 쓰기 쉬움.</li>
+<li>다음 절에서 모르는 질문 처리를 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="05_따라하기-QA-체인-만들기.html"><span class="lbl">← 이전 절</span>05. 따라하기 QA 체인 만들기</a><a class="nxt" href="07_따라하기-모르는-질문엔-모른다고.html"><span class="lbl">다음 절 →</span>07. 따라하기 모르는 질문엔 모른다고</a></div>
+</div>
+</body></html>

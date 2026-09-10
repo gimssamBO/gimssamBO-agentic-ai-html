@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제2강 — 실습문제와 해답</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제2강 · llm api</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제2강 · llm api — 세부 목차</b><a class="" href="01_왜-LLM-API를-알아야-하는가.html">01. 왜 LLM API를 알아야 하는가</a><a class="" href="02_요청-응답-구조.html">02. 요청 응답 구조</a><a class="" href="03_시스템-지시로-역할-부여.html">03. 시스템 지시로 역할 부여</a><a class="" href="04_토큰과-비용-감각.html">04. 토큰과 비용 감각</a><a class="" href="05_temperature와-생성-제어.html">05. temperature와 생성 제어</a><a class="" href="06_따라하기-Gemini-호출.html">06. 따라하기 Gemini 호출</a><a class="" href="07_따라하기-OpenAI-호환-호출.html">07. 따라하기 OpenAI 호환 호출</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="cur" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">실습문제와 해답</h1>
+<p>직접 코드를 고쳐 보며 2강 내용을 손에 익힙니다. 먼저 <strong>스스로 풀어 본 뒤</strong> 해답을 펼쳐 보세요.</p>
+<hr/>
+<h2 id="1-temperature">문제 1 — temperature 다양성 측정 스크립트</h2>
+<p><code>code/ch02_llm_api.py</code>에 함수 <code>diversity(temp)</code> 를 추가하세요.</p>
+<ul>
+<li>같은 질문 <code>"승승장구몰을 한 문장으로 홍보해줘."</code> 를 주어진 <code>temperature</code>로 <strong>5번</strong> 호출합니다.</li>
+<li>답변 5개를 리스트에 모으고, <code>len(set(답변리스트))</code>(중복 제거 후 개수)를 출력합니다.</li>
+<li><code>diversity(0.0)</code> 과 <code>diversity(1.0)</code> 을 각각 실행합니다.</li>
+<li>기대 결과: <code>0.0</code>일 때는 고유 답변 수가 1에 가깝고, <code>1.0</code>일 때는 더 큰 수가 나와 <strong>temperature가 다양성을 키운다</strong>는 것이 숫자로 확인되면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_genai_client, GEMINI_MODEL
+from google.genai import types
+
+client = get_genai_client()
+
+def diversity(temp: float) -&gt; int:
+    """같은 질문을 temp로 5번 호출해, 서로 다른 답이 몇 개인지 센다."""
+    answers = []
+    for _ in range(5):
+        resp = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents="승승장구몰을 한 문장으로 홍보해줘.",
+            config=types.GenerateContentConfig(temperature=temp),
+        )
+        answers.append(resp.text.strip())
+    unique = len(set(answers))          # 중복 제거 후 개수 = 다양성 지표
+    print(f"temperature={temp}: 고유 답변 {unique}/5개")
+    return unique
+
+if __name__ == "__main__":
+    diversity(0.0)   # 거의 같은 답 → 1에 가까움
+    diversity(1.0)   # 매번 다른 답 → 더 큰 수
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">temperature=0.0: 고유 답변 1/5개
+temperature=1.0: 고유 답변 5/5개
+</code></pre>
+
+
+**해설**: `set()`은 중복을 제거하므로, 답이 다양할수록 길이가 커집니다. `temperature=0`은 "가장 확률 높은 단어"만 골라 매번 같은 답을, `1.0`은 모험적으로 골라 다른 답을 만듭니다. 다양성을 **숫자로** 측정한 셈입니다.
+
+</details>
+<hr/>
+<h2 id="2">문제 2 — 초등학생 말투 + 토큰 비교</h2>
+<p>기존 <code>chat()</code> 함수를 활용해 다음을 수행하세요.</p>
+<ul>
+<li><code>system</code> 인자에 <code>"너는 초등학생도 이해하도록 쉬운 단어와 짧은 문장으로만 설명한다."</code> 를 넣어 <code>"환불 얼마나 걸려요?"</code> 에 답하게 합니다.</li>
+<li><code>chat()</code> 이 <strong>답변과 함께 <code>total_token_count</code> 도 반환</strong>하도록 수정합니다.</li>
+<li>"친절한 상담원" 말투와 "초등학생" 말투의 <strong>총 토큰 수를 함께 출력</strong>합니다.</li>
+<li>기대 결과: 두 말투의 답변과 각각의 토큰 수가 나란히 출력되면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_genai_client, GEMINI_MODEL
+from google.genai import types
+
+client = get_genai_client()
+
+def chat(system: str, user: str, temperature: float = 0.3):
+    """답변 텍스트와 총 토큰 수를 함께 돌려주도록 수정한 버전."""
+    resp = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=user,
+        config=types.GenerateContentConfig(
+            system_instruction=system, temperature=temperature),
+    )
+    # (답변, 총 토큰 수) 튜플로 반환
+    return resp.text, resp.usage_metadata.total_token_count
+
+if __name__ == "__main__":
+    q = "환불 얼마나 걸려요?"
+
+    text1, tok1 = chat("너는 승승장구몰의 친절한 CS 상담원이다. 존댓말로 간결히 답하라.", q)
+    text2, tok2 = chat("너는 초등학생도 이해하도록 쉬운 단어와 짧은 문장으로만 설명한다.", q)
+
+    print(f"[친절한 상담원] (토큰 {tok1})\n{text1}\n")
+    print(f"[초등학생 말투] (토큰 {tok2})\n{text2}")
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">[친절한 상담원] (토큰 95)
+안녕하세요 고객님! 환불은 영업일 기준 평균 3~5일 정도 소요됩니다 ...
+
+[초등학생 말투] (토큰 80)
+돈은 보통 3일에서 5일 사이에 다시 들어와요. 조금만 기다리면 돼요!
+</code></pre>
+
+
+**해설**: `chat()`이 이제 **튜플 `(답변, 토큰수)`** 를 반환하도록 바뀌었습니다. 말투(시스템 지시)에 따라 답변 길이가 달라지면 출력 토큰도 달라져, 토큰 수도 함께 변합니다. "말투를 바꾸면 비용도 바뀐다"를 눈으로 확인할 수 있습니다.
+
+</details>
+<hr/>
+<h2 id="_2">정리</h2>
+<ul>
+<li>문제 1로 <strong>temperature ↔ 다양성</strong>의 관계를 숫자로 측정했습니다.</li>
+<li>문제 2로 <strong>시스템 지시 ↔ 토큰(비용)</strong> 의 관계를 확인했습니다.</li>
+</ul>
+<p>이것으로 2강을 마칩니다. 다음은 프롬프트 엔지니어링입니다!</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="08_정리-체크리스트.html"><span class="lbl">← 이전 절</span>08. 정리 체크리스트</a><span class="nxt off"><span class="lbl"> </span> </span></div>
+</div>
+</body></html>

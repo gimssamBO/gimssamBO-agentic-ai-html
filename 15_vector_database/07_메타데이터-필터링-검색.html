@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제15강 — 메타데이터 필터링 검색</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제15강 · vector database</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제15강 · vector database — 세부 목차</b><a class="" href="01_대량-검색과-인덱스-저장.html">01. 대량 검색과 인덱스 저장</a><a class="" href="02_벡터DB의-역할.html">02. 벡터DB의 역할</a><a class="" href="03_FAISS-vs-Chroma.html">03. FAISS vs Chroma</a><a class="" href="04_인덱스-영속화-아키텍처.html">04. 인덱스 영속화 아키텍처</a><a class="" href="05_따라하기-FAISS-인덱스-만들기.html">05. 따라하기 FAISS 인덱스 만들기</a><a class="" href="06_따라하기-인덱스-저장과-재로드.html">06. 따라하기 인덱스 저장과 재로드</a><a class="cur" href="07_메타데이터-필터링-검색.html">07. 메타데이터 필터링 검색</a><a class="" href="08_인덱스-증분-업데이트.html">08. 인덱스 증분 업데이트</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">메타데이터 필터링 검색</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>여러 PDF를 한 인덱스에 넣되, 각 청크의 <code>metadata</code>에 출처를 보존하면, <strong>"특정 문서 안에서만"</strong> 검색할 수 있습니다. <code>Chroma</code>의 <code>filter={"source": "멤버십정책.pdf"}</code>로 정밀하게 범위를 좁힙니다. (FAISS는 필터가 약해 Chroma를 씁니다.)</p>
+<hr/>
+<h2 id="1">1. 왜 필터가 필요한가</h2>
+<p>여러 문서를 한 인덱스에 넣으면 편하지만, 가끔 <strong>검색 범위를 좁히고 싶을</strong> 때가 있습니다.</p>
+<pre><code class="language-text">질문: "VIP 등급이 받는 혜택은?"
+  → 전체 검색: 환불정책·핸드북·멤버십정책 청크가 다 후보
+  → 엉뚱한 문서(환불정책)의 청크가 섞여 들어올 수 있음!
+
+원하는 것: "멤버십정책.pdf 안에서만" 검색
+</code></pre>
+<p>"멤버십 혜택"은 멤버십 문서에만 있는데, 전체에서 검색하면 다른 문서의 비슷한 표현이 섞일 수 있습니다. <strong>특정 문서로 범위를 좁히면</strong> 노이즈가 줄어 정확해지죠.</p>
+<hr/>
+<h2 id="2-metadata">2. metadata에 출처 보존</h2>
+<p>필터링하려면 먼저 각 청크에 <strong>무엇으로 필터할지(출처)</strong> 를 metadata에 넣어야 합니다. (실습 파일: <code>sections/15_vector_database/07_메타데이터-필터링-검색.py</code>)</p>
+<pre><code class="language-python">def load_and_chunk(filenames):
+    """각 청크 metadata에 source(파일명)를 보존한다."""
+    chunks = []
+    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+    for name in filenames:
+        docs = PyPDFLoader(str(DOCS / name)).load()
+        parts = splitter.split_documents(docs)
+        # PyPDFLoader의 source는 전체 경로 → 필터 키로 쓰기 좋게 '파일명'으로 정규화
+        for d in parts:
+            d.metadata["source"] = name   # 예: "멤버십정책.pdf"
+        chunks.extend(parts)
+    return chunks
+</code></pre>
+<p><code>PyPDFLoader</code>가 넣어 주는 <code>source</code>는 전체 경로(<code>/Users/.../멤버십정책.pdf</code>)라 필터 키로 불편합니다. 그래서 <strong>파일명만</strong>(<code>멤버십정책.pdf</code>)으로 정규화해 두죠. 이러면 <code>filter={"source": "멤버십정책.pdf"}</code>로 깔끔하게 필터할 수 있습니다.</p>
+<hr/>
+<h2 id="3-chroma">3. Chroma로 인덱싱</h2>
+<p>메타데이터 필터는 <strong>Chroma</strong>가 강합니다(03번). Chroma로 인덱스를 만듭니다.</p>
+<pre><code class="language-python">from langchain_community.vectorstores import Chroma
+
+chunks = load_and_chunk(["환불교환정책.pdf", "멤버십정책.pdf", "직원핸드북.pdf"])
+vs = Chroma.from_documents(chunks, get_embeddings(), persist_directory=CHROMA_DIR)
+</code></pre>
+<blockquote>
+<p><strong>왜 FAISS 말고 Chroma?</strong> FAISS도 검색은 되지만 "source가 X인 청크만" 같은 <strong>정확한 필터가 약합니다.</strong> Chroma는 <code>where</code> 필터(metadata 조건)를 네이티브로 지원해, 필터링이 정확하고 편합니다.</p>
+</blockquote>
+<hr/>
+<h2 id="4">4. 필터로 범위 좁히기</h2>
+<p><code>similarity_search</code>에 <code>filter</code>를 주면 그 조건의 청크만 검색합니다.</p>
+<pre><code class="language-python">def search_in_doc(vs, query, source=None, k=3):
+    """source 지정 시 해당 문서 안에서만, 미지정 시 전체에서 검색한다."""
+    flt = {"source": source} if source else None
+    return vs.similarity_search(query, k=k, filter=flt)
+
+# ① 필터 없이 전체 검색 — 엉뚱한 문서가 섞일 수 있음
+search_in_doc(vs, "VIP 등급 혜택은?")
+
+# ② 멤버십정책.pdf 안에서만 — 정확히 그 문서 청크만 후보
+search_in_doc(vs, "VIP 등급 혜택은?", source="멤버십정책.pdf")
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[필터 없음 — 전체 검색]
+[1] (출처: 멤버십정책.pdf) VIP 등급은 연 100만원 이상 구매 시 ...
+[2] (출처: 환불교환정책.pdf) ...  ← 엉뚱한 문서가 섞임!
+
+[필터: 멤버십정책.pdf 안에서만]
+[1] (출처: 멤버십정책.pdf) VIP 등급은 연 100만원 이상 구매 시 ...
+[2] (출처: 멤버십정책.pdf) 등급별 적립률은 ...  ← 모두 멤버십 문서!
+</code></pre>
+<p>필터를 주니 <strong>멤버십 문서 청크만</strong> 결과에 나옵니다. 노이즈가 사라졌죠.</p>
+<hr/>
+<h2 id="5">5. 필터를 라우팅처럼 활용</h2>
+<p>필터로 검색 범위를 바꾸면, 질문 종류에 따라 <strong>알맞은 문서로 라우팅</strong>하는 효과를 낼 수 있습니다.</p>
+<pre><code class="language-python"># "연차 휴가" 질문 → 직원핸드북에서만
+search_in_doc(vs, "연차 휴가는 며칠인가요?", source="직원핸드북.pdf")
+
+# "환불" 질문 → 환불정책에서만
+search_in_doc(vs, "환불 며칠 걸려요?", source="환불교환정책.pdf")
+</code></pre>
+<p>질문 주제에 맞는 문서로 필터하면, 그 문서 안에서만 정확히 찾습니다. 12강의 도구 라우팅과 비슷한 발상이죠 — "이 질문엔 이 문서". (어느 문서로 필터할지는 LLM이 정하게 할 수도 있습니다.)</p>
+<hr/>
+<h2 id="6-llm">6. 필터 + LLM 답변</h2>
+<p>필터로 노이즈를 줄인 뒤 LLM에게 답을 시키면 더 정확합니다.</p>
+<pre><code class="language-python">docs = search_in_doc(vs, "VIP 등급 혜택은?", source="멤버십정책.pdf", k=3)
+context = "\n\n".join(d.page_content for d in docs)
+llm = get_chat(temperature=0.0)
+answer = llm.invoke(
+    f"아래 [문서]만 근거로 한국어로 답하라.\n\n[문서]\n{context}\n\n[질문] VIP 등급 혜택은?"
+).content
+print(answer)
+</code></pre>
+<p>필터로 <strong>관련 문서만</strong> 추린 뒤 그 내용을 근거로 답하니, 환각이 줄고 정확해집니다. 이게 16강 RAG QA의 미리보기입니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>여러 문서를 한 인덱스에 넣되, <strong>metadata에 출처(source)를 보존</strong>한다.</li>
+<li><code>PyPDFLoader</code>의 전체 경로 source를 <strong>파일명으로 정규화</strong>하면 필터 키로 편하다.</li>
+<li><strong>Chroma</strong>의 <code>filter={"source": "..."}</code>로 특정 문서 안에서만 검색.</li>
+<li>필터로 <strong>노이즈를 줄여</strong> 검색 정확도를 높인다(라우팅처럼 활용).</li>
+<li>다음 절에서 인덱스를 증분 업데이트합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_따라하기-인덱스-저장과-재로드.html"><span class="lbl">← 이전 절</span>06. 따라하기 인덱스 저장과 재로드</a><a class="nxt" href="08_인덱스-증분-업데이트.html"><span class="lbl">다음 절 →</span>08. 인덱스 증분 업데이트</a></div>
+</div>
+</body></html>

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제9강 — 지식 컷오프 문제</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제9강 · search agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제9강 · search agent — 세부 목차</b><a class="cur" href="01_지식-컷오프-문제.html">01. 지식 컷오프 문제</a><a class="" href="02_검색으로-보강하기.html">02. 검색으로 보강하기</a><a class="" href="03_따라하기-웹검색-도구-붙이기.html">03. 따라하기 웹검색 도구 붙이기</a><a class="" href="04_따라하기-검색-과정-관찰하기.html">04. 따라하기 검색 과정 관찰하기</a><a class="" href="05_검색결과-신뢰성과-재검증.html">05. 검색결과 신뢰성과 재검증</a><a class="" href="06_네트워크-오류-처리와-재시도.html">06. 네트워크 오류 처리와 재시도</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">지식 컷오프 문제</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>LLM은 <strong>학습한 시점까지의 지식만</strong> 갖습니다. 그 이후의 신제품·최신 유행·어제 뉴스는 모르고, 모르면서 아는 척하는 환각도 생깁니다. 이 한계를 <strong>지식 컷오프(knowledge cutoff)</strong> 라고 합니다.</p>
+<hr/>
+<h2 id="1-llm">1. LLM은 '특정 시점에 멈춰 있다'</h2>
+<p>LLM은 방대한 텍스트로 학습되지만, 그 학습은 <strong>어느 시점에 끝납니다.</strong> 그 시점 이후의 정보는 학습에 포함되지 않았으므로 모릅니다.</p>
+<p>시간을 축으로 보면, <strong>컷오프 시점</strong>을 기준으로 둘로 나뉩니다.</p>
+<ul>
+<li><strong>컷오프 이전</strong>: 학습된 지식 → 알고 있음</li>
+<li><strong>컷오프 이후</strong>: 학습에 없던 정보 → 모름</li>
+</ul>
+<p>예를 들어 이런 질문은 컷오프 이후의 정보라 답하기 어렵습니다.</p>
+<ul>
+<li>"<strong>올해</strong> 가장 인기 있는 무선 이어버드는?"</li>
+<li>"<strong>어제</strong> 발표된 경쟁사 신제품 사양은?"</li>
+<li>"<strong>지난주</strong> 환율은 얼마였어?"</li>
+</ul>
+<hr/>
+<h2 id="2-8">2. 8강과 이어지는 문제</h2>
+<p>8강에서 "가을 패딩 출시" 계획을 세웠는데, 첫 단계가 <strong>"시장조사"</strong> 였습니다. "요즘 인기 있는 패딩 트렌드는?"을 알려면 <strong>오늘의 시장</strong>을 알아야 합니다. 그런데 LLM은 학습 시점 이후의 트렌드를 모릅니다.</p>
+<pre><code class="language-python">ask("2026년 무선 이어버드 최신 트렌드 알려줘")
+# → "제가 학습한 시점 이후의 정보는 알 수 없습니다 ..." (모름)
+# → 또는 그럴듯하게 지어냄 (환각!)
+</code></pre>
+<hr/>
+<h2 id="3">3. 더 위험한 건 환각</h2>
+<p>"모른다"고 답하면 차라리 낫습니다. 진짜 문제는 LLM이 <strong>모르면서 아는 척 지어내는</strong> 것입니다(1강 환각 복습).</p>
+<blockquote>
+<p>"2026년 최신 이어버드 트렌드는 'XYZ 노이즈 캔슬링 5.0' 기술이 대세입니다."</p>
+</blockquote>
+<p>이런 답이 그럴듯하게 나오지만, <strong>존재하지 않는 기술</strong>일 수 있습니다. 시장조사 보고서에 이런 환각이 들어가면 큰일이죠.</p>
+<blockquote>
+<p>비유: LLM은 <strong>몇 년 전 유학을 떠나 소식이 끊긴 친구</strong>입니다. 옛날 일은 잘 알지만 "요즘 뭐가 유행해?"라고 물으면 모릅니다. 그런데 모른다고 하기 민망해서 옛날 기억으로 대충 둘러대면, 그게 환각입니다.</p>
+</blockquote>
+<hr/>
+<h2 id="4">4. 해결책 — 검색이라는 '눈'을 달아 준다</h2>
+<p>해결책은 간단합니다. LLM에게 <strong>웹 검색 도구</strong>를 쥐여 주는 것입니다. 그러면 모르는 최신 정보를 <strong>그때그때 찾아서</strong> 답할 수 있습니다.</p>
+<p>질문: <strong>"최신 이어버드 트렌드?"</strong></p>
+<ol>
+<li><strong>LLM</strong>: "이건 내 지식 밖이네. 검색해야겠다"</li>
+<li><strong>검색 도구</strong>로 웹 검색 → 최신 기사·스니펫 획득</li>
+<li><strong>LLM</strong>: 검색 결과를 읽고 요약 → 최신 정보 기반 답변!</li>
+</ol>
+<p>5강에서 배운 것과 똑같습니다 — <strong>도구를 붙여 LLM의 한계를 넘는다.</strong> 다만 이번 도구는 "재고 조회"가 아니라 "웹 검색"일 뿐입니다.</p>
+<hr/>
+<h2 id="5">5. 이 강에서 만들 것</h2>
+<p>무료이고 API 키가 필요 없는 <strong>DuckDuckGo 검색 도구</strong>를 <code>create_agent</code>에 붙여, 최신 시장 정보를 조사하는 에이전트를 만듭니다.</p>
+<table>
+<thead>
+<tr>
+<th>항목</th>
+<th>설명</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>도구</td>
+<td><code>DuckDuckGoSearchResults</code> (무료, API 키 불필요)</td>
+</tr>
+<tr>
+<td>입력</td>
+<td>검색어 문자열</td>
+</tr>
+<tr>
+<td>출력</td>
+<td>제목·스니펫·링크가 담긴 검색 결과</td>
+</tr>
+<tr>
+<td>주의</td>
+<td><strong>인터넷 연결 필요</strong>, 호출 제한 시 일시적 오류 가능</td>
+</tr>
+</tbody>
+</table>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>LLM은 <strong>학습 시점(컷오프) 이후를 모른다</strong> — 최신 정보에 약하다.</li>
+<li>모르면서 지어내는 <strong>환각</strong>이 더 위험하다.</li>
+<li>해결책은 <strong>웹 검색 도구</strong>를 붙이는 것(5강 도구 원리의 응용).</li>
+<li>다음 절에서 검색으로 보강하는 흐름을 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><span class="prv off"><span class="lbl"> </span> </span><a class="nxt" href="02_검색으로-보강하기.html"><span class="lbl">다음 절 →</span>02. 검색으로 보강하기</a></div>
+</div>
+</body></html>

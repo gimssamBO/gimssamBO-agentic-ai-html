@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제9강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제9강 · search agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제9강 · search agent — 세부 목차</b><a class="" href="01_지식-컷오프-문제.html">01. 지식 컷오프 문제</a><a class="" href="02_검색으로-보강하기.html">02. 검색으로 보강하기</a><a class="" href="03_따라하기-웹검색-도구-붙이기.html">03. 따라하기 웹검색 도구 붙이기</a><a class="" href="04_따라하기-검색-과정-관찰하기.html">04. 따라하기 검색 과정 관찰하기</a><a class="" href="05_검색결과-신뢰성과-재검증.html">05. 검색결과 신뢰성과 재검증</a><a class="" href="06_네트워크-오류-처리와-재시도.html">06. 네트워크 오류 처리와 재시도</a><a class="cur" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="9">9강에서 배운 것</h2>
+<p>9강에서는 LLM에게 <strong>웹 검색이라는 눈</strong>을 달아 최신 정보로 답하게 만들었습니다.</p>
+<ul>
+<li><strong>지식 컷오프</strong>: LLM은 학습 시점 이후를 모른다 — 최신 정보에 약하고 환각이 생긴다.</li>
+<li><strong>검색 에이전트</strong>: LLM이 스스로 검색어를 만들고, 검색하고, 결과를 요약한다.</li>
+<li><strong>DuckDuckGoSearchResults</strong>: 무료·키 불필요한 LangChain 기본 도구.</li>
+<li><strong>신뢰성 검증</strong>: 검색 결과는 틀릴 수 있어 "불충분하면 확인 필요" + 교차확인.</li>
+<li><strong>네트워크 대응</strong>: 지수 백오프 재시도 + 폴백으로 죽지 않게.</li>
+</ul>
+<hr/>
+<h2 id="_2">한눈에 보는 핵심 코드</h2>
+<pre><code class="language-python">from langchain.agents import create_agent
+from langchain_community.tools import DuckDuckGoSearchResults
+from common import get_chat
+
+llm = get_chat(provider="gemini")
+search = DuckDuckGoSearchResults()              # 그 자체로 도구
+
+agent = create_agent(llm, tools=[search],
+                     system_prompt="너는 시장조사 담당자다. 필요하면 검색해 한국어로 요약하라.")
+
+# 과정 관찰 + 오류 대비
+try:
+    for step in agent.stream({"messages": [{"role": "user", "content": q}]},
+                             stream_mode="values"):
+        step["messages"][-1].pretty_print()
+except Exception as e:
+    print("검색 오류:", e)
+</code></pre>
+<hr/>
+<h2 id="_3">이 강에서 설치한 라이브러리</h2>
+<pre><code class="language-bash">pip install langchain-community ddgs
+</code></pre>
+<p><code>langchain-community</code>는 DuckDuckGo 외에도 수많은 도구·연동을 담은 패키지입니다. 앞으로 RAG(13강~)에서도 계속 씁니다.</p>
+<hr/>
+<h2 id="_4">체크리스트</h2>
+<ul>
+<li>[ ] LLM의 지식 컷오프와 환각 문제를 설명할 수 있다.</li>
+<li>[ ] <code>DuckDuckGoSearchResults</code>를 도구로 에이전트에 연결했다.</li>
+<li>[ ] <code>stream</code>으로 검색어 생성·검색·요약 과정을 관찰했다.</li>
+<li>[ ] 검색 결과를 "불충분하면 확인 필요"로 신중히 요약하고 교차확인했다.</li>
+<li>[ ] 네트워크 오류에 지수 백오프 재시도 + 폴백을 적용했다.</li>
+</ul>
+<hr/>
+<h2 id="_5">한 줄 핵심</h2>
+<blockquote>
+<p><strong>검색 도구로 LLM의 지식 컷오프를 보강한다. 단, 검색은 재검증이 필수이고, 네트워크 실패에 대비해 재시도·폴백을 둔다.</strong></p>
+</blockquote>
+<hr/>
+<h2 id="_6">다음 강 예고</h2>
+<p>10강에서는 <strong>Code Execution Agent</strong>를 만듭니다. LLM은 계산기가 아니라서 정확한 계산·집계가 약합니다(4강 복습). 그래서 LLM이 <strong>pandas 코드를 생성하고, 우리가 그 코드를 실행</strong>해 정확한 결과를 얻는 방식을 배웁니다. "계산은 코드에게, 판단은 LLM에게" 맡기는 거죠. 코드 실행의 보안 문제도 함께 다룹니다.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_네트워크-오류-처리와-재시도.html"><span class="lbl">← 이전 절</span>06. 네트워크 오류 처리와 재시도</a><a class="nxt" href="08_실습문제와-해답.html"><span class="lbl">다음 절 →</span>08. 실습문제와 해답</a></div>
+</div>
+</body></html>

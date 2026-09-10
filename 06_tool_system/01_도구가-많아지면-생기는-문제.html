@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제6강 — 도구가 많아지면 생기는 문제 — "도구 상자가 커지면 헷갈린다"</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제6강 · tool system</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제6강 · tool system — 세부 목차</b><a class="cur" href="01_도구가-많아지면-생기는-문제.html">01. 도구가 많아지면 생기는 문제</a><a class="" href="02_모델은-무엇을-보고-도구를-고르나.html">02. 모델은 무엇을 보고 도구를 고르나</a><a class="" href="03_좋은-도구-설계-원칙.html">03. 좋은 도구 설계 원칙</a><a class="" href="04_따라하기-도구-4개-등록하고-관찰.html">04. 따라하기 도구 4개 등록하고 관찰</a><a class="" href="05_따라하기-독스트링-망가뜨려보기.html">05. 따라하기 독스트링 망가뜨려보기</a><a class="" href="06_비슷한-도구-구분하기.html">06. 비슷한 도구 구분하기</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">도구가 많아지면 생기는 문제 — "도구 상자가 커지면 헷갈린다"</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>5강에서는 도구가 2개뿐이었습니다. 하지만 진짜 에이전트는 수많은 도구를 갖습니다. 도구가 많아지면 <strong>"어떤 도구를 써야 하지?"</strong> 라는 새 문제가 생깁니다. 좋은 소식은, 하드코딩 없이 <strong>도구 설명(독스트링)만 잘 쓰면 모델이 알아서 고른다</strong>는 것입니다.</p>
+<hr/>
+<h2 id="1">1. 도구가 늘어나면 생기는 일</h2>
+<p>5강의 에이전트는 도구가 <code>get_stock</code>, <code>get_exchange_rate</code> 둘뿐이었습니다. 질문이 오면 둘 중 하나를 고르면 됐죠. 하지만 진짜 승승장구몰 CS 에이전트는 이런 도구를 다 가집니다.</p>
+<ul>
+<li>재고 조회, 가격 조회, 주문 상태 확인, 상품 검색, 환불 정책 안내, 리뷰 요약, 배송 추적…</li>
+</ul>
+<p>도구가 10개, 20개로 늘면 <strong>새 문제</strong>가 생깁니다.</p>
+<pre><code class="language-python"># "이 청바지 얼마예요?" 라는 질문에...
+# 모델이 get_order_status(주문 조회)를 부르면? → 엉뚱한 답!
+# 모델이 get_price(가격 조회)를 부르면? → 정답!
+</code></pre>
+<p><strong>여러 도구 중 옳은 하나(또는 여럿)를 정확히 고르는 능력</strong>이 에이전트 품질을 좌우합니다.</p>
+<blockquote>
+<p>비유: 공구함에 망치 하나만 있으면 고민이 없습니다. 하지만 드라이버·렌치·펜치가 수십 개면, <strong>"이 일엔 어떤 공구?"</strong> 를 고르는 게 일이 됩니다. 잘못 고르면 나사를 망치로 두드리는 꼴이죠.</p>
+</blockquote>
+<hr/>
+<h2 id="2">2. 하드코딩은 답이 아니다</h2>
+<p>"그럼 우리가 직접 정해 주면 되잖아?"라고 생각할 수 있습니다.</p>
+<pre><code class="language-python"># 나쁜 방법 — if문으로 일일이 하드코딩
+if "얼마" in question:
+    get_price(...)
+elif "재고" in question:
+    get_stock(...)
+elif "주문" in question:
+    get_order_status(...)
+# ... 도구가 20개면 if문이 20개? 그리고 "값이 어때?"는 "얼마"에 안 걸림!
+</code></pre>
+<p>이 방식은 도구가 늘 때마다 <code>if</code>문이 늘고, 표현이 조금만 달라도("얼마" vs "값이 어때?" vs "가격은?") 놓칩니다. <strong>유지보수 지옥</strong>입니다.</p>
+<hr/>
+<h2 id="3">3. 진짜 해법 — 설명을 잘 쓰면 모델이 고른다</h2>
+<p>좋은 소식이 있습니다. 우리가 도구 선택을 하드코딩할 필요가 <strong>전혀 없습니다.</strong> 도구의 <strong>독스트링(설명)</strong> 을 잘 써 두면, 모델이 질문과 설명을 비교해 <strong>알아서</strong> 고릅니다.</p>
+<pre><code class="language-python">def get_price(product_name: str) -&gt; str:
+    """상품명을 받아 판매가(원)를 반환한다. 가격/얼마 질문에 사용."""
+    ...
+
+# 4개 도구를 그냥 다 등록만 하면...
+TOOLS = [get_price, get_stock, get_order_status, search_product]
+
+ask("슬림핏 청바지 얼마야?")    # → 모델이 get_price 를 알아서 고름!
+ask("이어버드 재고 있어?")      # → 모델이 get_stock 을 알아서 고름!
+</code></pre>
+<p>우리는 도구를 <strong>그냥 다 등록</strong>했을 뿐인데, 질문마다 다른 도구가 선택됩니다. 비결은 <strong>독스트링</strong>입니다.</p>
+<hr/>
+<h2 id="4">4. 이 강의 핵심 메시지</h2>
+<p>이 강에서 계속 반복할 한 문장이 있습니다.</p>
+<blockquote>
+<p><strong>"도구 설명은 모델을 위한 프롬프트다."</strong></p>
+</blockquote>
+<p>독스트링은 동료 개발자를 위한 메모가 아니라, <strong>모델이 읽고 판단하는 사용 설명서</strong>입니다. 그래서 이 강은 결국 "모델이 잘 고를 수 있는 설명을 어떻게 쓰는가"에 관한 강의입니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>도구가 많아지면 <strong>"올바른 도구 고르기"</strong> 가 새 과제가 된다.</li>
+<li><code>if</code>문 하드코딩은 유지보수 지옥 → 답이 아니다.</li>
+<li><strong>독스트링을 잘 쓰면 모델이 알아서</strong> 도구를 고른다.</li>
+<li>핵심 한 줄: <strong>"도구 설명은 모델을 위한 프롬프트다."</strong></li>
+<li>다음 절에서 모델이 무엇을 보고 도구를 고르는지 자세히 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><span class="prv off"><span class="lbl"> </span> </span><a class="nxt" href="02_모델은-무엇을-보고-도구를-고르나.html"><span class="lbl">다음 절 →</span>02. 모델은 무엇을 보고 도구를 고르나</a></div>
+</div>
+</body></html>

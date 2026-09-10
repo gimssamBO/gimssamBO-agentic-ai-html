@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제4강 — 실습문제와 해답</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제4강 · reasoning prompt</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제4강 · reasoning prompt — 세부 목차</b><a class="" href="01_왜-단계적-추론이-필요한가.html">01. 왜 단계적 추론이 필요한가</a><a class="" href="02_CoT-vs-직접답변.html">02. CoT vs 직접답변</a><a class="" href="03_자기검증-검산.html">03. 자기검증 검산</a><a class="" href="04_따라하기-CoT-정답률-비교.html">04. 따라하기 CoT 정답률 비교</a><a class="" href="05_따라하기-자기검증-추가하기.html">05. 따라하기 자기검증 추가하기</a><a class="" href="06_CoT가-효과없는-경우.html">06. CoT가 효과없는 경우</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="cur" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">실습문제와 해답</h1>
+<p>직접 코드를 고쳐 보며 4강 내용을 손에 익힙니다. 먼저 <strong>스스로 풀어 본 뒤</strong> 해답을 펼쳐 보세요.</p>
+<hr/>
+<h2 id="1-cot-ab">문제 1 — CoT 문구 효과 A/B 측정</h2>
+<p><code>ask_cot()</code>를 복제해 <code>ask_nostep()</code>을 만들되, 프롬프트에서 <code>"단계적으로 풀어라"</code> 문구만 제거하세요(나머지 형식은 동일). 같은 8문제에 두 함수를 적용해 각각의 정답 개수를 출력하세요.</p>
+<ul>
+<li>사용 파일: <code>data/math_word_problems.csv</code></li>
+<li>기대 결과: <code>CoT 정답률: x/8 | 단계제거 정답률: y/8</code> 형태로 두 수치가 나와 "단계적으로" 한 줄의 효과를 비교할 수 있으면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib, re
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_genai_client, GEMINI_MODEL, DATA
+from google.genai import types
+import pandas as pd
+
+client = get_genai_client()
+df = pd.read_csv(DATA / "math_word_problems.csv")
+
+def extract_number(text):
+    nums = re.findall(r"-?\d[\d,]*", text.replace(" ", ""))
+    return int(nums[-1].replace(",", "")) if nums else None
+
+def ask_cot(q):
+    r = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=f"{q}\n단계적으로 풀어라. 각 계산을 한 줄씩 쓰고, 맨 마지막 줄에 '정답: &lt;숫자&gt;'.",
+        config=types.GenerateContentConfig(temperature=0))
+    return r.text
+
+def ask_nostep(q):   # "단계적으로 풀어라" 문구만 제거 (형식은 동일)
+    r = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=f"{q}\n각 계산을 한 줄씩 쓰고, 맨 마지막 줄에 '정답: &lt;숫자&gt;'.",
+        config=types.GenerateContentConfig(temperature=0))
+    return r.text
+
+cot_ok = nostep_ok = 0
+for _, row in df.iterrows():
+    ans = int(row["answer"])
+    cot_ok    += (extract_number(ask_cot(row["question"]))    == ans)
+    nostep_ok += (extract_number(ask_nostep(row["question"])) == ans)
+
+n = len(df)
+print(f"CoT 정답률: {cot_ok}/{n} | 단계제거 정답률: {nostep_ok}/{n}")
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">CoT 정답률: 8/8 | 단계제거 정답률: 6/8
+</code></pre>
+
+
+**해설**: 형식("한 줄씩, 마지막에 정답")은 똑같이 두고 **"단계적으로 풀어라"** 라는 지시어만 뺐는데 정답률이 떨어집니다. 이 한 문구가 모델에게 "차근차근 추론하라"는 신호를 준다는 걸 보여 줍니다. (이런 식으로 프롬프트의 한 요소만 바꿔 효과를 재는 것을 A/B 테스트라고 합니다.)
+
+</details>
+<hr/>
+<h2 id="2-self-consistency">문제 2 — self-consistency 다중 풀이</h2>
+<p>한 문제를 <code>ask_cot()</code>로 <strong>3번</strong> 호출하고, 각 답의 숫자를 모아 <code>collections.Counter</code>로 <strong>최빈값(다수결 답)</strong> 을 출력하는 함수 <code>self_consistency(question, n=3)</code>를 작성하세요.</p>
+<ul>
+<li>답을 다양하게 얻으려면 <code>temperature</code>를 약간 높입니다(예: 0.7).</li>
+<li>사용 파일: <code>data/math_word_problems.csv</code></li>
+<li>기대 결과: 3개의 개별 답과 최종 다수결 답이 출력되고, 정답과 일치하면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib, re
+from collections import Counter
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_genai_client, GEMINI_MODEL, DATA
+from google.genai import types
+import pandas as pd
+
+client = get_genai_client()
+df = pd.read_csv(DATA / "math_word_problems.csv")
+
+def extract_number(text):
+    nums = re.findall(r"-?\d[\d,]*", text.replace(" ", ""))
+    return int(nums[-1].replace(",", "")) if nums else None
+
+def self_consistency(question: str, n: int = 3):
+    """같은 문제를 n번 풀어 가장 많이 나온 답(다수결)을 채택한다."""
+    answers = []
+    for _ in range(n):
+        r = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=f"{question}\n단계적으로 풀고 마지막 줄에 '정답: &lt;숫자&gt;'.",
+            config=types.GenerateContentConfig(temperature=0.7),  # 다양성 위해 약간 높임
+        )
+        answers.append(extract_number(r.text))
+    print("개별 답:", answers)
+    winner = Counter(answers).most_common(1)[0][0]   # 최빈값
+    print("다수결 답:", winner)
+    return winner
+
+if __name__ == "__main__":
+    row = df.iloc[0]
+    result = self_consistency(row["question"], n=3)
+    print("실제 정답:", int(row["answer"]), "→", "맞음" if result == int(row["answer"]) else "틀림")
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">개별 답: [213300, 213300, 213000]
+다수결 답: 213300
+실제 정답: 213300 → 맞음
+</code></pre>
+
+
+**해설**: 세 번 풀어 `[213300, 213300, 213000]`이 나왔는데, 다수결로 `213300`을 채택해 정답을 맞혔습니다. 한 번의 풀이가 우연히 틀려도, **여러 번 풀어 가장 많이 나온 답**을 고르면 더 안정적입니다. 이게 self-consistency의 핵심입니다. (대신 호출을 n배 하므로 비용도 n배입니다.)
+
+</details>
+<hr/>
+<h2 id="_2">정리</h2>
+<ul>
+<li>문제 1로 <strong>"단계적으로" 문구 하나의 효과</strong>를 A/B로 측정했습니다.</li>
+<li>문제 2로 <strong>여러 번 풀고 다수결</strong>을 취하는 self-consistency를 구현했습니다.</li>
+</ul>
+<p>이것으로 4강(추론형 프롬프트)을 마칩니다. 다음 5강부터는 에이전트에 <strong>도구</strong>를 답니다!</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="07_정리-체크리스트.html"><span class="lbl">← 이전 절</span>07. 정리 체크리스트</a><span class="nxt off"><span class="lbl"> </span> </span></div>
+</div>
+</body></html>

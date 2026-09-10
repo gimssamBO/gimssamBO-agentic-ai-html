@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제11강 — 분석 결과를 차트로 시각화</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제11강 · data analysis agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제11강 · data analysis agent — 세부 목차</b><a class="" href="01_자연어로-데이터-분석하기.html">01. 자연어로 데이터 분석하기</a><a class="" href="02_데이터-함정-이상치-처리.html">02. 데이터 함정 이상치 처리</a><a class="" href="03_분석규칙을-시스템-프롬프트로.html">03. 분석규칙을 시스템 프롬프트로</a><a class="" href="04_따라하기-분석-도구와-전처리.html">04. 따라하기 분석 도구와 전처리</a><a class="" href="05_따라하기-자연어-질문으로-분석.html">05. 따라하기 자연어 질문으로 분석</a><a class="" href="06_분석전-데이터-품질-체크.html">06. 분석전 데이터 품질 체크</a><a class="cur" href="07_분석결과-차트로-시각화.html">07. 분석결과 차트로 시각화</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">분석 결과를 차트로 시각화</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>숫자 표만으로는 추세가 잘 안 보입니다. <strong>matplotlib</strong>으로 월별 매출 꺾은선과 카테고리별 매출 막대그래프를 그려 PNG 파일로 저장합니다. 시각화는 분석의 마지막 <strong>"전달"</strong> 단계입니다.</p>
+<hr/>
+<h2 id="0">0. 실습 준비 (설치)</h2>
+<pre><code class="language-bash">conda activate agentic
+
+# 11강 시각화에 필요한 라이브러리
+#  - matplotlib           : 파이썬 대표 시각화 라이브러리 (꺾은선·막대 그래프)
+#  - koreanize-matplotlib : 차트 한글 깨짐을 OS 무관하게 막아 주는 도우미
+pip install matplotlib koreanize-matplotlib
+</code></pre>
+<p>이번 시각화는 <code>data/monthly_sales.csv</code>(컬럼: month, 카테고리들, total)를 씁니다.</p>
+<hr/>
+<h2 id="1">1. 왜 시각화가 필요한가</h2>
+<p>분석 결과가 숫자 표로만 나오면, 사람이 한눈에 추세를 파악하기 어렵습니다.</p>
+<pre><code class="language-text">표: 2026-01 7,151,000 / 2026-02 6,890,000 / 2026-03 7,320,000 ...
+   → "오르락내리락 하는 것 같은데... 전체적으로는?"  (한눈에 안 보임)
+
+차트: 꺾은선 그래프
+   → "아, 2월에 떨어졌다가 다시 회복하는구나!"  (한눈에 보임)
+</code></pre>
+<blockquote>
+<p>비유: 길 안내를 글로 "북쪽으로 200m, 우회전, 100m..."라고 듣는 것과 <strong>지도</strong>를 보는 것의 차이입니다. 같은 정보라도 시각화하면 훨씬 빨리 이해됩니다.</p>
+</blockquote>
+<hr/>
+<h2 id="2">2. 한글 폰트 설정 (중요!)</h2>
+<p>matplotlib은 기본적으로 <strong>한글을 네모(□)로 깨뜨립니다.</strong> 차트 제목·축에 한글을 쓰려면 폰트를 지정해야 하는데, OS마다 폰트 이름이 달라(맥 <code>AppleGothic</code>, 윈도우 <code>Malgun Gothic</code>, 리눅스 <code>NanumGothic</code>) 직접 분기하면 번거롭습니다. 그래서 <strong><code>koreanize-matplotlib</code></strong> 를 씁니다.</p>
+<pre><code class="language-python">import matplotlib
+matplotlib.use("Agg")  # 화면 없는 환경에서도 동작하도록 파일 저장용 백엔드
+
+import matplotlib.pyplot as plt
+import koreanize_matplotlib   # 이 import 한 줄이 한글 폰트 설정을 끝낸다
+</code></pre>
+<ul>
+<li><strong><code>matplotlib.use("Agg")</code></strong>: 화면 없이 <strong>파일로 저장</strong>하는 모드. 서버나 자동화 환경에서 필수.</li>
+<li><strong><code>import koreanize_matplotlib</code></strong>: import 하는 것만으로 <strong>번들된 나눔고딕</strong>을 적용하고 음수 부호 깨짐(<code>axes.unicode_minus</code>)까지 자동으로 잡아 줍니다. <strong>맥·윈도우·리눅스·코랩 어디서나 동일</strong>하게 한글이 나오죠. (<code>matplotlib.pyplot</code>을 import 한 <strong>다음 줄</strong>에 둬야 설정이 적용됩니다.)</li>
+</ul>
+<blockquote>
+<p>OS별로 직접 지정하고 싶다면 <code>plt.rcParams["font.family"] = "Malgun Gothic"</code>(윈도우)처럼 분기를 쓸 수도 있지만, <code>koreanize-matplotlib</code> 한 줄이 그 모든 분기를 대신해 줍니다.</p>
+</blockquote>
+<hr/>
+<h2 id="3-1">3. 차트 ① — 월별 매출 꺾은선</h2>
+<p>(실습 파일: <code>sections/11_data_analysis_agent/07_분석결과-차트로-시각화.py</code>)</p>
+<pre><code class="language-python">import pandas as pd
+from common import DATA, ROOT
+
+df = pd.read_csv(DATA / "monthly_sales.csv", encoding="utf-8-sig")
+
+# 차트를 저장할 reports 폴더 (없으면 생성)
+out_dir = ROOT / "reports"
+out_dir.mkdir(exist_ok=True)
+
+# 월별 total 꺾은선
+fig1, ax1 = plt.subplots(figsize=(10, 5))
+ax1.plot(df["month"], df["total"], marker="o", color="#2563eb")
+ax1.set_title("승승장구몰 월별 총매출 추이")
+ax1.set_xlabel("월")
+ax1.set_ylabel("총매출(원)")
+# y축 숫자에 천단위 콤마
+ax1.yaxis.set_major_formatter(lambda x, _: f"{int(x):,}")
+plt.xticks(rotation=45, ha="right")     # x축 라벨 기울이기
+fig1.tight_layout()
+fig1.savefig(out_dir / "11_월별총매출_꺾은선.png", dpi=120)   # 파일로 저장!
+plt.close(fig1)
+</code></pre>
+<p>핵심 흐름: <code>plt.subplots()</code>로 도화지를 만들고 → <code>ax.plot()</code>으로 선을 그리고 → 제목·축 설정 → <code>savefig()</code>로 <strong>파일 저장</strong>.</p>
+<p><code>plt.show()</code> 대신 <code>savefig()</code>를 쓰는 게 포인트입니다. 자동화·서버 환경에서는 화면이 없으니, 차트를 <strong>파일로 남깁니다.</strong></p>
+<hr/>
+<h2 id="4-2">4. 차트 ② — 카테고리별 매출 막대</h2>
+<pre><code class="language-python"># 가장 최근 달의 카테고리별 매출
+categories = [c for c in df.columns if c not in ("month", "total")]
+last = df.iloc[-1]                          # 마지막 행 (최근 달)
+values = [last[c] for c in categories]
+
+fig2, ax2 = plt.subplots(figsize=(10, 5))
+ax2.bar(categories, values, color="#16a34a")     # 막대그래프
+ax2.set_title(f"{last['month']} 카테고리별 매출")
+ax2.set_xlabel("카테고리")
+ax2.set_ylabel("매출(원)")
+ax2.yaxis.set_major_formatter(lambda x, _: f"{int(x):,}")
+plt.xticks(rotation=45, ha="right")
+fig2.tight_layout()
+fig2.savefig(out_dir / "11_카테고리별매출_막대.png", dpi=120)
+plt.close(fig2)
+</code></pre>
+<p>꺾은선과 거의 같은데 <code>ax.plot</code> 대신 <code>ax.bar</code>(막대)를 씁니다. <strong>추이는 꺾은선, 비교는 막대</strong> — 데이터 성격에 맞는 차트 종류를 고르는 게 중요합니다.</p>
+<hr/>
+<h2 id="5">5. 어떤 차트를 언제 쓰나</h2>
+<table>
+<thead>
+<tr>
+<th>차트 종류</th>
+<th>적합한 데이터</th>
+<th>예시</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>꺾은선(line)</td>
+<td>시간에 따른 <strong>추이</strong></td>
+<td>월별 매출 변화</td>
+</tr>
+<tr>
+<td>막대(bar)</td>
+<td>항목 간 <strong>비교</strong></td>
+<td>카테고리별 매출</td>
+</tr>
+<tr>
+<td>원형(pie)</td>
+<td>전체 중 <strong>비중</strong></td>
+<td>채널별 매출 점유율</td>
+</tr>
+<tr>
+<td>산점도(scatter)</td>
+<td>두 변수의 <strong>관계</strong></td>
+<td>가격 vs 판매량</td>
+</tr>
+</tbody>
+</table>
+<p>"무엇을 보여 주고 싶은가"에 따라 차트를 고릅니다. 추이를 막대로 그리거나 비교를 꺾은선으로 그리면 오히려 헷갈리죠.</p>
+<hr/>
+<h2 id="6">6. 시각화는 분석의 '전달' 단계</h2>
+<p>분석 과정을 정리하면:</p>
+<pre><code class="language-text">1. 데이터 품질 체크 (06번)  → 데이터를 믿을 수 있나?
+2. 분석/집계 (04~05번)      → 무엇을 알아냈나?
+3. 시각화 (07번)            → 어떻게 전달하나?  ← 지금
+</code></pre>
+<p>아무리 좋은 분석도 <strong>전달이 안 되면</strong> 소용없습니다. 경영진은 숫자 표보다 차트 한 장을 더 빨리 이해합니다. 그래서 시각화는 분석의 마지막 마무리이자, 가장 중요한 "전달" 단계입니다. (24강에서 이 차트를 리포트에 넣습니다.)</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>11강 시각화 설치: <code>pip install matplotlib koreanize-matplotlib</code>.</li>
+<li>한글 깨짐 방지: <strong><code>import koreanize_matplotlib</code></strong> 한 줄(OS 무관, 음수 부호까지 자동).</li>
+<li><code>plt.show()</code> 대신 <strong><code>savefig()</code>로 파일 저장</strong>(자동화 환경).</li>
+<li><strong>추이는 꺾은선, 비교는 막대</strong> — 데이터에 맞는 차트를 고른다.</li>
+<li>시각화는 분석의 <strong>"전달" 단계</strong> — 차트가 표보다 빨리 이해된다.</li>
+<li>다음 절에서 11강을 정리합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_분석전-데이터-품질-체크.html"><span class="lbl">← 이전 절</span>06. 분석전 데이터 품질 체크</a><a class="nxt" href="08_정리-체크리스트.html"><span class="lbl">다음 절 →</span>08. 정리 체크리스트</a></div>
+</div>
+</body></html>

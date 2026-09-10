@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제24강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제24강 · business agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제24강 · business agent — 세부 목차</b><a class="" href="01_숫자는-있는데-보고서가-없다.html">01. 숫자는 있는데 보고서가 없다</a><a class="" href="02_계산은-코드-서술은-LLM.html">02. 계산은 코드 서술은 LLM</a><a class="" href="03_따라하기-핵심수치-집계.html">03. 따라하기 핵심수치 집계</a><a class="" href="04_따라하기-LLM에게-서술-맡기기.html">04. 따라하기 LLM에게 서술 맡기기</a><a class="" href="05_따라하기-리포트-저장.html">05. 따라하기 리포트 저장</a><a class="" href="06_예외처리-데이터-누락-대응.html">06. 예외처리 데이터 누락 대응</a><a class="" href="07_차트로-시각화-더하기.html">07. 차트로 시각화 더하기</a><a class="cur" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="24">24강에서 배운 것</h2>
+<p>24강에서는 데이터를 사람이 읽는 보고서로 자동 변환하는 <strong>비즈니스 리포트 에이전트</strong>를 만들었습니다.</p>
+<ul>
+<li><strong>핵심 원칙</strong>: 계산은 코드(pandas), 서술은 LLM — 산술 환각 방지.</li>
+<li><strong>facts 집계</strong>: 최신 달 총매출·증감률·카테고리 1·2위를 코드로 정확히.</li>
+<li><strong>서술 위임</strong>: facts를 프롬프트에 박아 넣고 "새 숫자 금지" → LLM은 글만.</li>
+<li><strong>단일 진입점</strong>: <code>generate_monthly_report()</code> 한 함수로 배치·API 공유.</li>
+<li><strong>[신규] 예외 처리</strong>: <code>load_facts_safe</code>로 파일 없음·컬럼 변경에 죽지 않게.</li>
+<li><strong>[신규] 차트 시각화</strong>: matplotlib로 막대그래프 png + 리포트에 이미지 삽입.</li>
+</ul>
+<hr/>
+<h2 id="_2">한눈에 보는 핵심 코드</h2>
+<pre><code class="language-python">import pandas as pd
+
+# 1) 계산은 코드 — facts(단일 진실)
+def load_facts():
+    df = pd.read_csv(DATA / "monthly_sales.csv").sort_values("month").reset_index(drop=True)
+    cur, prev = df.iloc[-1], df.iloc[-2]
+    growth = (cur["total"] - prev["total"]) / prev["total"] * 100
+    return {"month": cur["month"], "total": int(cur["total"]),
+            "growth_pct": round(growth, 1), "by_category": {...}}
+
+# 2) 서술은 LLM — facts만 주고 "새 숫자 금지"
+def write_report(facts):
+    return get_chat(temperature=0.3).invoke(
+        f"아래 확정 수치만 근거로 보고서를 써라. 숫자를 지어내지 마라.\n"
+        f"총매출 {facts['total']:,}원, 전월 대비 {facts['growth_pct']}%...").content
+
+# 3) 단일 진입점
+def generate_monthly_report():
+    facts = load_facts(); body = write_report(facts); return save_report(facts, body)
+</code></pre>
+<pre><code class="language-python"># [신규] 예외 처리 — 항상 dict 반환(ok 플래그)
+facts = load_facts_safe()
+if not facts["ok"]:
+    notify_admin(facts["error"])      # 죽지 말고 알림
+else:
+    save_report(facts, write_report(facts))
+
+# [신규] 차트 — 계산은 코드, facts로 그림
+matplotlib.use("Agg")                 # 화면 없는 배치 대응
+ax.bar(cats, [v/10000 for v in facts["by_category"].values()])
+plt.savefig(REPORTS_DIR / f"chart_{facts['month']}.png"); plt.close(fig)
+</code></pre>
+<hr/>
+<h2 id="_3">이 강에서 설치한 라이브러리</h2>
+<pre><code class="language-bash">pip install -U pandas              # 데이터 집계 (11강에서 설치했다면 생략)
+pip install -U matplotlib          # 차트 시각화 (07번 신규)
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>패키지</th>
+<th>용도</th>
+<th>처음 등장</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pandas</code></td>
+<td>CSV 집계·정렬·증감 계산</td>
+<td>11강</td>
+</tr>
+<tr>
+<td><code>matplotlib</code></td>
+<td>카테고리별 매출 막대그래프</td>
+<td>24강(07번)</td>
+</tr>
+<tr>
+<td><code>get_chat</code> (Gemini)</td>
+<td>리포트 서술</td>
+<td>2강</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>이번 강에서 <strong>새로</strong> 설치하는 건 차트용 <code>matplotlib</code>입니다(11강 시각화에서 이미 썼다면 생략). 예외 처리(06번)는 추가 설치가 필요 없습니다.</p>
+</blockquote>
+<hr/>
+<h2 id="_4">체크리스트</h2>
+<ul>
+<li>[ ] <strong>"계산은 코드, 서술은 LLM"</strong> 원칙을 설명할 수 있다.</li>
+<li>[ ] pandas로 핵심 수치(facts)를 정확히 집계했다.</li>
+<li>[ ] facts를 근거로 LLM이 마크다운 리포트를 작성하게 했다(새 숫자 금지).</li>
+<li>[ ] 단일 함수(<code>generate_monthly_report</code>)로 배치·엔드포인트화할 수 있다.</li>
+<li>[ ] 파일 없음·컬럼 변경 등에 <strong>죽지 않는</strong> 예외 처리를 구현했다.</li>
+<li>[ ] 차트 png를 만들어 리포트에 <strong>이미지로 삽입</strong>했다.</li>
+</ul>
+<hr/>
+<h2 id="_5">한 줄 핵심</h2>
+<blockquote>
+<p><strong>비즈니스 리포트는 "계산은 코드, 서술은 LLM"으로 나눈다. 숫자는 facts로 확정해 환각을 막고, 배치는 예외에 죽지 않게 감싸며, 글에 차트를 더해 한눈에 보이게 한다.</strong></p>
+</blockquote>
+<hr/>
+<h2 id="_6">다음 강 예고</h2>
+<p>25강 <strong>Multi-Agent 개념</strong>에서는 "만능 한 명 vs 전문가 팀"을 다룹니다. 하나의 에이전트에 모든 걸 맡기는 대신, <strong>역할별 전문 에이전트</strong>로 나누고 <strong>Supervisor가 라우팅</strong>하는 협업 구조를 배웁니다. 규칙 라우터와 LLM 라우터의 정확도·비용도 비교합니다.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="07_차트로-시각화-더하기.html"><span class="lbl">← 이전 절</span>07. 차트로 시각화 더하기</a><a class="nxt" href="09_실습문제와-해답.html"><span class="lbl">다음 절 →</span>09. 실습문제와 해답</a></div>
+</div>
+</body></html>

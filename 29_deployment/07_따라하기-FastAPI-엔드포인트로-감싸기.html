@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제29강 — 따라하기 — FastAPI 엔드포인트로 감싸기</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제29강 · deployment</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제29강 · deployment — 세부 목차</b><a class="" href="01_내-PC에선-됐는데요.html">01. 내 PC에선 됐는데요</a><a class="" href="02_설정-분리-env와-config.html">02. 설정 분리 env와 config</a><a class="" href="03_구조적-로깅.html">03. 구조적 로깅</a><a class="" href="04_예외처리와-재시도-지수백오프.html">04. 예외처리와 재시도 지수백오프</a><a class="" href="05_비용-지연-관리.html">05. 비용 지연 관리</a><a class="" href="06_따라하기-견고한-운영-래퍼.html">06. 따라하기 견고한 운영 래퍼</a><a class="cur" href="07_따라하기-FastAPI-엔드포인트로-감싸기.html">07. 따라하기 FastAPI 엔드포인트로 감싸기</a><a class="" href="08_응답-캐싱으로-비용-줄이기.html">08. 응답 캐싱으로 비용 줄이기</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="fastapi">따라하기 — FastAPI 엔드포인트로 감싸기</h1>
+<h2 id="_1">목표</h2>
+<p>06번의 견고한 래퍼(<code>robust_invoke</code>)를 <strong>HTTP API로 노출</strong>합니다. CLI 데모로 끝내지 않고 <code>POST /chat</code> 엔드포인트로 만들면, 웹·앱 등 <strong>어떤 클라이언트도</strong> 우리 에이전트를 호출할 수 있습니다(28강 운영 계약 구현). 실제 파일은 <code>sections/29_deployment/07_따라하기-FastAPI-엔드포인트로-감싸기.py</code> 입니다.</p>
+<hr/>
+<h2 id="0">0. 실습 준비</h2>
+<pre><code class="language-bash">conda activate agentic
+
+# FastAPI 서버 실행에 필요한 라이브러리
+#  - fastapi : 웹 API 프레임워크
+#  - uvicorn : FastAPI 앱을 실제로 구동하는 ASGI 서버
+pip install -U fastapi uvicorn
+</code></pre>
+<ul>
+<li>06번의 <code>code/ch29_deploy.py</code>(load_config·setup_logging·robust_invoke)가 있어야 합니다.</li>
+</ul>
+<hr/>
+<h2 id="1-http-api">1. 왜 HTTP API로 감싸나</h2>
+<p>06번까지는 <code>python ch29_deploy.py</code>로 <strong>터미널에서만</strong> 돌렸습니다. 하지만 실제 서비스는 웹/앱에서 호출해야 하죠.</p>
+<pre><code class="language-text">[CLI 데모]    나만, 터미널에서 직접 실행
+[HTTP API]    POST /chat 으로 → 웹페이지·모바일앱·다른 서버 누구나 호출
+</code></pre>
+<p>에이전트를 <strong>HTTP 엔드포인트</strong>로 노출하면, 28강에서 정한 운영 계약(<code>POST /chat {thread_id, message}</code>)이 실제로 구현됩니다.</p>
+<hr/>
+<h2 id="2">2. 운영 자산 재사용</h2>
+<p>핵심은 06번의 함수들을 <strong>그대로 가져다 쓰는</strong> 것입니다.</p>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parents[2] / "code"))
+from common import get_chat
+
+# 29강 운영 자산을 그대로 재사용 (설정 분리·구조적 로깅·재시도 래퍼)
+from ch29_deploy import load_config, setup_logging, robust_invoke
+</code></pre>
+<p>새로 만드는 건 <strong>웹 계층뿐</strong>입니다. 비즈니스 로직(설정·로깅·재시도)은 06번 것을 재사용하죠. 이게 "본체와 전송 계층 분리"의 실제 모습입니다.</p>
+<hr/>
+<h2 id="3-llm">3. 앱·로거·LLM은 시작 시 한 번만</h2>
+<p>중요한 성능 포인트입니다.</p>
+<pre><code class="language-python">try:
+    from fastapi import FastAPI
+    from pydantic import BaseModel
+
+    # [핵심] 설정·로거·LLM은 서버 시작 시 '한 번만' 만든다
+    #        (요청마다 재생성하면 느리고 낭비)
+    cfg = load_config()
+    logger = setup_logging(cfg)
+    llm = get_chat(provider=cfg["llm"]["provider"],
+                   temperature=cfg["llm"]["temperature"])
+    logger.info(f"FastAPI 앱 초기화: {cfg['app']['name']} v{cfg['app']['version']}")
+
+    app = FastAPI(title="승승장구몰 CS Agent")
+</code></pre>
+<pre><code class="language-text">[나쁨]  요청마다 load_config()·get_chat() 호출 → 매번 파일 읽고 객체 생성 (느림)
+[좋음]  서버 시작 시 1회 생성 → 모든 요청이 공유 (빠름)
+</code></pre>
+<p>설정·로거·LLM은 <strong>서버가 켜질 때 딱 한 번</strong> 만들고, 모든 요청이 이를 공유합니다.</p>
+<hr/>
+<h2 id="4">4. 요청/응답 스키마와 엔드포인트</h2>
+<p><code>pydantic</code> 모델로 입력·출력을 정의하면 <strong>자동 검증·문서화</strong>됩니다.</p>
+<pre><code class="language-python">    class ChatIn(BaseModel):                  # 요청 본문 스키마 = 입력 자동 검증
+        thread_id: str = "demo"
+        message: str
+
+    class ChatOut(BaseModel):                 # 응답 스키마(문서화·검증용)
+        thread_id: str
+        reply: str
+
+    @app.post("/chat", response_model=ChatOut)
+    def chat(body: ChatIn):
+        """[POST /chat] 사용자 메시지를 받아 견고한 래퍼로 답변을 생성한다."""
+        logger.info(f"요청 수신(thread={body.thread_id}): {body.message}")
+        reply = robust_invoke(llm, body.message, logger,
+                              max_retries=cfg["llm"]["max_retries"])  # 재시도+폴백
+        return {"thread_id": body.thread_id, "reply": reply}
+
+    @app.get("/health")
+    def health():
+        """[GET /health] 헬스체크 — 로드밸런서/모니터가 살아있는지 확인."""
+        return {"status": "ok", "app": cfg["app"]["name"], "version": cfg["app"]["version"]}
+
+except ImportError:
+    app = None       # fastapi 미설치여도 import 에러로 죽지 않게
+    print("[안내] fastapi/uvicorn 미설치 — 'pip install fastapi uvicorn' 후 사용하세요.")
+</code></pre>
+<p><strong>핵심</strong></p>
+<ul>
+<li><strong><code>ChatIn</code>(요청 스키마)</strong> — <code>message</code>가 없으면 FastAPI가 자동으로 422 에러를 냄(입력 검증 공짜).</li>
+<li><strong><code>@app.post("/chat")</code></strong> — 이 함수가 <code>POST /chat</code> 요청을 처리.</li>
+<li><strong><code>robust_invoke</code>로 호출</strong> — 06번 재시도/폴백 래퍼를 그대로 사용(웹에서도 안 죽음).</li>
+<li><strong><code>/health</code></strong> — 서버가 살아있는지 확인하는 헬스체크(운영 모니터링 필수).</li>
+<li><strong><code>try/except ImportError</code></strong> — fastapi 미설치 환경에서도 파일이 깨지지 않게.</li>
+</ul>
+<hr/>
+<h2 id="5">5. 서버 실행과 호출</h2>
+<p>서버는 <strong>uvicorn</strong>으로 띄웁니다.</p>
+<pre><code class="language-bash"># code/ 폴더에 ch29_app.py 로 배치했다고 가정
+uvicorn ch29_app:app --reload
+</code></pre>
+<p>다른 터미널에서 호출:</p>
+<pre><code class="language-bash"># POST /chat 호출
+curl -X POST localhost:8000/chat -H "Content-Type: application/json" \
+     -d '{"thread_id":"u1","message":"무료배송 기준 알려줘"}'
+
+# 응답
+{"thread_id":"u1","reply":"3만원 이상 구매 시 무료배송입니다."}
+
+# 헬스체크
+curl localhost:8000/health
+{"status":"ok","app":"승승장구 CS Agent","version":"1.0.0"}
+</code></pre>
+<blockquote>
+<p><strong>자동 문서</strong>: FastAPI는 <code>http://localhost:8000/docs</code>에 <strong>대화형 API 문서</strong>를 자동 생성합니다. 브라우저로 열어 바로 테스트할 수 있죠. <code>pydantic</code> 스키마 덕분입니다.</p>
+</blockquote>
+<hr/>
+<h2 id="6">6. 핵심 교훈 — 비즈니스 로직과 전송 계층 분리</h2>
+<pre><code class="language-text">[비즈니스 로직]   robust_invoke (06번) — "무엇을 어떻게 답하나, 안전하게"
+       +
+[전송 계층]       FastAPI chat() — "HTTP로 받아 HTTP로 돌려준다"
+</code></pre>
+<p>웹 함수 <code>chat()</code>은 <strong>얇습니다</strong> — 요청을 받아 <code>robust_invoke</code>를 부르고 결과를 반환할 뿐. 진짜 로직은 06번 래퍼에 있죠. 이렇게 분리하면:</p>
+<pre><code class="language-text">- robust_invoke 는 CLI에서도, FastAPI에서도, 테스트에서도 재사용
+- HTTP를 Slack 봇이나 gRPC로 바꿔도 비즈니스 로직은 그대로
+</code></pre>
+<blockquote>
+<p><strong>30강 예고</strong>: 30강에서는 <code>robust_invoke</code>(단순 LLM 호출) 자리에 <strong>완성된 에이전트(<code>answer</code>)</strong> 를 끼웁니다. 엔드포인트 구조는 그대로 두고 본체만 교체하는 거죠. 분리해뒀기에 가능합니다.</p>
+</blockquote>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>06번 래퍼를 <strong>FastAPI <code>POST /chat</code></strong> 으로 노출 → 웹·앱 등 누구나 호출 가능.</li>
+<li>설정·로거·LLM은 <strong>서버 시작 시 1회만</strong> 생성(요청마다 재생성 금지).</li>
+<li><code>pydantic</code> 스키마(<code>ChatIn</code>)로 <strong>입력 자동 검증</strong> + <code>/docs</code> 자동 문서.</li>
+<li><code>/health</code> 헬스체크로 운영 모니터링 대비.</li>
+<li>핵심 교훈: <strong>비즈니스 로직(robust_invoke)과 전송 계층(HTTP)을 분리</strong> → 재사용·교체 용이.</li>
+<li>다음 절에서 <strong>응답 캐싱</strong>으로 비용을 줄입니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_따라하기-견고한-운영-래퍼.html"><span class="lbl">← 이전 절</span>06. 따라하기 견고한 운영 래퍼</a><a class="nxt" href="08_응답-캐싱으로-비용-줄이기.html"><span class="lbl">다음 절 →</span>08. 응답 캐싱으로 비용 줄이기</a></div>
+</div>
+</body></html>

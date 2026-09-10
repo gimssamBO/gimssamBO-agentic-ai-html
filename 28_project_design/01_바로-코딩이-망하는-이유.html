@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제28강 — 바로 코딩이 망하는 이유</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제28강 · project design</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제28강 · project design — 세부 목차</b><a class="cur" href="01_바로-코딩이-망하는-이유.html">01. 바로 코딩이 망하는 이유</a><a class="" href="02_요구사항-정의와-기능-분해.html">02. 요구사항 정의와 기능 분해</a><a class="" href="03_구성요소-필요성-판단.html">03. 구성요소 필요성 판단</a><a class="" href="04_아키텍처와-인터페이스-설계.html">04. 아키텍처와 인터페이스 설계</a><a class="" href="05_따라하기-설계를-코드-스켈레톤으로.html">05. 따라하기 설계를 코드 스켈레톤으로</a><a class="" href="06_트레이드오프-판단-RAG-멀티에이전트.html">06. 트레이드오프 판단 RAG 멀티에이전트</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">바로 코딩이 망하는 이유</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>27강까지 도구·RAG·메모리·멀티에이전트를 <strong>따로따로</strong> 만들었습니다. 30강에선 이걸 <strong>하나의 서비스</strong>로 합칩니다. 그런데 <strong>설계 없이 바로 코드부터</strong> 짜면, 책임이 뒤섞이고 인터페이스가 불명확하며 비용·실패 대비가 빠진 결과가 나옵니다. 에이전트도 결국 <strong>하나의 백엔드 서비스</strong> — <strong>설계 → 구현</strong> 순서를 지켜야 합니다.</p>
+<hr/>
+<h2 id="1">1. 이제 "합치는" 단계입니다</h2>
+<p>지금까지 배운 것들을 떠올려 봅시다.</p>
+<pre><code class="language-text">5~12강:  도구(주문조회·재고·계산·검색)
+13~18강: RAG(정책 문서 검색)
+19~20강: 메모리(대화 맥락·사용자 기억)
+21~27강: 워크플로우·멀티에이전트(협업)
+</code></pre>
+<p>각각은 <strong>따로</strong> 동작했습니다. 30강의 목표는 이걸 모아 <strong>"진짜로 일하는 승승장구몰 통합 CS 에이전트"</strong> 하나로 만드는 것입니다. 그런데 여기서 많은 사람이 실수합니다 — <strong>곧장 코드부터</strong> 짜기 시작하죠.</p>
+<hr/>
+<h2 id="2">2. "바로 코딩"이 부르는 참사</h2>
+<p>설계 없이 바로 짜면, 백엔드 프로젝트가 그렇듯 이런 문제가 터집니다.</p>
+<pre><code class="language-text">① 책임이 뒤섞임
+   - 주문 조회 코드 안에 RAG 검색이 끼어들고, 답변 생성에 DB 로직이 섞임
+   - "이 기능 고치려면 어디를 봐야 하지?"가 안 보임
+
+② 인터페이스가 불명확
+   - 함수 이름·입출력이 매번 달라, 나중에 FastAPI로 감쌀 때 고생
+   - "이 에이전트를 외부에서 어떻게 부르지?"가 안 정해짐
+
+③ 비용·실패 대비 누락
+   - LLM 호출이 몇 번 일어나는지, 실패하면 어쩔지 생각 안 함
+   - 운영에서 타임아웃·rate limit 만나면 그대로 멈춤
+
+④ "필요 없는 것"까지 넣음
+   - 도구 4개뿐인데 멀티에이전트로 거창하게 → 복잡도·비용만 폭증
+</code></pre>
+<p>특히 ④가 흔합니다. "멋져 보여서" RAG·멀티에이전트를 다 넣었다가 <strong>오히려 느리고 비싸고 디버깅 어려운</strong> 시스템이 되죠.</p>
+<hr/>
+<h2 id="3">3. 에이전트도 "백엔드 서비스"다</h2>
+<p>핵심 인식 전환입니다.</p>
+<blockquote>
+<p><strong>에이전트 = 입력을 받아 처리해 출력을 내는 하나의 백엔드 서비스.</strong></p>
+</blockquote>
+<p>백엔드 서비스를 설계 없이 만들면 운영에서 터지듯, 에이전트도 똑같습니다. 그래서 <strong>설계 → 구현</strong> 순서를 지켜야 합니다.</p>
+<pre><code class="language-text">[바로 코딩]   코드부터 → 중간에 구조가 흔들림 → 갈아엎기 → 시간 낭비
+[설계 먼저]   무엇을·어떻게 만들지 합의 → 구현은 채우기만 → 흔들림 없음
+</code></pre>
+<hr/>
+<h2 id="4">4. 이번 강이 하는 일 — 코드 대신 "설계 문서"</h2>
+<p>28강은 <strong>코드를 거의 안 짭니다.</strong> 대신 <strong>설계 문서</strong>를 만듭니다. 그리고 그 설계를 <strong>코드 스켈레톤(시그니처 + TODO)</strong> 으로 박제합니다.</p>
+<pre><code class="language-text">이번 강의 결과물:
+  - "승승장구몰 통합 CS 에이전트" 설계 문서
+  - ch28_design.py — 함수 시그니처 + TODO 만 있는 '살아있는 설계 문서'
+    (실행하면 설계 요약을 출력. 실제 LLM 호출은 30강에서)
+</code></pre>
+<p>30강에서는 이 스켈레톤의 <strong>TODO를 채우기만</strong> 하면 됩니다. 설계가 미리 고정돼 있어 구현이 흔들리지 않죠.</p>
+<hr/>
+<h2 id="5-5">5. 5단계 설계 절차 (이번 강의 뼈대)</h2>
+<p>이번 강은 다음 5단계를 따라갑니다.</p>
+<pre><code class="language-text">1단계. 요구사항 정의    — "무엇을 해결하나" (사용자 시나리오)       → 02번
+2단계. 기능 분해        — 요구사항을 함수 단위로 쪼갬              → 02번
+3단계. 구성요소 필요성 판단 — 도구·RAG·메모리·멀티에이전트 중 뭐가 필요? → 03번 (가장 중요)
+4단계. 아키텍처 설계    — 전체 그림(다이어그램)                    → 04번
+5단계. 인터페이스 설계  — 외부 계약(진입 함수·엔드포인트)           → 04번
+</code></pre>
+<p>이 절차는 <strong>에이전트뿐 아니라 모든 백엔드 설계</strong>에 통하는 사고법입니다. 특히 <strong>3단계(구성요소 필요성 판단)</strong> 가 핵심 — "필요 없는 건 안 넣는다"가 좋은 설계의 출발입니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>30강에서 도구·RAG·메모리·멀티에이전트를 <strong>하나의 서비스로 통합</strong>한다.</li>
+<li><strong>설계 없이 바로 코딩</strong>하면: 책임 혼재·인터페이스 불명확·비용/실패 누락·과잉 구성.</li>
+<li>에이전트도 <strong>하나의 백엔드 서비스</strong> — <strong>설계 → 구현</strong> 순서를 지켜야 한다.</li>
+<li>이번 강은 코드 대신 <strong>설계 문서 + 코드 스켈레톤</strong>(살아있는 설계 문서)을 만든다.</li>
+<li>5단계 절차: <strong>요구사항 → 기능 분해 → 구성요소 판단 → 아키텍처 → 인터페이스</strong>.</li>
+<li>다음 절에서 1·2단계(요구사항 정의·기능 분해)를 다룹니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><span class="prv off"><span class="lbl"> </span> </span><a class="nxt" href="02_요구사항-정의와-기능-분해.html"><span class="lbl">다음 절 →</span>02. 요구사항 정의와 기능 분해</a></div>
+</div>
+</body></html>

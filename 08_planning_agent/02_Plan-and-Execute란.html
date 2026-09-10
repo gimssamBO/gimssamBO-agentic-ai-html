@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제8강 — Plan-and-Execute란</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제8강 · planning agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제8강 · planning agent — 세부 목차</b><a class="" href="01_목표를-단계로-쪼개기.html">01. 목표를 단계로 쪼개기</a><a class="cur" href="02_Plan-and-Execute란.html">02. Plan and Execute란</a><a class="" href="03_ReAct-vs-Plan-and-Execute.html">03. ReAct vs Plan and Execute</a><a class="" href="04_구조화-출력-Pydantic-스키마.html">04. 구조화 출력 Pydantic 스키마</a><a class="" href="05_따라하기-목표를-하위작업으로-분해.html">05. 따라하기 목표를 하위작업으로 분해</a><a class="" href="06_따라하기-실행-에이전트-구성.html">06. 따라하기 실행 에이전트 구성</a><a class="" href="07_계획이-잘못됐을때-대응.html">07. 계획이 잘못됐을때 대응</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="plan-and-execute">Plan-and-Execute란</h1>
+<h2 id="_1">한 줄 요약</h2>
+<p><strong>Plan-and-Execute</strong>는 큰 목표를 받으면 ① 먼저 전체 계획(하위 작업 목록)을 세우고 → ② 각 단계를 차례로 실행하는 방식입니다. "계획자(Planner)"와 "실행자(Executor)"라는 두 역할로 나뉩니다.</p>
+<hr/>
+<h2 id="1">1. 두 단계로 일하기</h2>
+<p>Plan-and-Execute는 이름 그대로 두 단계입니다.</p>
+<p><strong>목표</strong> "가을 패딩 출시" 가 두 단계를 거칩니다.</p>
+<table>
+<thead>
+<tr>
+<th>단계</th>
+<th>역할</th>
+<th>하는 일</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>① <strong>Planner (계획자)</strong></td>
+<td>"무엇을 할지" 결정</td>
+<td>목표를 하위 작업 목록으로 분해 → [시장조사, 콘셉트확정, 상세페이지, …]</td>
+</tr>
+<tr>
+<td>② <strong>Executor (실행자)</strong></td>
+<td>"어떻게 할지" 실행</td>
+<td>각 단계를 차례로 처리(도구로 진행상황 점검·다음 행동)</td>
+</tr>
+</tbody>
+</table>
+<p>→ 그 결과로 <strong>다음 할 일 제안 / 최종 보고</strong> 가 나옵니다.</p>
+<ul>
+<li><strong>Planner(계획자)</strong>: "무엇을 할지"를 정합니다. 큰 목표를 작은 단계들로 쪼갭니다.</li>
+<li><strong>Executor(실행자)</strong>: "어떻게 할지"를 처리합니다. 각 단계를 도구로 실행합니다.</li>
+</ul>
+<blockquote>
+<p>비유: 건축과 같습니다. <strong>설계사(Planner)</strong> 가 먼저 설계도를 그리고, <strong>시공팀(Executor)</strong> 이 그 설계도대로 짓습니다. 설계 없이 벽돌부터 쌓으면 집이 산으로 가죠.</p>
+</blockquote>
+<hr/>
+<h2 id="2">2. 왜 나누면 좋은가</h2>
+<p>"무엇을"과 "어떻게"를 나누면 장점이 있습니다.</p>
+<ul>
+<li><strong>큰 그림 유지</strong>: 계획이 있으니, 실행 중에 길을 잃지 않습니다. "지금 6단계 중 3단계 하는 중"을 압니다.</li>
+<li><strong>검토 가능</strong>: 계획을 먼저 보고 "이 순서 맞나?"를 점검할 수 있습니다(07번 계획 검증).</li>
+<li><strong>재사용</strong>: 같은 종류의 목표(다른 신상품 출시)에 비슷한 계획을 재사용할 수 있습니다.</li>
+</ul>
+<hr/>
+<h2 id="3-planner-executor">3. 이 강의 Planner와 Executor</h2>
+<p>이번 강에서 만들 두 부분을 미리 봅시다.</p>
+<h3 id="planner">Planner — 목표를 분해</h3>
+<pre><code class="language-python"># with_structured_output 으로 목표를 JSON(steps 리스트)으로 분해
+plan = make_plan("가을 패딩 출시")
+# → Plan(goal="가을 패딩 출시", steps=["시장조사", "콘셉트확정", "상세페이지", ...])
+</code></pre>
+<h3 id="executor">Executor — 진행상황 보며 실행</h3>
+<pre><code class="language-python"># create_agent 로 만든 LangChain 에이전트가 진행상황을 조회하며 다음 할 일 제안
+result = planning_agent.invoke({"messages": [{"role": "user", "content": "다음 할 일 추천해줘"}]})
+</code></pre>
+<p>이 둘을 04~06번에서 차례로 만듭니다.</p>
+<hr/>
+<h2 id="4">4. 현실적인 모습 — 완벽한 분리는 아니다</h2>
+<p>실무에서 Plan-and-Execute는 종종 <strong>혼합</strong>됩니다.</p>
+<ul>
+<li>계획을 세운 뒤, 실행 중 상황이 바뀌면 <strong>다시 계획</strong>을 짤 수도 있습니다(re-planning, 07번).</li>
+<li>Executor 자체가 작은 ReAct 루프일 수도 있습니다(각 단계를 도구로 처리).</li>
+</ul>
+<p>즉, "계획 → 실행"이 한 방향으로만 흐르는 게 아니라, <strong>실행 결과를 보고 계획을 수정</strong>하기도 합니다. 이 강에서는 기본형을 배우고, 07번에서 "계획이 틀렸을 때 다시 짜는" 응용을 봅니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>Plan-and-Execute = <strong>① 계획(무엇을) → ② 실행(어떻게)</strong> 의 2단계.</li>
+<li><strong>Planner</strong>(목표 분해)와 <strong>Executor</strong>(단계 실행)로 역할이 나뉜다.</li>
+<li>큰 그림 유지·검토 가능·재사용이 장점.</li>
+<li>실무에선 실행 결과에 따라 <strong>계획을 다시 짜기도</strong> 한다(07번).</li>
+<li>다음 절에서 ReAct와 Plan-and-Execute를 비교합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="01_목표를-단계로-쪼개기.html"><span class="lbl">← 이전 절</span>01. 목표를 단계로 쪼개기</a><a class="nxt" href="03_ReAct-vs-Plan-and-Execute.html"><span class="lbl">다음 절 →</span>03. ReAct vs Plan and Execute</a></div>
+</div>
+</body></html>

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제21강 — 실습문제와 해답</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제21강 · agent workflow</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제21강 · agent workflow — 세부 목차</b><a class="" href="01_자유로운게-항상-좋은건-아니다.html">01. 자유로운게 항상 좋은건 아니다</a><a class="" href="02_에이전트-vs-워크플로우.html">02. 에이전트 vs 워크플로우</a><a class="" href="03_StateGraph의-3요소.html">03. StateGraph의 3요소</a><a class="" href="04_따라하기-상태-스키마와-노드-정의.html">04. 따라하기 상태 스키마와 노드 정의</a><a class="" href="05_따라하기-그래프-조립과-일괄처리.html">05. 따라하기 그래프 조립과 일괄처리</a><a class="" href="06_조건부-분기-add_conditional_edges.html">06. 조건부 분기 add_conditional_edges</a><a class="" href="07_노드-실패-처리와-상태-검증.html">07. 노드 실패 처리와 상태 검증</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="cur" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">실습문제와 해답</h1>
+<p>직접 코드를 고쳐 보며 21강 내용을 손에 익힙니다. 먼저 <strong>스스로 풀어 본 뒤</strong> 해답을 펼쳐 보세요. (이 실습은 <code>GOOGLE_API_KEY</code>가 필요합니다.)</p>
+<hr/>
+<h2 id="1">문제 1 — 긴급 알림 조건 분기 추가</h2>
+<p><code>TicketState</code>에 <code>alert</code> 키를 추가하고 <code>notify_node</code>(긴급 티켓에 <code>alert="즉시알림"</code> 세팅)를 만든 뒤, <code>add_conditional_edges</code>로 <code>priority == "긴급"</code>이면 <code>priority → notify → assign</code>, 그 외엔 <code>priority → assign</code>으로 분기하세요.</p>
+<ul>
+<li>사용 파일: <code>data/support_tickets.csv</code></li>
+<li>기대 결과: 출력에 <code>alert</code> 열이 추가되고 긴급 티켓에만 "즉시알림"이 찍히면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib, csv
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import DATA
+from langgraph.graph import StateGraph, START, END
+from ch21_workflow import TicketState as Base, classify_node, priority_node, assign_node
+
+class TicketState(Base):
+    alert: str
+
+def notify_node(state) -&gt; dict:
+    """긴급 티켓에 즉시 알림 플래그를 세팅한다."""
+    return {"alert": "즉시알림"}
+
+def route(state) -&gt; str:
+    """긴급이면 notify를 거치고, 아니면 바로 assign으로."""
+    return "notify" if state["priority"] == "긴급" else "assign"
+
+g = StateGraph(TicketState)
+g.add_node("classify", classify_node)
+g.add_node("priority", priority_node)
+g.add_node("notify", notify_node)
+g.add_node("assign", assign_node)
+g.add_edge(START, "classify")
+g.add_edge("classify", "priority")
+g.add_conditional_edges("priority", route, {"notify": "notify", "assign": "assign"})
+g.add_edge("notify", "assign")     # 알림 후 배정으로 합류
+g.add_edge("assign", END)
+workflow = g.compile()
+
+with open(DATA / "support_tickets.csv", encoding="utf-8-sig") as f:
+    tickets = list(csv.DictReader(f))
+
+print(f"{'티켓':&lt;7}{'우선순위':&lt;7}{'알림':&lt;8}{'담당팀'}")
+for t in tickets:
+    r = workflow.invoke({"content": t["content"]})
+    print(f"{t['ticket_id']:&lt;7}{r['priority']:&lt;7}{r.get('alert','-'):&lt;8}{r['team']}")
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">티켓     우선순위   알림      담당팀
+TK001  긴급     즉시알림   결제지원팀
+TK002  보통     -        일반상담팀
+TK003  긴급     즉시알림   물류팀
+TK005  높음     -        물류팀
+</code></pre>
+
+
+**해설**: 긴급 티켓(TK001, TK003)만 `notify` 노드를 거쳐 "즉시알림"이 찍혔습니다. 핵심은 `route` 함수가 우선순위를 보고 "notify" 또는 "assign"을 반환하고, `notify` 다음에 다시 `assign`으로 **합류**(`g.add_edge("notify", "assign")`)하는 것입니다. 긴급은 "알림→배정", 일반은 "바로 배정"으로 흐르되, 결국 둘 다 배정을 거치죠. 분기 후 합류하는 흐름 패턴입니다.
+
+</details>
+<hr/>
+<h2 id="2">문제 2 — 노드 예외처리·검토필요 표시</h2>
+<p>각 노드를 try/except로 감싸 실패 시 <code>state["error"]</code>에 메시지를 기록하고, 마지막 노드가 <code>error</code>가 있으면 <code>team="검토필요"</code>로 덮어쓰게 하세요.</p>
+<ul>
+<li>검증: <code>classify_node</code>에 일부러 예외를 던지는 코드를 넣고, 해당 티켓의 담당팀이 "검토필요"로 출력되는지 확인</li>
+<li>기대 결과: 예외 발생 티켓이 "검토필요" 팀으로 처리되면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib, csv
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_chat, DATA
+from typing import TypedDict
+from langchain_core.messages import SystemMessage, HumanMessage
+from langgraph.graph import StateGraph, START, END
+from ch21_workflow import CATEGORIES, priority_node, TEAM_MAP
+
+llm = get_chat(temperature=0)
+
+class TicketState(TypedDict):
+    content: str; category: str; priority: str; team: str; error: str
+
+def classify_node(state) -&gt; dict:
+    try:
+        # 검증용: 일부러 예외 던지기 (특정 내용에서)
+        if "FORCE_ERROR" in state["content"]:
+            raise ValueError("강제 예외 (테스트)")
+        out = llm.invoke([SystemMessage(f"{CATEGORIES} 중 하나로 분류. 단어만."),
+                          HumanMessage(state["content"])]).content.strip()
+        cat = next((c for c in CATEGORIES if c in out), "기타")
+        return {"category": cat, "error": ""}
+    except Exception as e:
+        return {"category": "기타", "error": f"분류 실패: {e}"}
+
+def assign_node(state) -&gt; dict:
+    # error가 있으면 검토필요로 덮어씀
+    if state.get("error"):
+        return {"team": "검토필요"}
+    return {"team": TEAM_MAP.get(state["category"], "일반상담팀")}
+
+g = StateGraph(TicketState)
+for name, fn in [("classify", classify_node), ("priority", priority_node), ("assign", assign_node)]:
+    g.add_node(name, fn)
+g.add_edge(START, "classify"); g.add_edge("classify", "priority")
+g.add_edge("priority", "assign"); g.add_edge("assign", END)
+workflow = g.compile()
+
+tests = [{"ticket_id": "T1", "content": "결제가 안 돼요"},
+         {"ticket_id": "T2", "content": "FORCE_ERROR 테스트 티켓"}]   # 예외 유발
+for t in tests:
+    r = workflow.invoke({"content": t["content"], "error": ""})
+    print(f"{t['ticket_id']}: 팀={r['team']}, 오류={r.get('error') or '없음'}")
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">T1: 팀=결제지원팀, 오류=없음
+T2: 팀=검토필요, 오류=분류 실패: 강제 예외 (테스트)
+</code></pre>
+
+
+**해설**: T2는 `FORCE_ERROR`로 예외가 났지만, **죽지 않고** `error`에 기록된 채 진행됐습니다. 그리고 `assign_node`가 `error`가 있는 걸 보고 팀을 "검토필요"로 덮어썼죠. 핵심은 두 가지 — (1) `try/except`로 예외를 잡아 죽지 않게, (2) 마지막 노드에서 `error`를 보고 후처리(검토필요 배정). 이렇게 하면 실패한 티켓을 자동으로 "사람이 검토할 큐"로 보낼 수 있습니다. 견고한 워크플로우의 핵심 패턴이죠.
+
+</details>
+<hr/>
+<h2 id="_2">정리</h2>
+<ul>
+<li>문제 1로 <strong>조건부 분기 + 합류</strong> 흐름을 만들었습니다.</li>
+<li>문제 2로 <strong>예외 처리 + 검토필요 라우팅</strong>을 구현했습니다.</li>
+</ul>
+<p>이것으로 21강을 마칩니다. 다음 22강에서 리서치 에이전트를 만듭니다!</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="08_정리-체크리스트.html"><span class="lbl">← 이전 절</span>08. 정리 체크리스트</a><span class="nxt off"><span class="lbl"> </span> </span></div>
+</div>
+</body></html>

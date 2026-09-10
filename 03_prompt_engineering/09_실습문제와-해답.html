@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제3강 — 실습문제와 해답</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제3강 · prompt engineering</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제3강 · prompt engineering — 세부 목차</b><a class="" href="01_왜-프롬프트가-중요한가.html">01. 왜 프롬프트가 중요한가</a><a class="" href="02_좋은-프롬프트의-4요소.html">02. 좋은 프롬프트의 4요소</a><a class="" href="03_zero-shot-vs-few-shot.html">03. zero shot vs few shot</a><a class="" href="04_JSON-출력-강제하기.html">04. JSON 출력 강제하기</a><a class="" href="05_프롬프트-인젝션-기초-방어.html">05. 프롬프트 인젝션 기초 방어</a><a class="" href="06_따라하기-고객문의-분류와-정확도-측정.html">06. 따라하기 고객문의 분류와 정확도 측정</a><a class="" href="07_오분류-사례-분석.html">07. 오분류 사례 분석</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="cur" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">실습문제와 해답</h1>
+<p>직접 코드를 고쳐 보며 3강 내용을 손에 익힙니다. 먼저 <strong>스스로 풀어 본 뒤</strong> 해답을 펼쳐 보세요.</p>
+<hr/>
+<h2 id="1-few-shot">문제 1 — few-shot 보강으로 정확도 올리기</h2>
+<p><code>code/ch03_prompt.py</code>의 <code>FEWSHOT</code> 문자열에, "불만"과 "상품문의"를 가르는 경계 예시 2개를 직접 추가하세요.</p>
+<ul>
+<li>예: <code>문의: 배송이 자꾸 늦어서 너무 불편해요. → 불만</code>, <code>문의: 이 제품 방수 되나요? → 상품문의</code></li>
+<li>사용 파일: <code>data/cs_inquiries.csv</code></li>
+<li>기대 결과: 변경 <strong>전/후</strong> 60건 정확도를 모두 출력해, 예시 추가 효과(예: 88.3% → 91.7%)를 비교할 수 있으면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_genai_client, GEMINI_MODEL, DATA
+from google.genai import types
+import pandas as pd
+
+client = get_genai_client()
+df = pd.read_csv(DATA / "cs_inquiries.csv", encoding="utf-8-sig")
+CATEGORIES = ["배송", "환불", "교환", "결제", "상품문의", "칭찬", "불만"]
+
+FEWSHOT_BASE = """다음 고객 문의를 아래 7개 중 정확히 하나로 분류하라.
+카테고리: 배송 / 환불 / 교환 / 결제 / 상품문의 / 칭찬 / 불만
+카테고리 이름 한 단어만 출력하라(다른 말 금지).
+
+[예시]
+문의: 반품하면 배송비는 누가 부담하나요?           → 환불
+문의: 색상이 사진과 달라요. 다른 색으로 바꿔주세요.  → 교환
+문의: 상담원분이 정말 친절하셨어요. 감사합니다.      → 칭찬
+문의: 카드가 두 번 청구됐어요.                      → 결제
+"""
+
+# 경계 예시 2개 추가
+FEWSHOT_PLUS = FEWSHOT_BASE + """문의: 배송이 자꾸 늦어서 너무 불편해요.   → 불만
+문의: 이 제품 방수 되나요?                  → 상품문의
+"""
+
+def make_classifier(fewshot):
+    def classify(content):
+        resp = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=f"{fewshot}\n[분류할 문의]\n문의: {content} →",
+            config=types.GenerateContentConfig(temperature=0),
+        )
+        out = resp.text.strip()
+        return next((c for c in CATEGORIES if c in out), "기타")
+    return classify
+
+def accuracy(classify):
+    pred = df["content"].apply(classify)
+    return (pred == df["category_hint"]).mean()
+
+print(f"예시 추가 전: {accuracy(make_classifier(FEWSHOT_BASE)):.1%}")
+print(f"예시 추가 후: {accuracy(make_classifier(FEWSHOT_PLUS)):.1%}")
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">예시 추가 전: 88.3%
+예시 추가 후: 91.7%
+</code></pre>
+
+
+**해설**: 약한 경계(불만 vs 상품문의)를 콕 집은 예시를 추가하니 정확도가 올랐습니다. 07번에서 배운 "혼동쌍 분석 → 경계 예시 처방"을 실제로 적용한 것입니다.
+
+</details>
+<hr/>
+<h2 id="2-triage">문제 2 — 긴급 건만 추리는 triage 배치</h2>
+<p><code>code/ch03_prompt.py</code>의 <code>triage()</code> JSON 키에 <code>suggested_reply</code>(추천 답변 1문장)를 추가하세요.</p>
+<ul>
+<li><code>data/cs_inquiries.csv</code>의 <strong>앞 15건</strong>에 <code>triage()</code>를 적용합니다.</li>
+<li>결과 중 <code>urgent == True</code>인 건만 골라 <code>content / category / suggested_reply</code>를 한 줄씩 출력합니다.</li>
+<li>기대 결과: 긴급 문의들만 추천 답변과 함께 출력되면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib, json
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_genai_client, GEMINI_MODEL, DATA
+from google.genai import types
+import pandas as pd
+
+client = get_genai_client()
+df = pd.read_csv(DATA / "cs_inquiries.csv", encoding="utf-8-sig")
+
+def triage(content: str) -&gt; dict:
+    resp = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=(
+            "다음 고객 문의를 분석해 JSON으로만 답하라.\n"
+            "키: category(배송/환불/교환/결제/상품문의/칭찬/불만 중 하나), "
+            "urgent(true/false), summary(20자 이내), "
+            "suggested_reply(고객에게 보낼 추천 답변 1문장)\n"  # ← 추가한 키
+            f"문의: {content}"
+        ),
+        config=types.GenerateContentConfig(
+            temperature=0, response_mime_type="application/json"),
+    )
+    return json.loads(resp.text)
+
+# 앞 15건에 적용 → 긴급 건만 출력
+print("=== 긴급 문의 (urgent=True) ===")
+for content in df["content"].head(15):
+    r = triage(content)
+    if r.get("urgent"):
+        print(f"- [{r['category']}] {content}")
+        print(f"    추천답변: {r['suggested_reply']}")
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">=== 긴급 문의 (urgent=True) ===
+- [환불] 어제 받은 제품이 박살나서 왔어요. 당장 환불해주세요!
+    추천답변: 파손 배송으로 불편을 드려 죄송합니다. 즉시 환불 처리 도와드리겠습니다.
+- [결제] 카드가 세 번이나 중복 결제됐어요!
+    추천답변: 중복 결제 확인 후 빠르게 환불해 드리겠습니다. 주문번호를 알려주세요.
+</code></pre>
+
+
+**해설**: JSON 키를 하나 추가하는 것만으로 "분류 + 긴급도 + 요약 + 추천답변"을 한 번의 호출로 받습니다. `urgent`로 필터링하면 **긴급 건만 우선 처리**하는 배치 로직이 됩니다. 이런 구조화된 출력이 다음 단계(자동 라우팅, 도구 호출)의 입력이 됩니다.
+
+</details>
+<hr/>
+<h2 id="_2">정리</h2>
+<ul>
+<li>문제 1로 <strong>혼동쌍 분석 → 경계 예시 추가 → 정확도 향상</strong>을 직접 확인했습니다.</li>
+<li>문제 2로 <strong>JSON 키 확장 → 긴급 건 자동 필터링</strong>을 구현했습니다.</li>
+</ul>
+<p>이것으로 3강을 마칩니다. 다음은 추론형 프롬프트(Chain-of-Thought)입니다!</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="08_정리-체크리스트.html"><span class="lbl">← 이전 절</span>08. 정리 체크리스트</a><span class="nxt off"><span class="lbl"> </span> </span></div>
+</div>
+</body></html>

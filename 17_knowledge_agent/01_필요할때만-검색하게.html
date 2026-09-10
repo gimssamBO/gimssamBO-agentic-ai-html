@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제17강 — 필요할 때만 검색하게</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제17강 · knowledge agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제17강 · knowledge agent — 세부 목차</b><a class="cur" href="01_필요할때만-검색하게.html">01. 필요할때만 검색하게</a><a class="" href="02_항상검색-vs-필요할때검색.html">02. 항상검색 vs 필요할때검색</a><a class="" href="03_RAG를-도구로-만들기.html">03. RAG를 도구로 만들기</a><a class="" href="04_따라하기-retriever를-도구로.html">04. 따라하기 retriever를 도구로</a><a class="" href="05_따라하기-일상질문-vs-정책질문.html">05. 따라하기 일상질문 vs 정책질문</a><a class="" href="06_도구-선택-실패와-description-개선.html">06. 도구 선택 실패와 description 개선</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">필요할 때만 검색하게</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>16강의 QA 체인은 <strong>무조건 검색</strong>합니다. "안녕하세요"에도 정책 문서를 뒤지죠. 사람 상담원은 일상 인사엔 그냥 답하고, 정책 질문이 오면 그제서야 정책집을 폅니다. 이 <strong>판단</strong>을 LLM에게 맡기는 게 Knowledge Agent입니다.</p>
+<hr/>
+<h2 id="1">1. 항상 검색의 낭비</h2>
+<p>16강 RAG QA 체인은 강력하지만 한 가지 단점이 있습니다 — <strong>무조건 검색합니다.</strong></p>
+<pre><code class="language-python">answer("안녕하세요!")        # → 정책 문서를 검색함 (불필요!)
+answer("오늘 날씨 좋네요")    # → 정책 PDF를 뒤짐 (낭비!)
+answer("환불 며칠 걸려요?")  # → 정책 검색함 (이건 필요)
+</code></pre>
+<p>"안녕하세요"나 "날씨 좋네요"는 정책 문서와 아무 관계가 없는데도 검색합니다. 이건 불필요한 <strong>임베딩 호출(비용)과 지연</strong>을 만듭니다. 인사 한마디에 문서를 뒤지는 건 비효율적이죠.</p>
+<hr/>
+<h2 id="2">2. 사람 상담원은 어떻게 하나</h2>
+<p>진짜 상담원을 생각해 봅시다.</p>
+<pre><code class="language-text">고객: "안녕하세요!"
+상담원: "안녕하세요! 무엇을 도와드릴까요?"  ← 정책집 안 봄
+
+고객: "환불 규정이 어떻게 되나요?"
+상담원: (정책집을 펼치며) "환불은..."        ← 그제서야 정책집 봄
+</code></pre>
+<p>상담원은 <strong>판단</strong>합니다. 일상 인사엔 그냥 답하고, 규정 질문엔 자료를 찾죠. 매번 정책집을 펴 보지 않습니다. 이 "언제 자료를 볼지 판단하는 능력"이 핵심입니다.</p>
+<hr/>
+<h2 id="3-rag">3. RAG를 '도구'로 만든다</h2>
+<p>해결책: RAG를 하나의 <strong>도구(tool)</strong> 로 포장해 에이전트에게 쥐여 주는 것입니다.</p>
+<p><strong>에이전트(LLM)</strong> 가 <code>[정책 문서 검색]</code> 도구를 들고, 질문에 따라 판단합니다.</p>
+<ul>
+<li>"안녕하세요" → 검색 도구 <strong>안 씀</strong> → 바로 답</li>
+<li>"환불 규정?" → 검색 도구 <strong>씀</strong> → 근거로 답</li>
+</ul>
+<p>5~12강에서 배운 그 패턴입니다 — LLM에게 도구를 주면 <strong>필요할 때 스스로</strong> 호출합니다. RAG 검색을 "도구 중 하나"로 만들면, 에이전트가 "이 질문은 검색이 필요한가?"를 판단하죠.</p>
+<blockquote>
+<p>비유: 16강 QA 체인은 <strong>"모든 손님에게 무조건 정책집을 펴서 읽어 주는" 신입</strong>입니다. 17강 Knowledge Agent는 <strong>"손님 질문을 듣고 필요할 때만 정책집을 펴는" 노련한 상담원</strong>이죠. 후자가 훨씬 자연스럽고 효율적입니다.</p>
+</blockquote>
+<hr/>
+<h2 id="4-rag">4. RAG와 에이전트가 만난다</h2>
+<p>이 강은 두 흐름이 합쳐지는 지점입니다.</p>
+<pre><code class="language-text">5~12강: 에이전트 (도구를 쓰는 LLM)
+13~16강: RAG (문서 검색으로 답)
+           ↓
+17강: RAG를 도구로 → 에이전트가 필요할 때 검색
+</code></pre>
+<p>RAG 검색을 <strong>에이전트의 도구</strong>로 만드는 거죠. 그러면 에이전트가 주문 조회 도구, 재고 도구처럼 "정책 검색 도구"도 골라 씁니다. 12강의 멀티툴 에이전트에 "지식 도구"가 하나 더 생기는 셈입니다(18강에서 본격적으로 합칩니다).</p>
+<hr/>
+<h2 id="5">5. 이 강에서 배울 것</h2>
+<table>
+<thead>
+<tr>
+<th>목차</th>
+<th>내용</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>02</td>
+<td>항상 검색 vs 필요할 때 검색</td>
+</tr>
+<tr>
+<td>03</td>
+<td>RAG를 도구로 만들기 (create_retriever_tool)</td>
+</tr>
+<tr>
+<td>04~05</td>
+<td>retriever를 도구로 → 일상/정책 질문 비교</td>
+</tr>
+<tr>
+<td>06</td>
+<td>도구 선택 실패와 description 개선 (신규)</td>
+</tr>
+</tbody>
+</table>
+<p>핵심 도구는 <code>create_retriever_tool</code> — retriever를 LLM이 호출 가능한 검색 도구로 바꿔 줍니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>16강 QA 체인은 <strong>무조건 검색</strong> → 일상 질문에도 낭비.</li>
+<li>사람 상담원처럼 <strong>필요할 때만 검색</strong>하게 하려면 판단이 필요.</li>
+<li>해법: RAG를 <strong>도구로</strong> 만들어 에이전트가 스스로 검색 여부 판단.</li>
+<li>이 강은 <strong>에이전트(5~12강) + RAG(13~16강)</strong> 가 만나는 지점.</li>
+<li>다음 절에서 두 방식을 자세히 비교합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><span class="prv off"><span class="lbl"> </span> </span><a class="nxt" href="02_항상검색-vs-필요할때검색.html"><span class="lbl">다음 절 →</span>02. 항상검색 vs 필요할때검색</a></div>
+</div>
+</body></html>

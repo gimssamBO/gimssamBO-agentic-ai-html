@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제11강 — 데이터 함정 — 이상치 처리</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제11강 · data analysis agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제11강 · data analysis agent — 세부 목차</b><a class="" href="01_자연어로-데이터-분석하기.html">01. 자연어로 데이터 분석하기</a><a class="cur" href="02_데이터-함정-이상치-처리.html">02. 데이터 함정 이상치 처리</a><a class="" href="03_분석규칙을-시스템-프롬프트로.html">03. 분석규칙을 시스템 프롬프트로</a><a class="" href="04_따라하기-분석-도구와-전처리.html">04. 따라하기 분석 도구와 전처리</a><a class="" href="05_따라하기-자연어-질문으로-분석.html">05. 따라하기 자연어 질문으로 분석</a><a class="" href="06_분석전-데이터-품질-체크.html">06. 분석전 데이터 품질 체크</a><a class="" href="07_분석결과-차트로-시각화.html">07. 분석결과 차트로 시각화</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">데이터 함정 — 이상치 처리</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>매출 분석에는 <strong>함정</strong>이 있습니다. 취소·환불 건을 매출에 넣으면 과대 계상되고, <code>quantity=999</code> 같은 이상치 한 건이 평균을 망치고, 음수 금액이 합계를 왜곡합니다. 분석 전에 이 함정들을 <strong>반드시 처리</strong>해야 합니다.</p>
+<hr/>
+<h2 id="1">1. 세 가지 데이터 함정</h2>
+<p><code>orders.csv</code>를 분석할 때 조심해야 할 함정들입니다.</p>
+<table>
+<thead>
+<tr>
+<th>함정</th>
+<th>문제</th>
+<th>처리</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>status</code>='취소'/'환불'</td>
+<td>매출에 포함하면 과대 계상</td>
+<td>매출 집계 시 제외</td>
+</tr>
+<tr>
+<td><code>quantity</code>=999</td>
+<td>입력 실수 이상치</td>
+<td>거르거나 사용자에 고지</td>
+</tr>
+<tr>
+<td>음수 <code>amount</code>(환불 오류)</td>
+<td>합계 왜곡</td>
+<td>환불 분석 외엔 제외</td>
+</tr>
+</tbody>
+</table>
+<p>하나씩 봅시다.</p>
+<hr/>
+<h2 id="2-1">2. 함정 ① — 취소·환불 건</h2>
+<p>주문에는 여러 상태가 있습니다.</p>
+<pre><code class="language-text">status 값: 배송완료 / 배송중 / 결제완료 / 취소 / 환불
+</code></pre>
+<p>"이번 달 매출"을 구할 때 <strong>취소·환불된 주문을 매출에 넣으면 안 됩니다.</strong> 고객이 취소한 주문은 실제 매출이 아니니까요. 그런데 단순히 <code>amount</code>를 다 더하면 취소 건까지 포함되어 <strong>매출이 부풀려집니다.</strong></p>
+<pre><code class="language-python"># 잘못된 매출 (취소/환불 포함 → 과대 계상)
+orders['amount'].sum()
+
+# 올바른 매출 (배송완료만)
+orders[orders['status'] == '배송완료']['amount'].sum()
+</code></pre>
+<p>보통 매출로 잡을 때는 <code>배송완료</code>(필요시 <code>배송중</code>, <code>결제완료</code> 포함)만 쓰고, <code>취소</code>·<code>환불</code>은 뺍니다.</p>
+<hr/>
+<h2 id="3-2-quantity">3. 함정 ② — quantity 이상치</h2>
+<p>누군가 주문 수량을 입력하다 실수로 <code>999</code>를 넣었다고 합시다. 이 한 건이 평균·합계를 <strong>완전히 망칩니다.</strong></p>
+<pre><code class="language-python"># 정상 주문: quantity 1~5개
+# 이상치: quantity 999개 (입력 실수)
+
+orders['quantity'].mean()   # 이상치 하나 때문에 평균이 확 뛴다!
+</code></pre>
+<blockquote>
+<p>비유: 반 평균 키를 구하는데, 한 명의 키가 실수로 "999cm"로 적혀 있다면? 평균이 말도 안 되게 높아집니다. 그 한 명을 빼야 진짜 평균이 나오죠.</p>
+</blockquote>
+<p>이상치는 <strong>거르거나</strong>, 적어도 사용자에게 <strong>"이상치가 있습니다"라고 알려야</strong> 합니다.</p>
+<hr/>
+<h2 id="4-3">4. 함정 ③ — 음수 금액</h2>
+<p>환불이 음수 <code>amount</code>로 기록되는 경우가 있습니다(환불 = 돈이 나감 = 마이너스). 이게 일반 매출 합계에 섞이면 <strong>합계가 왜곡</strong>됩니다.</p>
+<pre><code class="language-python"># amount에 음수(환불)가 섞이면
+orders['amount'].sum()   # 음수 환불이 매출을 깎아 실제와 다름
+
+# 환불 분석이 아니라면 음수 제외
+orders[orders['amount'] &gt;= 0]['amount'].sum()
+</code></pre>
+<p>물론 "환불 분석"을 할 때는 음수가 필요합니다. 함정은 <strong>"일반 매출 분석에 음수가 섞일 때"</strong> 입니다. 분석 목적에 따라 다르게 다뤄야 하죠.</p>
+<hr/>
+<h2 id="5">5. 왜 이게 중요한가</h2>
+<p>데이터 함정을 무시하면 <strong>틀린 보고서</strong>가 나옵니다. "이번 달 매출 1억!"이라고 보고했는데 알고 보니 취소 건이 2천만원 포함된 거라면? 잘못된 의사결정으로 이어집니다.</p>
+<blockquote>
+<p>데이터 분석에서 <strong>"쓰레기를 넣으면 쓰레기가 나온다(Garbage In, Garbage Out)"</strong> 는 격언이 있습니다. 아무리 분석을 잘해도, 데이터가 더러우면 결과도 틀립니다. 그래서 <strong>분석 전 데이터 정제</strong>가 분석만큼 중요합니다.</p>
+</blockquote>
+<hr/>
+<h2 id="6">6. 에이전트에게 함정을 가르치려면?</h2>
+<p>이 함정들을 에이전트가 <strong>알아서 피하게</strong> 하려면 어떻게 할까요? 두 가지 방법이 있습니다.</p>
+<ol>
+<li><strong>규칙을 가르친다</strong>: 시스템 프롬프트에 "취소/환불은 제외하라"고 명시 → 03번</li>
+<li><strong>미리 진단한다</strong>: 분석 전에 데이터 품질을 사람이 점검 → 06번</li>
+</ol>
+<p>다음 절에서 첫 번째 방법(규칙 주입)을 배웁니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>매출 분석의 세 함정: <strong>취소/환불 포함, quantity 이상치, 음수 금액</strong>.</li>
+<li>함정을 무시하면 <strong>매출이 부풀려지거나 왜곡</strong>된다(틀린 보고서).</li>
+<li>"쓰레기를 넣으면 쓰레기가 나온다" — 분석 전 <strong>데이터 정제</strong>가 필수.</li>
+<li>에이전트에게 <strong>규칙을 가르치거나</strong>(03번) <strong>미리 진단</strong>(06번)해야 한다.</li>
+<li>다음 절에서 분석 규칙을 시스템 프롬프트로 주입합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="01_자연어로-데이터-분석하기.html"><span class="lbl">← 이전 절</span>01. 자연어로 데이터 분석하기</a><a class="nxt" href="03_분석규칙을-시스템-프롬프트로.html"><span class="lbl">다음 절 →</span>03. 분석규칙을 시스템 프롬프트로</a></div>
+</div>
+</body></html>

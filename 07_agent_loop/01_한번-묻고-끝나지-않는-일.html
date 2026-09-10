@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제7강 — 한 번 묻고 끝나지 않는 일</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제7강 · agent loop</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제7강 · agent loop — 세부 목차</b><a class="cur" href="01_한번-묻고-끝나지-않는-일.html">01. 한번 묻고 끝나지 않는 일</a><a class="" href="02_ReAct-패턴-생각-행동-관찰.html">02. ReAct 패턴 생각 행동 관찰</a><a class="" href="03_직접-돌리는-루프와-종료조건.html">03. 직접 돌리는 루프와 종료조건</a><a class="" href="04_따라하기-미니-에이전트-루프-구현.html">04. 따라하기 미니 에이전트 루프 구현</a><a class="" href="05_따라하기-2-3스텝-작업-실행.html">05. 따라하기 2 3스텝 작업 실행</a><a class="" href="06_무한루프와-반복호출-방지.html">06. 무한루프와 반복호출 방지</a><a class="" href="07_대화기록-누적과-토큰-관리.html">07. 대화기록 누적과 토큰 관리</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">한 번 묻고 끝나지 않는 일</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>5·6강의 도구 호출은 <strong>한 방(one-shot)</strong> 이었습니다 — 질문 → 도구 1번 → 답. 하지만 현업의 일은 보통 <strong>여러 단계</strong>입니다. "행동 → 결과를 보고 → 다음 행동을 다시 정하는" 일을 목표가 끝날 때까지 <strong>반복</strong>하는 구조가 바로 <strong>Agent Loop</strong>입니다.</p>
+<hr/>
+<h2 id="1-one-shot">1. one-shot의 한계</h2>
+<p>지금까지 만든 도구 호출은 한 번에 끝났습니다.</p>
+<pre><code class="language-python">ask("이어버드 재고 있어?")
+# → get_stock 1번 호출 → "225개 있습니다" → 끝
+</code></pre>
+<p>질문 하나, 도구 하나, 답 하나. 깔끔하죠. 하지만 이런 질문은 어떨까요?</p>
+<blockquote>
+<p>"스마트워치 재고 확인하고, 재고가 부족하면 재주문이 필요한지 알려줘."</p>
+</blockquote>
+<p>이건 <strong>한 번에 못 끝납니다.</strong> 단계를 밟아야 합니다.</p>
+<ol>
+<li>먼저 <strong>재고를 조회</strong>한다 (행동 1) → "재고 3개"</li>
+<li>그 결과를 <strong>본다</strong> (관찰) → "어, 3개밖에 없네?"</li>
+<li>부족한지 판단하려면 <strong>재주문 기준을 확인</strong>한다 (행동 2) → "기준은 30개"</li>
+<li>비교해 <strong>결론</strong>을 낸다 (생각) → "3개 &lt; 30개, 재주문 필요!"</li>
+</ol>
+<p>행동 1의 <strong>결과를 봐야</strong> 행동 2를 할지 정할 수 있습니다. 한 방에는 불가능하죠.</p>
+<hr/>
+<h2 id="2">2. 그래서 '반복'이 필요하다</h2>
+<p>핵심은 <strong>"행동 → 결과를 보고 → 다음 행동을 다시 정하는"</strong> 일을 반복하는 것입니다.</p>
+<p>질문: <strong>"스마트워치 재고 확인하고 재주문 필요한지 알려줘"</strong></p>
+<ol>
+<li><strong>재고 조회</strong> → 관찰: "3개" → 더 알아봐야 함</li>
+<li><strong>재주문 기준 조회</strong> → 관찰: "30개" → 이제 판단 가능</li>
+<li><strong>판단</strong>: 3 &lt; 30 → "재주문 필요!" → 최종 답, 종료</li>
+</ol>
+<p>이 반복 구조가 <strong>Agent Loop</strong>이고, 에이전트를 진짜 에이전트로 만드는 <strong>심장</strong>입니다. 1강에서 외운 그 문장 — <em>"LLM이 목표를 보고, 도구를 정해 실행하고, 결과를 관찰해 다음 행동을 다시 정하는 일을 목표가 끝날 때까지 반복"</em> — 이 여기서 코드가 됩니다.</p>
+<blockquote>
+<p>비유: 요리와 같습니다. "국 끓여"라는 목표 하나로 끝나지 않죠. 간을 보고(관찰) → 싱거우면 소금 넣고(행동) → 다시 간을 보고(관찰) → 됐으면 끝. <strong>맛을 봐 가며 조절</strong>하는 이 반복이 Agent Loop입니다.</p>
+</blockquote>
+<hr/>
+<h2 id="3">3. 이미 배운 것들이 모인다</h2>
+<p>놀랍게도 Agent Loop는 <strong>새로운 게 아니라</strong> 지금까지 배운 것의 조합입니다.</p>
+<table>
+<thead>
+<tr>
+<th>단계</th>
+<th>어디서 배웠나</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Thought(생각) — 다음에 뭘 할지</td>
+<td>4강 CoT (단계적 추론)</td>
+</tr>
+<tr>
+<td>Action(행동) — 도구 호출</td>
+<td>5강 Function Calling</td>
+</tr>
+<tr>
+<td>여러 도구 중 선택</td>
+<td>6강 Tool 시스템</td>
+</tr>
+<tr>
+<td>결정→실행→결과 전달</td>
+<td>5강 수동 루프</td>
+</tr>
+</tbody>
+</table>
+<p>7강은 이것들을 <strong><code>while</code> 루프로 묶는</strong> 강의입니다. 5강의 수동 루프(결정→실행→전달)를 한 번만 하지 않고, <strong>여러 번 반복</strong>하는 거죠.</p>
+<hr/>
+<h2 id="4">4. 이 강에서 만들 것</h2>
+<p>재고 관리 에이전트를 만듭니다. 도구는 둘로 나눕니다.</p>
+<ul>
+<li><code>get_stock(product_name)</code>: 현재 재고 조회</li>
+<li><code>get_reorder_level(product_name)</code>: 재주문 기준 조회</li>
+</ul>
+<p>도구를 <strong>일부러 둘로 나눈</strong> 이유가 있습니다. 그래야 모델이 "재고 확인 → 기준 확인 → 판단"처럼 <strong>두 도구를 차례로</strong> 부르게 되어, 다단계 루프가 자연스럽게 만들어집니다. (<code>data/inventory.csv</code>의 <strong>스마트워치 Fit 5</strong>는 재고 3개, 기준 30개라 재주문이 필요한 사례입니다.)</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>5·6강의 도구 호출은 <strong>한 방</strong>, 현업의 일은 <strong>여러 단계</strong>.</li>
+<li>여러 단계 = "행동 → 관찰 → 다음 행동"의 <strong>반복</strong> = Agent Loop.</li>
+<li>Agent Loop는 4강(생각) + 5강(행동) + 6강(선택)의 <strong>조합</strong>이다.</li>
+<li>다음 절에서 이 반복을 정리한 <strong>ReAct 패턴</strong>을 배웁니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><span class="prv off"><span class="lbl"> </span> </span><a class="nxt" href="02_ReAct-패턴-생각-행동-관찰.html"><span class="lbl">다음 절 →</span>02. ReAct 패턴 생각 행동 관찰</a></div>
+</div>
+</body></html>

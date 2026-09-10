@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제5강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제5강 · function calling</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제5강 · function calling — 세부 목차</b><a class="" href="01_왜-함수호출이-필요한가.html">01. 왜 함수호출이 필요한가</a><a class="" href="02_LLM은-함수를-직접-실행하지-못한다.html">02. LLM은 함수를 직접 실행하지 못한다</a><a class="" href="03_자동실행-vs-수동루프.html">03. 자동실행 vs 수동루프</a><a class="" href="04_따라하기-도구-함수-만들기.html">04. 따라하기 도구 함수 만들기</a><a class="" href="05_따라하기-자동-function-calling.html">05. 따라하기 자동 function calling</a><a class="" href="06_따라하기-수동-루프로-결정-관찰.html">06. 따라하기 수동 루프로 결정 관찰</a><a class="" href="07_도구-실행-오류-처리.html">07. 도구 실행 오류 처리</a><a class="cur" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="5">5강에서 배운 것</h2>
+<p>5강에서는 LLM의 두뇌에 <strong>손발(도구)</strong> 을 달았습니다.</p>
+<ul>
+<li><strong>Function Calling</strong>: LLM이 파이썬 함수를 도구로 써서 실제 데이터를 조회한다.</li>
+<li><strong>핵심 개념</strong>: LLM은 함수를 <strong>직접 실행하지 못한다</strong> — "무엇을 부를지" 결정만 하고, 실행은 우리가 한다.</li>
+<li><strong>자동 vs 수동</strong>: 자동(<code>tools=[...]</code>)은 편하고, 수동(<code>disable=True</code> + <code>function_calls</code>)은 원리를 보여 준다.</li>
+<li><strong>오류 처리</strong>: 도구 실패를 <code>try/except</code>로 잡아 친절한 메시지로 바꾸면 에이전트가 멈추지 않는다.</li>
+</ul>
+<hr/>
+<h2 id="_2">한눈에 보는 핵심 코드</h2>
+<pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
+from google.genai import types
+client = get_genai_client()
+
+# 도구 = 독스트링 + 타입힌트를 갖춘 파이썬 함수
+def get_stock(product_name: str) -&gt; str:
+    """상품명을 받아 현재 재고 수량을 반환한다."""
+    try:
+        ...  # 조회
+        return "재고 225개"
+    except Exception as e:
+        return f"조회 오류: {e}"          # 예외를 친절한 문자열로
+
+# (자동) 도구만 주면 SDK가 실행까지
+resp = client.models.generate_content(
+    model=GEMINI_MODEL, contents="이어버드 재고?",
+    config=types.GenerateContentConfig(tools=[get_stock], temperature=0))
+print(resp.text)
+
+# (수동) 자동을 끄면 '결정'만 → 우리가 실행
+resp = client.models.generate_content(
+    model=GEMINI_MODEL, contents="이어버드 재고?",
+    config=types.GenerateContentConfig(
+        tools=[get_stock],
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+        temperature=0))
+for fc in resp.function_calls:
+    result = {"get_stock": get_stock}[fc.name](**dict(fc.args))   # 우리가 실행
+</code></pre>
+<hr/>
+<h2 id="_3">이 강에서 설치한 라이브러리</h2>
+<pre><code class="language-bash">pip install google-genai python-dotenv pandas   # (앞 강에서 설치했다면 생략 가능)
+</code></pre>
+<p>새로 설치할 라이브러리는 없습니다.</p>
+<hr/>
+<h2 id="_4">체크리스트</h2>
+<ul>
+<li>[ ] LLM은 함수를 실행하지 못하고 "무엇을 호출할지"만 정한다는 것을 설명할 수 있다.</li>
+<li>[ ] 자동 function calling으로 도구를 한 줄(<code>tools=[...]</code>)로 연결해 봤다.</li>
+<li>[ ] 수동 루프에서 <code>response.function_calls</code>를 직접 실행해 봤다.</li>
+<li>[ ] 함수 독스트링이 모델의 도구 선택 근거임을 이해했다.</li>
+<li>[ ] 도구 오류를 <code>try/except</code>로 잡아 친절한 메시지로 변환했다.</li>
+</ul>
+<hr/>
+<h2 id="_5">한 줄 핵심</h2>
+<blockquote>
+<p><strong>"모델은 결정, 실행은 우리." LLM은 어떤 도구를 부를지 정할 뿐, 실제 실행과 오류 처리는 우리 코드가 맡는다.</strong></p>
+</blockquote>
+<hr/>
+<h2 id="_6">다음 강 예고</h2>
+<p>6강에서는 도구가 <strong>여러 개</strong>일 때의 문제를 다룹니다. 도구가 많아지면 모델이 "어떤 도구를 써야 하지?" 헷갈립니다. 모델이 무엇을 보고 도구를 고르는지(독스트링!), 좋은 도구를 어떻게 설계하는지, 비슷한 도구를 어떻게 구분하는지를 배웁니다.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="07_도구-실행-오류-처리.html"><span class="lbl">← 이전 절</span>07. 도구 실행 오류 처리</a><a class="nxt" href="09_실습문제와-해답.html"><span class="lbl">다음 절 →</span>09. 실습문제와 해답</a></div>
+</div>
+</body></html>

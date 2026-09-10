@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제23강 — 코딩 에이전트의 핵심 루프</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제23강 · coding agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제23강 · coding agent — 세부 목차</b><a class="" href="01_이-스크립트-왜-안돌지.html">01. 이 스크립트 왜 안돌지</a><a class="cur" href="02_코딩-에이전트의-핵심-루프.html">02. 코딩 에이전트의 핵심 루프</a><a class="" href="03_안전과-책임.html">03. 안전과 책임</a><a class="" href="04_따라하기-버그-읽고-수정-요청.html">04. 따라하기 버그 읽고 수정 요청</a><a class="" href="05_따라하기-저장하고-실행해-검증.html">05. 따라하기 저장하고 실행해 검증</a><a class="" href="06_재귀적-버그수정-오류-피드백-루프.html">06. 재귀적 버그수정 오류 피드백 루프</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">코딩 에이전트의 핵심 루프</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>코딩 에이전트의 핵심은 <strong>생성으로 끝내지 않고 실행해서 검증</strong>하는 것입니다. 코드 읽기 → 수정 생성 → 실행 → 오류 확인의 루프를 돌고, 오류가 남으면 다시 수정합니다. 이번 강은 기본형으로 <strong>1회 수정 후 실행 검증</strong>까지 구현하고, 06번에서 재귀 루프로 확장합니다.</p>
+<hr/>
+<h2 id="1-4">1. 4단계 루프</h2>
+<blockquote>
+<p>[1. 코드 읽기] → [2. 수정 생성] → [3. 실행] → [4. 오류 확인]</p>
+</blockquote>
+<p>4단계에서 <strong>오류가 남으면 2단계(수정)로 되돌아가</strong> 반복하고, <strong>정상(종료코드 0)이면 완료</strong>합니다.</p>
+<table>
+<thead>
+<tr>
+<th>단계</th>
+<th>하는 일</th>
+<th>구현</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. 읽기</td>
+<td>대상 소스 로드</td>
+<td><code>path.read_text()</code></td>
+</tr>
+<tr>
+<td>2. 수정</td>
+<td>버그 고친 전체 코드 생성</td>
+<td>LLM (<code>temperature=0</code>)</td>
+</tr>
+<tr>
+<td>3. 실행</td>
+<td>별도 프로세스로 돌림</td>
+<td><code>subprocess.run</code></td>
+</tr>
+<tr>
+<td>4. 확인</td>
+<td>종료코드로 성공 판정</td>
+<td><code>returncode == 0</code></td>
+</tr>
+</tbody>
+</table>
+<p>핵심은 <strong>3·4단계</strong>입니다. 많은 사람이 "LLM이 코드를 만들면 끝"이라 생각하지만, 진짜 가치는 <strong>만든 코드를 실제로 돌려 검증</strong>하는 데 있습니다.</p>
+<hr/>
+<h2 id="2">2. 왜 "실행 검증"이 핵심인가</h2>
+<p>LLM이 만든 코드는 <strong>그럴듯해 보여도 틀릴 수 있습니다.</strong></p>
+<pre><code class="language-text">LLM: "버그를 모두 고쳤습니다!" (자신만만)
+   → 그런데 실행하면 여전히 에러 (혹은 새 버그 추가)
+</code></pre>
+<p>자연어 답변은 "맞는지" 사람이 읽어 봐야 알지만, <strong>코드는 다릅니다 — 실행하면 객관적으로 판정</strong>됩니다.</p>
+<pre><code class="language-text">종료코드 0  → 정상 동작 (객관적 성공)
+종료코드 ≠0 → 에러 발생 (객관적 실패) + 오류 메시지 확보
+</code></pre>
+<p>이 <strong>객관적 검증 가능성</strong>이 코딩 에이전트를 강력하게 만듭니다. "고쳤다는 주장"이 아니라 "실제로 돌아간다는 증거"를 얻는 거죠. 16강(환각)에서 배운 "LLM 출력을 믿지 마라"를 코드로 실천하는 셈입니다.</p>
+<hr/>
+<h2 id="3-llm">3. 코드 추출 — LLM은 설명을 덧붙인다</h2>
+<p>2단계에서 한 가지 함정이 있습니다. LLM에게 "코드 고쳐줘"라고 하면 <strong>코드 앞뒤에 설명을 붙입니다.</strong></p>
+<pre><code class="language-text">LLM 응답:
+  "네, 버그를 분석했습니다. 먼저 인코딩 문제가...
+  ```python
+  import csv
+  ...
+  ```
+  이렇게 수정하면 정상 동작합니다."
+</code></pre>
+<p>이 응답을 그대로 파일로 저장해 실행하면 <strong>SyntaxError</strong>입니다(설명 문장은 파이썬이 아니니까). 그래서 <strong>코드블록만 추출</strong>하는 단계가 필요합니다.</p>
+<pre><code class="language-python">import re
+
+def extract_code(text: str) -&gt; str:
+    """LLM 응답에서 ```python ...``` 코드블록만 추출. 없으면 원문 반환."""
+    m = re.search(r"```(?:python)?\s*(.*?)```", text, re.DOTALL)  # 첫 코드블록 매칭
+    return (m.group(1) if m else text).strip()
+</code></pre>
+<p><code>re.DOTALL</code>은 <code>.</code>이 줄바꿈까지 매칭하게 해, <strong>여러 줄 코드블록</strong>을 통째로 잡습니다. <code>```python</code>과 <code>```</code> 사이의 코드만 깔끔히 뽑아내죠.</p>
+<hr/>
+<h2 id="4-subprocess">4. 격리 실행 — subprocess</h2>
+<p>3단계 실행은 <strong>별도 프로세스(subprocess)</strong> 로 합니다. 왜 <code>exec()</code>로 직접 실행하지 않을까요?</p>
+<pre><code class="language-text">[exec()로 직접 실행]  내 프로그램 안에서 LLM 코드가 돎
+   → LLM 코드가 죽으면 내 프로그램도 죽음
+   → 무한루프면 내 프로그램도 멈춤
+   → 위험!
+
+[subprocess로 격리]   별도 프로세스에서 LLM 코드가 돎
+   → 죽어도 내 프로그램은 멀쩡 (종료코드만 받음)
+   → 타임아웃으로 무한루프 차단 가능
+   → 안전!
+</code></pre>
+<pre><code class="language-python">import subprocess, sys
+
+proc = subprocess.run(
+    [sys.executable, str(FIXED)],      # 현재 파이썬으로 수정 파일 실행
+    cwd=str(ROOT),                     # 작업 디렉터리 지정(상대경로 대비)
+    capture_output=True, text=True,    # 출력을 문자열로 캡처
+    timeout=60,                        # 무한루프 방지 타임아웃 (필수!)
+)
+print(proc.returncode)                 # 0이면 정상
+</code></pre>
+<p><code>timeout=60</code>이 <strong>안전장치</strong>입니다. LLM이 실수로 무한루프 코드를 만들어도 60초 후 강제 종료되죠. 격리 실행은 코딩 에이전트의 기본 안전 원칙입니다(03번).</p>
+<hr/>
+<h2 id="5">5. 기본형 → 재귀 루프 확장</h2>
+<p>이번 강은 <strong>1회 수정</strong>까지가 기본형입니다.</p>
+<pre><code class="language-text">[기본형 (이번 강 04·05)]  읽기 → 수정 1번 → 실행 → 결과 보고
+                          (실패하면 사람이 다시 돌림)
+
+[재귀 루프 (06번 신규)]   읽기 → 수정 → 실행 → 실패면 오류를 피드백 → 재수정 → ...
+                          (최대 N회 자동 반복, self-debugging)
+</code></pre>
+<p>1회 수정으로 대부분의 정형적 버그는 잡힙니다. 하지만 한 번에 안 되는 복잡한 버그를 위해, 06번에서 <strong>오류 메시지를 다시 LLM에 먹여 자동 재수정</strong>하는 루프로 발전시킵니다. 먼저 기본형부터 탄탄히 만들죠.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>코딩 에이전트 = <strong>읽기 → 수정 → 실행 → 오류 확인</strong> 루프.</li>
+<li>핵심은 <strong>실행 검증</strong>: 코드는 돌려 보면 종료코드로 <strong>객관적 판정</strong> 가능.</li>
+<li>LLM은 코드에 <strong>설명을 덧붙임</strong> → 정규식으로 <strong>코드블록만 추출</strong>(<code>re.DOTALL</code>).</li>
+<li>실행은 <strong>subprocess로 격리</strong> + <strong>timeout</strong>으로 무한루프 차단.</li>
+<li>이번 강은 <strong>1회 수정</strong>(기본형), 06번에서 <strong>재귀 루프</strong>로 확장.</li>
+<li>다음 절에서 안전과 책임 원칙을 다룹니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="01_이-스크립트-왜-안돌지.html"><span class="lbl">← 이전 절</span>01. 이 스크립트 왜 안돌지</a><a class="nxt" href="03_안전과-책임.html"><span class="lbl">다음 절 →</span>03. 안전과 책임</a></div>
+</div>
+</body></html>

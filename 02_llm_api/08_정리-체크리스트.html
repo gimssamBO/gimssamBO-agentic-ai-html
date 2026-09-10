@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제2강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제2강 · llm api</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제2강 · llm api — 세부 목차</b><a class="" href="01_왜-LLM-API를-알아야-하는가.html">01. 왜 LLM API를 알아야 하는가</a><a class="" href="02_요청-응답-구조.html">02. 요청 응답 구조</a><a class="" href="03_시스템-지시로-역할-부여.html">03. 시스템 지시로 역할 부여</a><a class="" href="04_토큰과-비용-감각.html">04. 토큰과 비용 감각</a><a class="" href="05_temperature와-생성-제어.html">05. temperature와 생성 제어</a><a class="" href="06_따라하기-Gemini-호출.html">06. 따라하기 Gemini 호출</a><a class="" href="07_따라하기-OpenAI-호환-호출.html">07. 따라하기 OpenAI 호환 호출</a><a class="cur" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="2">2강에서 배운 것</h2>
+<p>1강에서 "한 번 호출"만 해 봤다면, 2강에서는 그 호출을 <strong>통제</strong>하는 법을 배웠습니다.</p>
+<ul>
+<li><strong>요청-응답 구조</strong>: 요청은 <code>model·contents·config</code>, 응답은 <code>text·usage_metadata</code>.</li>
+<li><strong>시스템 지시</strong>: 모델에게 역할·말투·안전장치를 부여 → 같은 질문도 답이 통째로 바뀜.</li>
+<li><strong>토큰과 비용</strong>: 요금은 토큰으로 매겨지고, 한국어가 더 많이 쓴다. <code>usage_metadata</code>로 확인·예측.</li>
+<li><strong>temperature</strong>: 무작위성 손잡이. 분류=0, 상담=0.3, 창작=0.7.</li>
+<li><strong>OpenAI 호출</strong>: 회사가 달라도 요청-응답 구조는 같다 → 모델 교체가 쉽다.</li>
+</ul>
+<hr/>
+<h2 id="_2">한눈에 보는 핵심 코드</h2>
+<pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
+from google.genai import types
+
+client = get_genai_client()
+
+resp = client.models.generate_content(
+    model=GEMINI_MODEL,                                  # 어떤 모델
+    contents="환불 얼마나 걸려요?",                        # 무슨 말
+    config=types.GenerateContentConfig(                  # 어떤 설정
+        system_instruction="너는 친절한 상담원이다.",      #   역할
+        temperature=0.3,                                 #   무작위성
+    ),
+)
+print(resp.text)                 # 답변
+print(resp.usage_metadata)       # 토큰(=비용)
+</code></pre>
+<hr/>
+<h2 id="_3">이 강에서 설치한 라이브러리</h2>
+<pre><code class="language-bash">pip install google-genai python-dotenv   # Gemini (필수)
+pip install openai                        # OpenAI (보조, 키 있을 때만)
+</code></pre>
+<hr/>
+<h2 id="_4">체크리스트</h2>
+<ul>
+<li>[ ] 요청 3종 세트(model/contents/config)와 응답 2종 세트(text/usage)를 설명할 수 있다.</li>
+<li>[ ] 시스템 지시로 말투를 바꿀 수 있다.</li>
+<li>[ ] <code>usage_metadata</code>로 토큰을 확인하고, 한국어가 더 많이 쓴다는 걸 안다.</li>
+<li>[ ] temperature를 작업에 맞게(분류 0, 창작 0.7) 고를 수 있다.</li>
+<li>[ ] OpenAI 호출도 "요청-응답 구조는 같다"는 걸 확인했다.</li>
+</ul>
+<hr/>
+<h2 id="_5">한 줄 핵심</h2>
+<blockquote>
+<p><strong>LLM 호출은 '요청(model·contents·config) → 응답(text·usage)'의 함수다. 이 구조를 통제하면 말투·비용·일관성을 모두 다룰 수 있다.</strong></p>
+</blockquote>
+<hr/>
+<h2 id="_6">다음 강 예고</h2>
+<p>3강에서는 <strong>프롬프트 엔지니어링</strong>을 배웁니다. "어떻게 물어야 원하는 답이 나오는가"를 다루죠. few-shot 예시로 분류 정확도를 높이고, JSON 형식을 강제하고, 프롬프트를 노리는 공격(인젝션)을 막는 법까지 — LLM을 마음대로 부리는 핵심 기술입니다.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="07_따라하기-OpenAI-호환-호출.html"><span class="lbl">← 이전 절</span>07. 따라하기 OpenAI 호환 호출</a><a class="nxt" href="09_실습문제와-해답.html"><span class="lbl">다음 절 →</span>09. 실습문제와 해답</a></div>
+</div>
+</body></html>

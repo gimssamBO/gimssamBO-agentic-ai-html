@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제15강 — 대량 검색과 인덱스 저장</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제15강 · vector database</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제15강 · vector database — 세부 목차</b><a class="cur" href="01_대량-검색과-인덱스-저장.html">01. 대량 검색과 인덱스 저장</a><a class="" href="02_벡터DB의-역할.html">02. 벡터DB의 역할</a><a class="" href="03_FAISS-vs-Chroma.html">03. FAISS vs Chroma</a><a class="" href="04_인덱스-영속화-아키텍처.html">04. 인덱스 영속화 아키텍처</a><a class="" href="05_따라하기-FAISS-인덱스-만들기.html">05. 따라하기 FAISS 인덱스 만들기</a><a class="" href="06_따라하기-인덱스-저장과-재로드.html">06. 따라하기 인덱스 저장과 재로드</a><a class="" href="07_메타데이터-필터링-검색.html">07. 메타데이터 필터링 검색</a><a class="" href="08_인덱스-증분-업데이트.html">08. 인덱스 증분 업데이트</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">대량 검색과 인덱스 저장</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>14강에서 FAQ 10개는 numpy로 충분했지만, 사내 문서가 늘면 청크가 수천 개가 됩니다. 그러면 ① 매번 전체 비교가 <strong>느리고</strong>, ② 매 요청마다 다시 임베딩하면 <strong>비용이 폭발</strong>합니다. <strong>벡터 데이터베이스</strong>가 이 둘을 해결합니다.</p>
+<hr/>
+<h2 id="1-numpy">1. numpy 검색의 한계</h2>
+<p>14강에서는 FAQ 10개를 numpy 루프로 검색했습니다. 10개니까 빨랐죠. 그런데 승승장구몰의 모든 문서를 모으면?</p>
+<pre><code class="language-text">환불정책 + 핸드북 + 멤버십정책 + 제품매뉴얼 여러 개 ...
+→ 청크가 금세 수천 ~ 수만 개!
+</code></pre>
+<p>여기서 두 가지 문제가 터집니다.</p>
+<h3 id="1">① 속도 문제</h3>
+<p>매 질문마다 <strong>수천 개 벡터와 일일이</strong> 코사인 유사도를 계산하면 느립니다. 질문 하나에 몇 초씩 걸리면 서비스로 못 씁니다.</p>
+<h3 id="2">② 재인덱싱 문제</h3>
+<p>더 심각한 문제입니다. 서버가 요청을 받을 때마다 PDF를 <strong>다시 로드·임베딩</strong>하면? 임베딩 API를 매번 호출하니 <strong>비용·지연이 폭발</strong>합니다.</p>
+<pre><code class="language-python"># 끔찍한 코드 — 요청마다 전체 재임베딩!
+def handle_request(question):
+    chunks = load_and_chunk_all_pdfs()    # 매번 PDF 로드
+    vectors = embed(chunks)               # 매번 임베딩 (API 비용!)
+    return search(vectors, question)      # 그제서야 검색
+</code></pre>
+<p>이러면 질문 하나당 수천 개를 임베딩하니, 돈도 시간도 막대하게 듭니다.</p>
+<hr/>
+<h2 id="2-db">2. 벡터DB가 해결하는 것</h2>
+<p><strong>벡터 데이터베이스(Vector DB)</strong> 는 이 둘을 모두 해결합니다.</p>
+<ul>
+<li><strong>인덱스를 미리 만들어 두고(영속화)</strong> → 재임베딩 안 함</li>
+<li><strong>근사 최근접 이웃(ANN)</strong> 알고리즘으로 검색 → 빠름</li>
+</ul>
+<pre><code class="language-text">[사전 1회] PDF → 청킹 → 임베딩 → 벡터DB 인덱스 → 디스크 저장
+[매 요청]  디스크에서 로드 → 질문만 임베딩 → 빠르게 검색
+</code></pre>
+<p>핵심은 13강에서 배운 그 원리입니다 — <strong>"비싼 계산은 미리 해서 저장, 요청 시엔 조회만."</strong> 백엔드 개발자에게 익숙한 패턴이죠.</p>
+<blockquote>
+<p>비유: 도서관과 같습니다. 사서가 책을 <strong>미리 분류해 서가에 꽂아 두면</strong>(인덱싱), 손님이 올 때마다 빠르게 찾아 줍니다. 손님이 올 때마다 책을 다시 분류하지 않죠. 벡터DB가 그 "미리 분류된 서가"입니다.</p>
+</blockquote>
+<hr/>
+<h2 id="3">3. 이 강에서 배울 것</h2>
+<table>
+<thead>
+<tr>
+<th>목차</th>
+<th>내용</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>02</td>
+<td>벡터DB의 역할 (인덱싱 vs 서비스 분리)</td>
+</tr>
+<tr>
+<td>03</td>
+<td>FAISS vs Chroma</td>
+</tr>
+<tr>
+<td>04</td>
+<td>인덱스 영속화 아키텍처</td>
+</tr>
+<tr>
+<td>05~06</td>
+<td>FAISS 인덱스 만들기 → 저장/재로드</td>
+</tr>
+<tr>
+<td>07</td>
+<td>메타데이터 필터링 검색 (신규)</td>
+</tr>
+<tr>
+<td>08</td>
+<td>인덱스 증분 업데이트 (신규)</td>
+</tr>
+</tbody>
+</table>
+<p>주력은 <strong>FAISS</strong>(가볍고 빠르고 영속화가 명확)이고, 메타데이터 필터가 필요할 때 <strong>Chroma</strong>를 씁니다.</p>
+<hr/>
+<h2 id="4-rag-5-4">4. RAG 5단계 중 ④ 저장/검색</h2>
+<p>이 강은 RAG 파이프라인의 <strong>④ 저장/검색</strong> 단계입니다.</p>
+<blockquote>
+<p>① 로드 ✓ · ② 청킹 ✓ · ③ 임베딩 ✓ · <strong>④ 저장/검색 ← 15강(지금)</strong> · ⑤ 생성(16강)</p>
+</blockquote>
+<p>14강에서 만든 벡터를 <strong>벡터DB에 저장</strong>하고, <strong>빠르게 검색</strong>하는 게 15강입니다. 이걸 마치면 16강에서 LLM 답변 생성으로 RAG를 완성합니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>문서가 늘면 청크가 수천 개 → numpy 검색은 <strong>느리고</strong> 매번 재임베딩은 <strong>비쌈</strong>.</li>
+<li><strong>벡터DB</strong>가 해결: 인덱스 <strong>미리 저장</strong>(재임베딩 X) + <strong>고속 검색</strong>(ANN).</li>
+<li>원리: "비싼 계산은 미리, 요청 시엔 조회만"(13강 인덱싱/질의).</li>
+<li>이 강은 RAG의 <strong>④ 저장/검색</strong> 단계.</li>
+<li>다음 절에서 벡터DB의 역할을 자세히 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><span class="prv off"><span class="lbl"> </span> </span><a class="nxt" href="02_벡터DB의-역할.html"><span class="lbl">다음 절 →</span>02. 벡터DB의 역할</a></div>
+</div>
+</body></html>

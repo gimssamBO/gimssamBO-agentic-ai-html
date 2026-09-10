@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제5강 — 실습문제와 해답</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제5강 · function calling</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제5강 · function calling — 세부 목차</b><a class="" href="01_왜-함수호출이-필요한가.html">01. 왜 함수호출이 필요한가</a><a class="" href="02_LLM은-함수를-직접-실행하지-못한다.html">02. LLM은 함수를 직접 실행하지 못한다</a><a class="" href="03_자동실행-vs-수동루프.html">03. 자동실행 vs 수동루프</a><a class="" href="04_따라하기-도구-함수-만들기.html">04. 따라하기 도구 함수 만들기</a><a class="" href="05_따라하기-자동-function-calling.html">05. 따라하기 자동 function calling</a><a class="" href="06_따라하기-수동-루프로-결정-관찰.html">06. 따라하기 수동 루프로 결정 관찰</a><a class="" href="07_도구-실행-오류-처리.html">07. 도구 실행 오류 처리</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="cur" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">실습문제와 해답</h1>
+<p>직접 코드를 고쳐 보며 5강 내용을 손에 익힙니다. 먼저 <strong>스스로 풀어 본 뒤</strong> 해답을 펼쳐 보세요.</p>
+<hr/>
+<h2 id="1">문제 1 — 독스트링 품질 실험</h2>
+<p><code>get_stock</code>의 독스트링을 <strong>부실하게</strong>(<code>"""재고."""</code>) 바꾼 버전과 <strong>자세한</strong> 원래 버전, 두 가지로 <code>"이어버드 남았어?"</code>를 수동 루프로 실행하세요.</p>
+<ul>
+<li>매 실행마다 <code>resp.function_calls</code>가 비었는지(도구 미선택), 아니면 <code>get_stock</code>을 골랐는지 출력합니다.</li>
+<li>사용 파일: <code>data/inventory.csv</code></li>
+<li>기대 결과: 부실한 독스트링일 때 도구 선택이 흔들리고, 자세한 독스트링일 때 정확히 고르는 차이가 보이면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_genai_client, GEMINI_MODEL, DATA
+from google.genai import types
+import pandas as pd
+
+client = get_genai_client()
+inv = pd.read_csv(DATA / "inventory.csv", encoding="utf-8-sig")
+
+def make_get_stock(doc: str):
+    """독스트링만 다른 get_stock 함수를 만들어 돌려준다."""
+    def get_stock(product_name: str) -&gt; str:
+        row = inv[inv["product_name"].str.contains(product_name, na=False)]
+        if row.empty:
+            return f"'{product_name}' 재고 정보를 찾지 못했습니다."
+        r = row.iloc[0]
+        return f"{r['product_name']} 재고 {int(r['stock'])}개"
+    get_stock.__doc__ = doc      # 독스트링을 바꿔치기
+    return get_stock
+
+def test(doc: str, label: str):
+    tool = make_get_stock(doc)
+    resp = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents="이어버드 남았어?",
+        config=types.GenerateContentConfig(
+            tools=[tool],
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+            temperature=0),
+    )
+    calls = resp.function_calls or []
+    picked = calls[0].name if calls else "(도구 미선택)"
+    print(f"[{label}] 독스트링={doc!r} → 모델 선택: {picked}")
+
+test("재고.", "부실")
+test("상품명(일부만 입력해도 됨)을 받아 현재 재고 수량을 반환한다.", "자세함")
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">[부실] 독스트링='재고.' → 모델 선택: (도구 미선택) 또는 흔들림
+[자세함] 독스트링='상품명(일부만...)' → 모델 선택: get_stock
+</code></pre>
+
+
+**해설**: 모델은 함수 본문을 못 보고 **독스트링만** 봅니다. `"재고."` 처럼 부실하면 "이 도구가 재고 조회에 쓰는 거구나"를 확신하지 못해 도구를 안 고르거나 흔들립니다. 자세한 독스트링은 정확한 선택을 이끕니다. **독스트링이 곧 도구 성능**이라는 6강의 핵심을 미리 체험한 셈입니다.
+
+</details>
+<hr/>
+<h2 id="2">문제 2 — 환율 자동 처리 + 곱셈 검증</h2>
+<p>자동 function calling으로 <code>"10000엔이면 원화로 얼마야?"</code>를 실행하세요. 그리고 <code>data/exchange_rates.csv</code>에서 JPY의 <code>krw_per_unit</code>을 직접 읽어 <code>10000 * krw_per_unit</code>을 파이썬으로 계산한 값과, 모델 최종 답의 금액을 나란히 출력해 비교하세요.</p>
+<ul>
+<li>사용 파일: <code>data/exchange_rates.csv</code></li>
+<li>기대 결과: 모델 답의 원화 금액과 직접 계산한 금액이 (오차 범위 내) 일치하면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_genai_client, GEMINI_MODEL, DATA
+from google.genai import types
+import pandas as pd
+
+client = get_genai_client()
+rates = pd.read_csv(DATA / "exchange_rates.csv", encoding="utf-8-sig")
+
+def get_exchange_rate(currency: str) -&gt; str:
+    """통화 코드(USD, EUR, JPY 등)를 받아 1단위당 원화(KRW) 환율을 반환한다."""
+    row = rates[rates["currency"].str.upper() == currency.upper()]
+    if row.empty:
+        return f"{currency} 환율 정보가 없습니다."
+    return f"1 {currency.upper()} = {float(row.iloc[0]['krw_per_unit']):,.2f} KRW"
+
+# (1) 모델에게 자동 처리 시키기
+resp = client.models.generate_content(
+    model=GEMINI_MODEL,
+    contents="10000엔이면 원화로 얼마야?",
+    config=types.GenerateContentConfig(tools=[get_exchange_rate], temperature=0),
+)
+print("[모델 답]", resp.text)
+
+# (2) 직접 계산해 검증
+jpy = float(rates[rates["currency"].str.upper() == "JPY"].iloc[0]["krw_per_unit"])
+print(f"[직접 계산] 10000 × {jpy} = {10000 * jpy:,.0f} 원")
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">[모델 답] 10,000엔은 약 90,000원입니다. (환율 1 JPY = 9.00 KRW 기준)
+[직접 계산] 10000 × 9.0 = 90,000 원
+</code></pre>
+
+
+**해설**: 모델은 `get_exchange_rate("JPY")`를 호출해 환율(9.00)을 얻고, 거기에 10000을 곱해 답했습니다. 직접 계산한 값과 일치하죠. **주의**: 곱셈 자체는 4강에서 봤듯 LLM이 가끔 틀립니다. 그래서 큰 금액이나 중요한 계산은 도구가 환율을 주고 **곱셈은 코드로** 하는 게 더 안전합니다(10강 코드 실행 에이전트에서 이 방식을 배웁니다).
+
+</details>
+<hr/>
+<h2 id="_2">정리</h2>
+<ul>
+<li>문제 1로 <strong>독스트링이 도구 선택을 좌우</strong>한다는 걸 확인했습니다(→ 6강 핵심).</li>
+<li>문제 2로 <strong>도구 + 계산</strong>을 조합하고 직접 계산으로 검증했습니다.</li>
+</ul>
+<p>이것으로 5강을 마칩니다. 다음 6강에서는 도구가 여러 개일 때의 "도구 선택" 문제를 다룹니다!</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="08_정리-체크리스트.html"><span class="lbl">← 이전 절</span>08. 정리 체크리스트</a><span class="nxt off"><span class="lbl"> </span> </span></div>
+</div>
+</body></html>

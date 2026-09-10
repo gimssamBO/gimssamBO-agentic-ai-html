@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제22강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제22강 · research agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제22강 · research agent — 세부 목차</b><a class="" href="01_최신-시장동향을-매번-사람이.html">01. 최신 시장동향을 매번 사람이</a><a class="" href="02_리서치-에이전트-패턴.html">02. 리서치 에이전트 패턴</a><a class="" href="03_네트워크-의존성.html">03. 네트워크 의존성</a><a class="" href="04_따라하기-리서치-에이전트와-폴백.html">04. 따라하기 리서치 에이전트와 폴백</a><a class="" href="05_따라하기-마크다운-리포트-저장.html">05. 따라하기 마크다운 리포트 저장</a><a class="" href="06_복잡한-주제를-하위질의로-쪼개기.html">06. 복잡한 주제를 하위질의로 쪼개기</a><a class="" href="07_검색결과-교차검증.html">07. 검색결과 교차검증</a><a class="cur" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="22">22강에서 배운 것</h2>
+<p>22강에서는 9강의 웹 검색을 발전시켜, 시장 정보를 조사하고 <strong>마크다운 리포트를 자동 생성</strong>하는 리서치 에이전트를 만들었습니다.</p>
+<ul>
+<li><strong>리서치 패턴</strong>: 검색 → 수집 → 요약 → 리포트 4단계.</li>
+<li><strong>검색 도구 에이전트</strong>: <code>create_agent</code>에 <code>DuckDuckGoSearchResults</code>를 붙여 스스로 검색·요약.</li>
+<li><strong>마크다운 저장</strong>: 본문에 헤더를 붙여 <code>reports/*.md</code>로 저장(<code>research</code>/<code>save_report</code> 분리).</li>
+<li><strong>네트워크 폴백</strong>: 검색 실패 시 LLM 지식만으로 임시 리포트(서비스가 죽지 않게).</li>
+<li><strong>[신규] 하위 질의 분해</strong>: 큰 주제를 3~4개로 쪼개 깊이 있게 조사(Plan-and-Execute).</li>
+<li><strong>[신규] 교차 검증</strong>: 다른 검색어 2개로 재검색해 신뢰도(높음/보통/낮음) 판정.</li>
+</ul>
+<hr/>
+<h2 id="_2">한눈에 보는 핵심 코드</h2>
+<pre><code class="language-python">from langchain_community.tools import DuckDuckGoSearchResults
+from langchain.agents import create_agent
+
+# 1) 검색 도구 붙인 리서치 에이전트
+agent = create_agent(
+    get_chat(temperature=0.3),
+    tools=[DuckDuckGoSearchResults()],
+    system_prompt="...시장 조사 애널리스트... '## 개요/## 핵심 동향/## 시사점' 포함",
+)
+
+# 2) 조사 + 폴백
+def research(topic):
+    try:
+        r = agent.invoke({"messages": [{"role": "user", "content": f"{topic} 리포트 써줘"}]})
+        return r["messages"][-1].text
+    except Exception as e:
+        return get_chat().invoke(f"{topic} 리포트(검색 없이, 최신 아닐 수 있음 경고 포함)").text
+
+# 3) 저장
+def save_report(topic, body):
+    path = REPORTS / f"research_{datetime.date.today().isoformat()}.md"
+    path.write_text(f"# 시장 조사 리포트 — {topic}\n\n" + body, encoding="utf-8")
+    return path
+</code></pre>
+<pre><code class="language-python"># [신규] 하위 질의 분해 (구조화 출력)
+class SubQueries(BaseModel):
+    queries: list[str] = Field(description="3~4개의 구체적 하위 검색 질의")
+queries = get_chat().with_structured_output(SubQueries).invoke(prompt).queries
+
+# [신규] 교차 검증
+class Verdict(BaseModel):
+    agree: str; confidence: str; reason: str
+v = get_chat(temperature=0).with_structured_output(Verdict).invoke(compare_prompt)
+</code></pre>
+<hr/>
+<h2 id="_3">이 강에서 설치한 라이브러리</h2>
+<pre><code class="language-bash">pip install -U ddgs          # DuckDuckGo 검색 백엔드 (키 불필요)
+# 아래는 앞 강에서 이미 설치했다면 생략
+pip install -U langchain langchain-community langchain-google-genai pydantic
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>패키지</th>
+<th>용도</th>
+<th>처음 등장</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ddgs</code></td>
+<td>웹 검색(<code>DuckDuckGoSearchResults</code> 백엔드)</td>
+<td>9강</td>
+</tr>
+<tr>
+<td><code>langchain</code></td>
+<td><code>create_agent</code></td>
+<td>7강</td>
+</tr>
+<tr>
+<td><code>langchain-community</code></td>
+<td><code>DuckDuckGoSearchResults</code> 도구</td>
+<td>9강</td>
+</tr>
+<tr>
+<td><code>pydantic</code></td>
+<td>구조화 출력(<code>SubQueries</code>·<code>Verdict</code>)</td>
+<td>8강</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>이번 강에서 <strong>새로</strong> 꼭 필요한 건 <code>ddgs</code> 정도이며, 나머지는 앞 강에서 설치한 것을 그대로 씁니다.</p>
+</blockquote>
+<hr/>
+<h2 id="_4">체크리스트</h2>
+<ul>
+<li>[ ] 리서치 패턴(검색→수집→요약→리포트)을 설명할 수 있다.</li>
+<li>[ ] <code>DuckDuckGoSearchResults</code>를 에이전트 도구로 붙였다.</li>
+<li>[ ] 결과를 마크다운 <code>.md</code> 파일로 저장했다.</li>
+<li>[ ] 검색 실패 시 <strong>폴백</strong>(예외처리)이 동작함을 이해했다.</li>
+<li>[ ] 큰 주제를 <strong>하위 질의로 분해</strong>해 깊이 있게 조사했다.</li>
+<li>[ ] <strong>교차 검증</strong>으로 핵심 주장의 신뢰도를 표시했다.</li>
+</ul>
+<hr/>
+<h2 id="_5">한 줄 핵심</h2>
+<blockquote>
+<p><strong>리서치 에이전트는 "검색→요약→리포트" 파이프라인이다. 외부 검색은 반드시 폴백으로 감싸고, 큰 주제는 쪼개고, 핵심 주장은 교차 검증해 신뢰도를 표시한다.</strong></p>
+</blockquote>
+<hr/>
+<h2 id="_6">다음 강 예고</h2>
+<p>23강 <strong>Coding Agent</strong>에서는 "이 스크립트 왜 안 돌지?"를 해결하는 코딩 에이전트를 만듭니다. 버그가 있는 코드를 읽고 수정하고, <strong>저장→실행→검증</strong> 루프를 돌립니다. 특히 실행 오류를 다시 LLM에 피드백해 <strong>재귀적으로 버그를 고치는</strong> 기법을 배웁니다.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="07_검색결과-교차검증.html"><span class="lbl">← 이전 절</span>07. 검색결과 교차검증</a><a class="nxt" href="09_실습문제와-해답.html"><span class="lbl">다음 절 →</span>09. 실습문제와 해답</a></div>
+</div>
+</body></html>

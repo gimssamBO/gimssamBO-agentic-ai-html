@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제12강 — 여러 도구를 통합하다 (1부 종합)</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제12강 · multi tool agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제12강 · multi tool agent — 세부 목차</b><a class="cur" href="01_여러-도구를-통합하다.html">01. 여러 도구를 통합하다</a><a class="" href="02_도구-라우팅.html">02. 도구 라우팅</a><a class="" href="03_따라하기-도구-3종-정의.html">03. 따라하기 도구 3종 정의</a><a class="" href="04_따라하기-하나의-에이전트로-통합.html">04. 따라하기 하나의 에이전트로 통합</a><a class="" href="05_따라하기-연쇄-호출-질문.html">05. 따라하기 연쇄 호출 질문</a><a class="" href="06_도구-실패시-폴백-처리.html">06. 도구 실패시 폴백 처리</a><a class="" href="07_도구-입력-검증.html">07. 도구 입력 검증</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="1">여러 도구를 통합하다 (1부 종합)</h1>
+<h2 id="_1">한 줄 요약</h2>
+<p>지금까지는 도구가 하나(검색 또는 분석)였습니다. 하지만 진짜 상담봇은 주문 조회·재고 확인·매출 분석을 <strong>모두</strong> 할 수 있어야 합니다. 여러 도구를 한 에이전트에 통합하면, LLM이 질문에 맞는 도구를 <strong>스스로 골라</strong> 순서대로 호출합니다.</p>
+<hr/>
+<h2 id="1_1">1. 현실의 질문은 도구 하나로 안 끝난다</h2>
+<p>지금까지 강마다 능력을 하나씩 키웠습니다 — 8강 계획, 9강 검색, 10강 코드 실행, 11강 데이터 분석. 그런데 현실의 질문은 한 가지 도구로 안 끝납니다.</p>
+<blockquote>
+<p>"C0001 고객의 최근 주문 상태와, 그 상품 재고, 그리고 이번 달 전체 매출을 알려줘."</p>
+</blockquote>
+<p>이 한 문장에 <strong>세 가지 일</strong>이 들어 있습니다.</p>
+<ol>
+<li><strong>주문 조회</strong>: C0001의 최근 주문 → "현미 잡곡, product_id=P0025"</li>
+<li><strong>재고 조회</strong>: P0025의 재고 → "155개"</li>
+<li><strong>매출 분석</strong>: 이번 달 전체 매출 → "약 1천만원"</li>
+</ol>
+<p>진짜 상담봇은 이렇게 <strong>여러 도구를 손에 쥐고, 질문에 맞춰 골라 쓰며, 결과를 이어붙여</strong> 답합니다.</p>
+<hr/>
+<h2 id="2-1">2. 1부의 종합</h2>
+<p>이번 강은 1부에서 만든 도구들이 <strong>하나로 모이는</strong> 종합편입니다.</p>
+<table>
+<thead>
+<tr>
+<th>도구</th>
+<th>데이터</th>
+<th>역할</th>
+<th>어디서 배웠나</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>get_order_status</code></td>
+<td>orders.csv</td>
+<td>고객 최근 주문 상태</td>
+<td>5·6강</td>
+</tr>
+<tr>
+<td><code>get_stock</code></td>
+<td>inventory.csv</td>
+<td>상품 재고/재주문</td>
+<td>5·7강</td>
+</tr>
+<tr>
+<td><code>run_pandas</code></td>
+<td>orders.csv</td>
+<td>매출 등 집계 분석</td>
+<td>10·11강</td>
+</tr>
+<tr>
+<td>(선택) 웹 검색</td>
+<td>웹</td>
+<td>최신 정보</td>
+<td>9강</td>
+</tr>
+</tbody>
+</table>
+<p>각 도구는 이미 배운 것들입니다. 12강의 새로움은 이것들을 <strong>한 에이전트에 통합</strong>하는 것이죠.</p>
+<blockquote>
+<p>비유: 지금까지 망치(5강), 드라이버(9강), 줄자(11강)를 따로따로 만들었다면, 이제 <strong>하나의 공구함</strong>에 다 넣는 겁니다. 그러면 어떤 작업이 와도 적절한 공구를 꺼내 쓸 수 있죠.</p>
+</blockquote>
+<hr/>
+<h2 id="3">3. 핵심 개념 두 가지</h2>
+<p>이 강의 핵심은 두 가지입니다.</p>
+<h3 id="1-02">① 도구 라우팅 (02번)</h3>
+<p>LLM이 각 도구의 docstring을 읽고 "지금 어떤 도구가 필요한가"를 <strong>스스로 판단</strong>합니다. 우리가 <code>if-else</code>로 짜는 게 아닙니다.</p>
+<h3 id="2-05">② 연쇄 호출 (05번)</h3>
+<p>앞 도구의 결과를 다음 도구의 입력으로 <strong>이어 씁니다.</strong> "주문 조회로 얻은 product_id를 재고 조회에 넣는" 식이죠.</p>
+<hr/>
+<h2 id="4">4. 추가로 배울 실무 기법</h2>
+<p>기본 통합 외에, 실무에 꼭 필요한 두 가지를 더 배웁니다.</p>
+<ul>
+<li><strong>폴백 처리(06번)</strong>: 도구가 실패해도 에이전트가 멈추지 않고 대체 안내를 하게.</li>
+<li><strong>입력 검증(07번)</strong>: 잘못된 입력(<code>c1</code>, 공백 등)을 도구가 미리 걸러내게.</li>
+</ul>
+<p>이 두 가지가 "장난감 에이전트"와 "진짜 서비스"를 가르는 차이입니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>현실의 질문은 <strong>여러 도구</strong>가 필요하다(주문+재고+분석).</li>
+<li>12강은 1부 도구들을 <strong>한 에이전트에 통합</strong>하는 종합편.</li>
+<li>핵심: <strong>도구 라우팅</strong>(LLM이 도구 선택) + <strong>연쇄 호출</strong>(결과를 이어 씀).</li>
+<li>실무 기법: <strong>폴백</strong>(실패 대응) + <strong>입력 검증</strong>.</li>
+<li>다음 절에서 도구 라우팅을 자세히 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><span class="prv off"><span class="lbl"> </span> </span><a class="nxt" href="02_도구-라우팅.html"><span class="lbl">다음 절 →</span>02. 도구 라우팅</a></div>
+</div>
+</body></html>

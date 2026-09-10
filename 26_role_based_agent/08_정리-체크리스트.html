@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제26강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제26강 · role based agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제26강 · role based agent — 세부 목차</b><a class="" href="01_무엇을-할지와-어떻게-할지-나누기.html">01. 무엇을 할지와 어떻게 할지 나누기</a><a class="" href="02_Planner-Worker-협업구조.html">02. Planner Worker 협업구조</a><a class="" href="03_Supervisor-vs-Planner-Worker.html">03. Supervisor vs Planner Worker</a><a class="" href="04_따라하기-Planner-작업-분해.html">04. 따라하기 Planner 작업 분해</a><a class="" href="05_따라하기-Worker-작업-실행.html">05. 따라하기 Worker 작업 실행</a><a class="" href="06_따라하기-오케스트레이터-취합.html">06. 따라하기 오케스트레이터 취합</a><a class="" href="07_Worker-실패-처리와-재시도.html">07. Worker 실패 처리와 재시도</a><a class="cur" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="_2">이번 강에서 배운 것</h2>
+<p>26강은 <strong>"무엇을 할지(계획)"와 "어떻게 할지(실행)"를 다른 역할로 나누는</strong> Planner/Worker 구조를 다뤘습니다.</p>
+<ul>
+<li><strong>왜 나누나 (01·02번)</strong> — 한 LLM에게 "계획도 세우고 실행도 하라"고 하면 둘 다 어설퍼집니다. <strong>Planner</strong>가 작업을 쪼개고 <strong>Worker</strong>가 한 작업씩 집중 수행하면, 각자 잘하는 일에만 몰두해 품질이 올라갑니다.</li>
+<li><strong>Supervisor와의 차이 (03번)</strong> — 25강 Supervisor는 "이 질문을 <strong>누구에게 보낼까</strong>"라는 <em>라우팅</em>이고, Planner/Worker는 "이 목표를 <strong>어떤 작업들로 쪼갤까</strong>"라는 <em>분해</em>입니다. 라우팅은 하나를 고르고, 분해는 여러 작업을 만들어 모읍니다.</li>
+<li><strong>Planner (04번)</strong> — <code>with_structured_output(Plan)</code>으로 작업을 <strong>항상 리스트(<code>list[str]</code>)로</strong> 받아, 코드가 바로 <code>for</code>로 순회할 수 있게 합니다.</li>
+<li><strong>Worker (05번)</strong> — 받은 <strong>한 작업만</strong> 맥락(브리프)과 함께 수행합니다. 작업이 독립적이라 재사용·병렬화·재시도에 유리합니다.</li>
+<li><strong>오케스트레이터 (06번)</strong> — <code>run_campaign</code>이 <strong>계획 → 실행 → 취합</strong>을 지휘합니다. Planner가 쪼갠 작업이 그대로 최종 문서의 목차가 됩니다.</li>
+<li><strong>실패 처리 (07번)</strong> — Worker 한 번 실패에 전체가 멈추지 않도록, <strong>재시도 → 스킵·기록 → 끝까지 진행</strong>(부분 실패 허용)을 더했습니다.</li>
+</ul>
+<hr/>
+<h2 id="_3">핵심 코드 한눈에</h2>
+<pre><code class="language-python"># 1) Planner — 목표를 작업 리스트로 분해 (구조화 출력)
+class Plan(BaseModel):
+    subtasks: list[str] = Field(description="필요한 하위 작업 3~4개")
+
+def plan(llm, brief_text: str) -&gt; list[str]:
+    planner = llm.with_structured_output(Plan)
+    result = planner.invoke([SystemMessage(PLANNER_SYSTEM),
+                             HumanMessage(f"[캠페인 브리프]\n{brief_text}")])
+    return result.subtasks
+
+# 2) Worker — 한 작업만 맥락과 함께 수행
+def work(llm, brief_text: str, subtask: str) -&gt; str:
+    result = llm.invoke([SystemMessage(WORKER_SYSTEM),
+                         HumanMessage(f"[브리프]\n{brief_text}\n\n[작업]\n{subtask}")])
+    return result.content
+
+# 3) 오케스트레이터 — 계획→실행→취합
+def run_campaign(brief_text: str) -&gt; str:
+    llm_plan = get_chat(temperature=0)      # 계획은 재현성
+    llm_work = get_chat(temperature=0.5)    # 실행은 약간의 다양성
+    subtasks = plan(llm_plan, brief_text)
+    outputs = [(t, work(llm_work, brief_text, t)) for t in subtasks]
+    report = [f"# 캠페인 실행안\n\n&gt; {brief_text}\n"]
+    for i, (t, out) in enumerate(outputs, 1):
+        report.append(f"## {i}. {t}\n{out}\n")
+    return "\n".join(report)
+</code></pre>
+<hr/>
+<h2 id="_4">설치 라이브러리</h2>
+<p>이번 강은 <strong>추가로 설치할 라이브러리가 없습니다.</strong> 앞 강에서 쓰던 것을 그대로 재사용합니다.</p>
+<pre><code class="language-bash">conda activate agentic
+# 모두 이전 강에서 설치됨 (재확인용)
+pip install -U langchain langchain-google-genai pydantic pandas pyyaml
+</code></pre>
+<ul>
+<li><code>langchain</code>·<code>langchain-google-genai</code>: <code>get_chat</code>, 메시지 객체.</li>
+<li><code>pydantic</code>: 구조화 출력(<code>Plan</code> 스키마, 8강).</li>
+<li><code>pandas</code>: 캠페인 CSV 로드(11강).</li>
+<li><code>pyyaml</code>: 09번 실습 2(프롬프트 외부화)에서 사용.</li>
+<li>데이터: <code>data/marketing_brief.csv</code>.</li>
+</ul>
+<hr/>
+<h2 id="_5">체크리스트</h2>
+<ul>
+<li>[ ] Planner와 Worker로 역할을 나누면 <strong>왜</strong> 품질이 오르는지 설명할 수 있다.</li>
+<li>[ ] Supervisor(라우팅)와 Planner/Worker(분해)의 <strong>차이</strong>를 한 문장으로 말할 수 있다.</li>
+<li>[ ] <code>with_structured_output(Plan)</code>이 <strong>왜</strong> 자유 텍스트보다 안전한지 안다(항상 리스트).</li>
+<li>[ ] Worker에 <strong>작업만이 아니라 맥락(브리프)도</strong> 함께 주는 이유를 안다.</li>
+<li>[ ] 오케스트레이터의 세 책임(<strong>순서 제어·데이터 전달·취합</strong>)을 설명할 수 있다.</li>
+<li>[ ] Worker 실패 시 <strong>재시도 → 스킵·기록 → 계속</strong>(부분 실패 허용)을 구현할 수 있다.</li>
+</ul>
+<hr/>
+<h2 id="_6">한 줄 핵심</h2>
+<blockquote>
+<p><strong>"계획(Planner)과 실행(Worker)을 나누고, 오케스트레이터가 지휘한다."</strong> — 한 명에게 다 시키지 말고, 쪼개서 각자 잘하는 일에 집중시켜라.</p>
+</blockquote>
+<hr/>
+<h2 id="27">다음 강 예고 — 27강</h2>
+<p>26강의 오케스트레이터는 <strong><code>for</code> 루프</strong>로 흐름을 제어했습니다. 27강에서는 이 지휘를 <strong>StateGraph(그래프)</strong> 로 옮깁니다. Researcher → Analyst → Writer가 <strong>공유 상태</strong>를 주고받는 파이프라인을 그래프로 선언하고, 조건부 분기로 품질을 재검토하는 데까지 나아갑니다. 즉, <strong>"코드로 흐름을 짜던 것"을 "그래프로 흐름을 선언하는 것"</strong> 으로 바꾸는 단계입니다.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="07_Worker-실패-처리와-재시도.html"><span class="lbl">← 이전 절</span>07. Worker 실패 처리와 재시도</a><a class="nxt" href="09_실습문제와-해답.html"><span class="lbl">다음 절 →</span>09. 실습문제와 해답</a></div>
+</div>
+</body></html>

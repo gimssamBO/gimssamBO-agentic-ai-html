@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제20강 — 따라하기 — 새 세션에서도 기억</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제20강 · long term memory</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제20강 · long term memory — 세부 목차</b><a class="" href="01_어제-말한걸-기억-못하는-봇.html">01. 어제 말한걸 기억 못하는 봇</a><a class="" href="02_단기기억-vs-장기기억.html">02. 단기기억 vs 장기기억</a><a class="" href="03_도구로서의-장기기억.html">03. 도구로서의 장기기억</a><a class="" href="04_따라하기-프로필-영속-저장-도구.html">04. 따라하기 프로필 영속 저장 도구</a><a class="cur" href="05_따라하기-새-세션에서도-기억.html">05. 따라하기 새 세션에서도 기억</a><a class="" href="06_SQLite로-장기기억-옮기기.html">06. SQLite로 장기기억 옮기기</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">따라하기 — 새 세션에서도 기억</h1>
+<h2 id="_2">목표</h2>
+<p>장기 기억 도구를 에이전트에 붙이고, <strong>에이전트를 새로 만든 뒤(=재시작)에도</strong> 저장한 정보가 살아 있는지 확인합니다. 이게 장기 기억의 본질입니다.</p>
+<hr/>
+<h2 id="1">1. 장기 + 단기 기억 함께</h2>
+<p>에이전트에 장기 기억 도구(get/update_profile)와 단기 기억(InMemorySaver)을 <strong>둘 다</strong> 붙입니다(02번).</p>
+<pre><code class="language-python">from langchain.agents import create_agent
+from langgraph.checkpoint.memory import InMemorySaver
+from common import get_chat
+
+def build_agent():
+    llm = get_chat(temperature=0)
+    agent = create_agent(
+        llm,
+        tools=[get_profile, update_profile],   # 장기 기억 (파일)
+        system_prompt=(
+            "너는 승승장구몰 상담원이다. 한국어 존댓말로 답하라. "
+            "고객이 자신의 선호/특이사항(알레르기 등)을 말하면 update_profile로 저장하라. "
+            "추천이나 응대 전에는 get_profile로 고객 정보를 먼저 확인하라."
+        ),
+        checkpointer=InMemorySaver(),   # 단기 기억 (세션 맥락)
+    )
+    return agent
+
+def say(agent, text, thread_id):
+    config = {"configurable": {"thread_id": thread_id}}
+    out = agent.invoke({"messages": [{"role": "user", "content": text}]}, config)
+    return out["messages"][-1].content
+</code></pre>
+<p>장기(도구)로 세션을 넘긴 사실을 보존하고, 단기(InMemorySaver)로 한 세션의 맥락을 잇습니다. 둘이 협력하죠.</p>
+<hr/>
+<h2 id="2-1">2. 1단계 — 알레르기 정보 저장</h2>
+<p>첫 상담에서 알레르기를 알려줍니다.</p>
+<pre><code class="language-python">agent = build_agent()
+print(say(agent, "저 C0001 임도현인데요, 선크림 알레르기 있어요. 기억해 주세요.", "sess-1"))
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">네, 임도현님. 선크림 알레르기가 있으신 점 프로필에 저장해 두었습니다.
+</code></pre>
+<p>에이전트가 "선호/특이사항을 말하면 저장하라"는 지침에 따라, <code>update_profile</code>을 호출해 <strong>파일에 저장</strong>했습니다. 이제 이 정보는 디스크에 있죠.</p>
+<hr/>
+<h2 id="3-2">3. 2단계 — 핵심 실험: 새 에이전트로 조회</h2>
+<p>이게 이 강의 <strong>핵심 실험</strong>입니다. 에이전트를 <strong>새로 만들고(=프로세스 재시작에 해당)</strong>, <strong>다른 thread_id</strong>로 물어봅니다.</p>
+<pre><code class="language-python"># 새 에이전트 = 단기 기억 완전히 비워짐 (재시작 시뮬레이션)
+agent2 = build_agent()
+print(say(agent2, "C0001 고객에게 화장품 추천할 때 주의할 점 있어?", "sess-2"))
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">C0001 임도현님은 선크림 알레르기가 있으시니, 자외선 차단 제품 추천 시
+성분을 반드시 확인하고 대체 제품을 안내해야 합니다.   ← 새 세션인데 기억!
+</code></pre>
+<p><strong>놀라운 점</strong>: <code>agent2</code>는 <strong>완전히 새 에이전트</strong>입니다. 단기 기억(InMemorySaver)은 텅 비었고, thread_id도 다릅니다(<code>sess-2</code>). 그런데도 "선크림 알레르기"를 기억하고 답했죠!</p>
+<hr/>
+<h2 id="4">4. 왜 기억했나 — 파일 덕분</h2>
+<p>비결은 <strong>파일(영속 저장소)</strong> 입니다.</p>
+<ol>
+<li><strong>agent (1단계)</strong> → <code>update_profile</code> → <code>user_profiles_rw.json</code>에 저장 <em>(파일에 남음)</em></li>
+<li><strong>agent2 (2단계, 새 에이전트)</strong> → <code>get_profile</code> → 파일에서 "알레르기" 읽음 → 답변</li>
+</ol>
+<p>1단계에서 파일에 쓴 정보가, 2단계의 새 에이전트가 <code>get_profile</code>로 읽었습니다. 에이전트는 새것이지만, <strong>파일은 그대로</strong> 있었으니까요.</p>
+<p>만약 이게 단기 기억(InMemorySaver)만이었다면? 새 에이전트는 텅 비어서 "그런 정보 없습니다"라고 했을 겁니다. 하지만 장기 기억은 <strong>파일에 영속</strong>되니, 에이전트가 바뀌어도 살아남죠. 이게 단기와 장기의 결정적 차이입니다.</p>
+<hr/>
+<h2 id="5">5. 파일로 검증</h2>
+<p>저장소 파일을 직접 열어 확인합니다.</p>
+<pre><code class="language-python">import json
+print(json.dumps(_load()["C0001"], ensure_ascii=False, indent=2))
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">{
+  "name": "임도현",
+  "선호카테고리": ["가전"],
+  "membership": "VIP",
+  "비고": "주말 배송 선호 / 선크림 알레르기 있음"
+}
+</code></pre>
+<p>파일에 "선크림 알레르기"가 기록돼 있습니다. 이건 메모리가 아니라 <strong>디스크</strong>라, 프로그램을 완전히 종료해도 남아 있죠. 다음에 프로그램을 다시 켜도, 이 파일을 읽으면 알레르기 정보가 그대로입니다.</p>
+<hr/>
+<h2 id="6">6. 이것이 장기 기억의 본질</h2>
+<p>이 실험이 보여 주는 것:</p>
+<blockquote>
+<p><strong>에이전트(메모리)는 휘발해도, 파일(영속)에 쓴 정보는 살아남는다.</strong></p>
+</blockquote>
+<pre><code class="language-text">단기 기억(InMemorySaver): 에이전트와 함께 소멸 → "방금 대화"만
+장기 기억(파일/DB):        에이전트와 무관하게 영속 → "사용자 프로필"
+</code></pre>
+<p>사용자가 며칠 뒤 다시 와도, 서버를 재시작해도, 파일에 쓴 "알레르기·선호·등급"은 그대로 기억됩니다. 이게 진짜 "사용자를 기억하는" 서비스의 모습이죠.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>장기 도구(파일) + 단기(InMemorySaver)를 <strong>함께</strong> 붙인다.</li>
+<li>핵심 실험: <strong>새 에이전트</strong>(재시작)로도 저장 정보가 살아 있는지 확인.</li>
+<li>새 에이전트인데 기억한 이유는 <strong>파일(영속)</strong> 에 남았기 때문.</li>
+<li>단기는 에이전트와 함께 소멸, 장기는 <strong>파일에 영속</strong>.</li>
+<li>디스크 파일은 프로그램 종료·재시작에도 유지.</li>
+<li>다음 절에서 JSON을 SQLite로 옮깁니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="04_따라하기-프로필-영속-저장-도구.html"><span class="lbl">← 이전 절</span>04. 따라하기 프로필 영속 저장 도구</a><a class="nxt" href="06_SQLite로-장기기억-옮기기.html"><span class="lbl">다음 절 →</span>06. SQLite로 장기기억 옮기기</a></div>
+</div>
+</body></html>

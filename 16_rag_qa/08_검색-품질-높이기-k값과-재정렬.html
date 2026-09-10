@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제16강 — 검색 품질 높이기 — k값과 재정렬(rerank)</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제16강 · rag qa</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제16강 · rag qa — 세부 목차</b><a class="" href="01_문서-근거로만-답하고-출처-밝히기.html">01. 문서 근거로만 답하고 출처 밝히기</a><a class="" href="02_QA-체인-구조-LCEL.html">02. QA 체인 구조 LCEL</a><a class="" href="03_환각을-억제하는-프롬프트.html">03. 환각을 억제하는 프롬프트</a><a class="" href="04_출처를-함께-반환하기.html">04. 출처를 함께 반환하기</a><a class="" href="05_따라하기-QA-체인-만들기.html">05. 따라하기 QA 체인 만들기</a><a class="" href="06_따라하기-답변과-출처-모듈화.html">06. 따라하기 답변과 출처 모듈화</a><a class="" href="07_따라하기-모르는-질문엔-모른다고.html">07. 따라하기 모르는 질문엔 모른다고</a><a class="cur" href="08_검색-품질-높이기-k값과-재정렬.html">08. 검색 품질 높이기 k값과 재정렬</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="k-rerank">검색 품질 높이기 — k값과 재정렬(rerank)</h1>
+<h2 id="_1">한 줄 요약</h2>
+<p>RAG 답변의 품질은 <strong>검색 품질</strong>에 달렸습니다. <code>k</code>(검색 개수)를 늘리면 누락은 줄지만 노이즈가 섞입니다. 그래서 <strong>많이 뽑은 뒤(k=6) LLM이 관련도로 점수를 매겨 상위만 추리는</strong> 재정렬(rerank)을 적용합니다.</p>
+<hr/>
+<h2 id="1">1. "검색이 나쁘면 답도 나쁘다"</h2>
+<p>RAG는 검색한 청크를 근거로 답합니다. 그러니 <strong>검색이 엉뚱한 청크를 가져오면, 답도 엉뚱</strong>합니다.</p>
+<pre><code class="language-text">좋은 검색: 질문에 딱 맞는 청크 → LLM이 정확히 답
+나쁜 검색: 무관한 청크 → LLM이 근거 없이 헤매거나 "모른다"
+</code></pre>
+<p>그래서 RAG 품질을 높이려면 <strong>검색 품질부터</strong> 높여야 합니다. "쓰레기를 넣으면 쓰레기가 나온다"는 11강 격언이 여기서도 통하죠.</p>
+<hr/>
+<h2 id="2-k">2. k값의 딜레마</h2>
+<p><code>k</code>는 "몇 개의 청크를 가져올지"입니다. 이게 딜레마를 만듭니다.</p>
+<pre><code class="language-text">k가 작으면 (k=2):
+  → 관련 청크를 놓칠 수 있음 (누락)
+  → 답에 필요한 정보가 빠질 위험
+
+k가 크면 (k=6):
+  → 누락은 줄지만 무관한 청크도 섞임 (노이즈)
+  → LLM이 헷갈리거나 엉뚱한 부분 참고
+</code></pre>
+<p>작으면 놓치고, 크면 노이즈가 낍니다. 어느 쪽도 완벽하지 않죠. (실습 파일: <code>sections/16_rag_qa/08_검색-품질-높이기-k값과-재정렬.py</code>)</p>
+<pre><code class="language-python">small = get_retriever(2).invoke(question)   # k=2: 적게
+large = get_retriever(6).invoke(question)   # k=6: 많이
+print(f"k=2: {len(small)}건 / k=6: {len(large)}건")
+</code></pre>
+<hr/>
+<h2 id="3-rerank">3. 해법 — 재정렬(rerank)</h2>
+<p>영리한 해법이 있습니다. <strong>많이 뽑은 뒤(k=6), 다시 추리는</strong> 것입니다.</p>
+<pre><code class="language-text">1. k=6으로 넉넉히 검색 (누락 방지)
+2. LLM이 각 청크의 질문 관련도를 0~10점으로 채점
+3. 상위 2개만 추려 LLM에게 근거로 줌 (노이즈 제거)
+</code></pre>
+<p>"넓게 뽑고 → 정밀하게 추리는" 2단계입니다. 그물을 크게 던져 많이 잡은 뒤, 좋은 것만 골라내는 거죠.</p>
+<hr/>
+<h2 id="4-rerank">4. rerank 구현</h2>
+<p>LLM에게 각 청크의 관련도를 점수로 매기게 합니다.</p>
+<pre><code class="language-python">def rerank(question, docs, top_n=2):
+    """검색된 청크들을 LLM이 질문 관련도(0~10)로 채점해 상위 top_n만 재선택한다."""
+    llm = get_chat(temperature=0.0)
+    scored = []
+    for d in docs:
+        prompt = (
+            "다음 [문서조각]이 [질문]에 답하는 데 얼마나 관련 있는지 0~10 정수로만 답하라.\n"
+            "오직 숫자 하나만 출력하라(설명 금지).\n\n"
+            f"[질문] {question}\n\n[문서조각]\n{d.page_content[:400]}\n\n[점수]"
+        )
+        score = _parse_score(llm.invoke(prompt).content)
+        scored.append((score, d))
+    scored.sort(key=lambda x: x[0], reverse=True)   # 점수 내림차순
+    return scored[:top_n]                            # 상위 top_n
+</code></pre>
+<p>각 청크마다 "이 청크가 질문에 얼마나 관련 있나?"를 LLM에게 0~10점으로 물어, 높은 점수 순으로 상위 2개만 남깁니다.</p>
+<hr/>
+<h2 id="5-llm">5. 왜 LLM 재정렬이 더 정밀한가</h2>
+<p>"벡터 유사도로 이미 정렬했는데 왜 또?"라고 생각할 수 있습니다.</p>
+<pre><code class="language-text">벡터 유사도: 빠르지만 '거칠다' (의미 좌표의 거리만 봄)
+LLM 재정렬:  느리지만 '정밀하다' (질문과 청크를 실제로 읽고 판단)
+</code></pre>
+<p>벡터 유사도는 빠른 대신 거칩니다 — "대충 비슷한 방향"을 봅니다. LLM 재정렬은 청크를 <strong>실제로 읽고</strong> "이게 질문에 답이 되나?"를 판단하니 더 정밀하죠. 대신 LLM 호출이라 느리고 비쌉니다.</p>
+<blockquote>
+<p>비유: 도서관에서 책을 찾을 때, <strong>서가 분류</strong>(벡터 검색)로 후보를 빠르게 추리고, <strong>직접 펴 보며</strong>(LLM 재정렬) 진짜 필요한 책을 고르는 것과 같습니다. 분류만으로는 거칠고, 다 펴 보면 느리니, 둘을 결합하죠.</p>
+</blockquote>
+<hr/>
+<h2 id="6">6. 재정렬의 트레이드오프</h2>
+<p>재정렬은 공짜가 아닙니다.</p>
+<ul>
+<li><strong>장점</strong>: 검색 정확도 향상 → RAG 답변 품질 향상</li>
+<li><strong>단점</strong>: 청크마다 LLM 호출 → 비용·지연 증가</li>
+</ul>
+<p>그래서 <strong>항상</strong> 쓰는 게 아니라, <strong>정확도가 중요한 경우</strong>에 씁니다. 빠른 응답이 중요하면 벡터 검색만, 정확도가 중요하면 재정렬을 추가하는 식이죠. (실무에는 전용 rerank 모델도 있어, LLM보다 싸고 빠르게 재정렬하기도 합니다.)</p>
+<hr/>
+<h2 id="7">7. 검색 품질을 높이는 다른 방법들</h2>
+<p>재정렬 외에도 검색 품질을 높이는 방법이 있습니다.</p>
+<ul>
+<li><strong>청크 크기 튜닝</strong>(13강): 적절한 chunk_size로 검색 단위 최적화</li>
+<li><strong>메타데이터 필터</strong>(15강): 관련 문서로 범위를 좁혀 노이즈 제거</li>
+<li><strong>쿼리 재작성</strong>: 질문을 검색에 좋은 형태로 바꾸기</li>
+<li><strong>하이브리드 검색</strong>: 의미 검색 + 키워드 검색 결합</li>
+</ul>
+<p>RAG 품질 개선은 "검색을 어떻게 더 정확하게"의 끝없는 여정입니다. 측정하고(자동 채점) 개선하는 순환이죠(3·11강).</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>RAG 답변 품질은 <strong>검색 품질</strong>에 달렸다("검색 나쁘면 답도 나쁨").</li>
+<li><code>k</code> 딜레마: 작으면 <strong>누락</strong>, 크면 <strong>노이즈</strong>.</li>
+<li><strong>재정렬(rerank)</strong>: 많이 뽑고(k=6) → LLM이 관련도 점수 → 상위만 추림.</li>
+<li>LLM 재정렬은 벡터 검색보다 <strong>정밀</strong>(실제로 읽고 판단)하지만 비쌈.</li>
+<li>검색 품질 개선은 청크 튜닝·필터·쿼리 재작성 등 다양.</li>
+<li>다음 절에서 16강을 정리합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="07_따라하기-모르는-질문엔-모른다고.html"><span class="lbl">← 이전 절</span>07. 따라하기 모르는 질문엔 모른다고</a><a class="nxt" href="09_정리-체크리스트.html"><span class="lbl">다음 절 →</span>09. 정리 체크리스트</a></div>
+</div>
+</body></html>

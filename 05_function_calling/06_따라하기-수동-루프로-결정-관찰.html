@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제5강 — 따라하기 — 수동 루프로 모델의 결정 관찰</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제5강 · function calling</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제5강 · function calling — 세부 목차</b><a class="" href="01_왜-함수호출이-필요한가.html">01. 왜 함수호출이 필요한가</a><a class="" href="02_LLM은-함수를-직접-실행하지-못한다.html">02. LLM은 함수를 직접 실행하지 못한다</a><a class="" href="03_자동실행-vs-수동루프.html">03. 자동실행 vs 수동루프</a><a class="" href="04_따라하기-도구-함수-만들기.html">04. 따라하기 도구 함수 만들기</a><a class="" href="05_따라하기-자동-function-calling.html">05. 따라하기 자동 function calling</a><a class="cur" href="06_따라하기-수동-루프로-결정-관찰.html">06. 따라하기 수동 루프로 결정 관찰</a><a class="" href="07_도구-실행-오류-처리.html">07. 도구 실행 오류 처리</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">따라하기 — 수동 루프로 모델의 결정 관찰</h1>
+<h2 id="_2">목표</h2>
+<p>자동 실행을 <strong>끄고</strong>, 모델이 "무엇을 호출하려 했는지"를 직접 들여다봅니다. 그리고 그 결정을 우리가 실행하고, 결과를 모델에 되돌려 최종 답을 만듭니다. 이게 7강 Agent Loop의 토대입니다.</p>
+<hr/>
+<h2 id="1">1. 자동 실행 끄기</h2>
+<p><code>automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)</code>로 자동 실행을 끕니다. 그러면 모델은 <strong>결정만</strong> 하고 멈춥니다.</p>
+<pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
+from google.genai import types
+
+client = get_genai_client()
+
+resp = client.models.generate_content(
+    model=GEMINI_MODEL,
+    contents="이어버드 재고 알려줘.",
+    config=types.GenerateContentConfig(
+        tools=[get_stock, get_exchange_rate],
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),  # 자동 끔
+        temperature=0,
+    ),
+)
+</code></pre>
+<hr/>
+<h2 id="2">2. 모델의 '결정' 들여다보기</h2>
+<p>이제 <code>resp.function_calls</code>에 모델이 부르려는 함수 목록이 담겨 있습니다. <strong>아직 실행은 안 됐습니다.</strong> 우리가 직접 실행합니다.</p>
+<pre><code class="language-python"># 이름 → 함수 매핑 (모델이 고른 함수 이름으로 실제 함수를 찾기 위함)
+TOOLS = {"get_stock": get_stock, "get_exchange_rate": get_exchange_rate}
+
+for fc in resp.function_calls:
+    print("모델의 결정 → 함수:", fc.name, "| 인자:", dict(fc.args))
+    result = TOOLS[fc.name](**dict(fc.args))     # ← 우리가 직접 실행!
+    print("우리가 실행한 결과:", result)
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">모델의 결정 → 함수: get_stock | 인자: {'product_name': '이어버드'}
+우리가 실행한 결과: 승승 무선 블루투스 이어버드 SE 재고 225개 (서울물류)
+</code></pre>
+<p>여기서 <strong>세 가지</strong>를 확인하세요.</p>
+<ul>
+<li><code>fc.name</code>: 모델이 고른 함수 이름 (<code>"get_stock"</code>)</li>
+<li><code>fc.args</code>: 모델이 채운 인자 (<code>{'product_name': '이어버드'}</code>)</li>
+<li><code>TOOLS[fc.name](**dict(fc.args))</code>: 이름으로 진짜 함수를 찾아 <strong>우리가 실행</strong></li>
+</ul>
+<blockquote>
+<p><strong>핵심</strong>: 모델은 <code>get_stock</code>을 <code>product_name='이어버드'</code>로 부르라고 <strong>결정만</strong> 했습니다. 실제 실행은 우리(파이썬)가 했죠. 02번에서 배운 "모델은 결정, 실행은 우리"를 눈으로 확인한 순간입니다.</p>
+</blockquote>
+<hr/>
+<h2 id="3-tools">3. <code>TOOLS</code> 딕셔너리가 왜 필요한가</h2>
+<p>모델은 함수 <strong>이름(문자열)</strong> <code>"get_stock"</code>을 줍니다. 그런데 문자열로는 함수를 호출할 수 없죠. 그래서 <strong>이름 → 함수</strong> 매핑이 필요합니다.</p>
+<pre><code class="language-python">TOOLS = {"get_stock": get_stock, "get_exchange_rate": get_exchange_rate}
+
+name = "get_stock"             # 모델이 준 이름
+func = TOOLS[name]             # 이름으로 진짜 함수 객체를 찾음
+result = func(product_name="이어버드")   # 호출
+</code></pre>
+<p>이 패턴은 7강 Agent Loop에서 계속 씁니다. 모델이 고른 도구를 이름으로 찾아 실행하는 거죠.</p>
+<hr/>
+<h2 id="4">4. 결과를 모델에 되돌려 최종 답 만들기</h2>
+<p>수동에서 <strong>최종 답</strong>까지 만들려면, 실행 결과를 <code>function_response</code>로 다시 모델에 넣어야 합니다. 대화 기록을 순서대로 쌓습니다.</p>
+<pre><code class="language-python">fc = resp.function_calls[0]
+result = TOOLS[fc.name](**dict(fc.args))
+
+followup = client.models.generate_content(
+    model=GEMINI_MODEL,
+    # 대화 기록: [사용자 질문] → [모델의 함수호출] → [우리의 실행 결과] 순으로 쌓는다
+    contents=[
+        types.Content(role="user",
+                      parts=[types.Part(text="이어버드 재고 알려줘.")]),
+        types.Content(role="model",
+                      parts=[types.Part(function_call=fc)]),
+        types.Content(role="user",
+                      parts=[types.Part.from_function_response(
+                          name=fc.name, response={"result": result})]),
+    ],
+)
+print(followup.text)
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">승승 무선 블루투스 이어버드 SE는 현재 225개 재고가 있습니다(서울물류 보관).
+</code></pre>
+<p>세 개의 <code>Content</code>를 순서대로 쌓은 게 보이시나요?</p>
+<ol>
+<li><strong>사용자 질문</strong> (<code>role="user"</code>)</li>
+<li><strong>모델의 함수 호출 결정</strong> (<code>role="model"</code>, <code>function_call=fc</code>)</li>
+<li><strong>우리의 실행 결과</strong> (<code>role="user"</code>, <code>from_function_response</code>)</li>
+</ol>
+<p>이렇게 "관찰 결과"를 모델이 <strong>봐야</strong> 최종 답을 만들 수 있습니다. 이 "대화 기록을 쌓아 가며 반복"하는 것이 바로 7강 Agent Loop의 핵심입니다.</p>
+<hr/>
+<h2 id="5-vs">5. 자동 vs 수동, 무엇을 봤나</h2>
+<ul>
+<li><strong>자동</strong>(05번): <code>tools=[...]</code>만 주면 끝. 편하지만 안이 안 보임.</li>
+<li><strong>수동</strong>(06번): 자동을 끄고 <code>function_calls</code>를 직접 실행. 모델의 "결정"이 보이고, 중간에 제어를 끼울 수 있음.</li>
+</ul>
+<p>7강에서는 이 수동 루프를 <code>while</code>로 감싸, 모델이 "재고 확인 → 부족하면 재주문 기준 조회 → 판단"처럼 <strong>여러 단계를 스스로</strong> 처리하는 에이전트를 만듭니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li><code>disable=True</code>로 자동을 끄면 모델은 <strong>결정만</strong>(<code>function_calls</code>) 하고 멈춘다.</li>
+<li><code>TOOLS[fc.name](**dict(fc.args))</code>로 이름→함수를 찾아 <strong>우리가 실행</strong>한다.</li>
+<li>최종 답은 결과를 <code>from_function_response</code>로 <strong>되돌려</strong> 만든다.</li>
+<li>이 "결정→실행→결과 전달" 루프가 <strong>7강 Agent Loop의 토대</strong>다.</li>
+<li>다음 절에서 도구가 <strong>실패할 때</strong> 우아하게 처리하는 법을 배웁니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="05_따라하기-자동-function-calling.html"><span class="lbl">← 이전 절</span>05. 따라하기 자동 function calling</a><a class="nxt" href="07_도구-실행-오류-처리.html"><span class="lbl">다음 절 →</span>07. 도구 실행 오류 처리</a></div>
+</div>
+</body></html>

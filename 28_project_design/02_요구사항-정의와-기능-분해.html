@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제28강 — 요구사항 정의와 기능 분해 (1·2단계)</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제28강 · project design</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제28강 · project design — 세부 목차</b><a class="" href="01_바로-코딩이-망하는-이유.html">01. 바로 코딩이 망하는 이유</a><a class="cur" href="02_요구사항-정의와-기능-분해.html">02. 요구사항 정의와 기능 분해</a><a class="" href="03_구성요소-필요성-판단.html">03. 구성요소 필요성 판단</a><a class="" href="04_아키텍처와-인터페이스-설계.html">04. 아키텍처와 인터페이스 설계</a><a class="" href="05_따라하기-설계를-코드-스켈레톤으로.html">05. 따라하기 설계를 코드 스켈레톤으로</a><a class="" href="06_트레이드오프-판단-RAG-멀티에이전트.html">06. 트레이드오프 판단 RAG 멀티에이전트</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="12">요구사항 정의와 기능 분해 (1·2단계)</h1>
+<h2 id="_1">한 줄 요약</h2>
+<p>설계의 첫 두 단계입니다. <strong>1단계 요구사항 정의</strong> — "무엇을 해결하나"를 <strong>사용자 시나리오</strong>로 적습니다. <strong>2단계 기능 분해</strong> — 각 요구사항을 <strong>함수 단위(입력/출력)</strong> 로 쪼갭니다. 막연한 "CS 봇 만들기"를 구체적인 함수 목록으로 바꾸는 과정입니다.</p>
+<hr/>
+<h2 id="1-1">1. 1단계 — 요구사항 정의 (사용자 시나리오)</h2>
+<p>"무엇을 만들지"를 기능이 아니라 <strong>사용자가 실제로 하는 말</strong>로 적습니다. 승승장구몰 통합 CS 에이전트라면:</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>사용자 시나리오</th>
+<th>필요한 능력</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R1</td>
+<td>"환불 절차 알려줘"</td>
+<td>사내 <strong>정책 문서</strong> 검색(RAG)</td>
+</tr>
+<tr>
+<td>R2</td>
+<td>"내 주문 O000050 상태는?"</td>
+<td>주문 DB <strong>도구</strong></td>
+</tr>
+<tr>
+<td>R3</td>
+<td>"이어버드 재고 있어?"</td>
+<td>재고 <strong>도구</strong></td>
+</tr>
+<tr>
+<td>R4</td>
+<td>"무료배송 기준?"</td>
+<td><strong>FAQ</strong> 도구</td>
+</tr>
+<tr>
+<td>R5</td>
+<td>"아까 그 정책 다시 알려줘"</td>
+<td><strong>단기 메모리</strong>(대화 맥락)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>왜 사용자 시나리오로 시작하나?</strong> "기능 목록"부터 적으면 <strong>만들기 쉬운 것</strong> 위주로 흐릅니다. 반면 사용자가 실제로 하는 말에서 출발하면, <strong>진짜 필요한 능력</strong>이 드러나죠. R1~R5는 "고객이 상담창에 칠 법한 문장"이고, 각 문장이 곧 시스템이 갖춰야 할 능력을 가리킵니다.</p>
+<blockquote>
+<p>1강에서 "LLM이 답 못 한 질문 2(주문 상태)"를 기억하시나요? 그게 바로 여기 <strong>R2</strong>입니다. 30강에서 드디어 이걸 풉니다.</p>
+</blockquote>
+<hr/>
+<h2 id="2-2">2. 2단계 — 기능 분해 (요구사항 → 함수)</h2>
+<p>각 요구사항을 <strong>함수 단위</strong>로 쪼갭니다. 입력과 출력을 명시해, "무엇을 받아 무엇을 내는가"를 못박습니다.</p>
+<pre><code class="language-text">get_order_status(order_id)  -&gt; 주문 상태 문자열       (R2)
+get_stock(product_name)     -&gt; 재고 수량 문자열        (R3)
+search_faq(keyword)         -&gt; FAQ 답변               (R4)
+policy_search(query)        -&gt; 정책 문서 근거(RAG)     (R1)
++ 대화 thread_id 별 메모리                            (R5)
+</code></pre>
+<pre><code class="language-text">[요구사항]          →    [함수 (입력 → 출력)]
+R1 정책 안내        →    policy_search(query) → 근거 텍스트
+R2 주문 상태        →    get_order_status(order_id) → 상태 문자열
+R3 재고 확인        →    get_stock(product_name) → 재고 문자열
+R4 FAQ              →    search_faq(keyword) → 답변
+R5 대화 기억        →    (함수 아님) thread_id 별 메모리로 처리
+</code></pre>
+<p>이건 백엔드의 <strong>유스케이스 분해</strong>와 똑같습니다. "주문 상태 알려줘"라는 추상적 요구를, <code>get_order_status(order_id) -&gt; str</code>라는 <strong>구체적 계약</strong>으로 바꾸는 거죠.</p>
+<hr/>
+<h2 id="3">3. 왜 입력/출력을 먼저 정하나</h2>
+<p>함수의 <strong>시그니처(이름·입력·출력)</strong> 를 먼저 정하면 좋은 점:</p>
+<pre><code class="language-text">- 합의 고정: "주문 조회는 order_id를 받아 문자열을 낸다"가 못박힘
+            → 구현자마다 제각각 만드는 일이 없음
+- 도구화 준비: 5강에서 배운 @tool 은 함수의 시그니처·독스트링을 LLM이 읽음
+            → 시그니처가 명확해야 LLM이 도구를 잘 고름
+- 테스트 용이: 입출력이 정해져 있어, 구현 전에 테스트부터 짤 수 있음
+- 병렬 작업: 팀이면 시그니처만 합의하고 각자 구현 가능
+</code></pre>
+<p>특히 에이전트에서는 이 함수들이 곧 <strong>도구(@tool)</strong> 가 됩니다. 시그니처와 독스트링이 명확해야 LLM이 "이 질문엔 이 도구"를 제대로 고르죠(6강 도구 설계 원칙).</p>
+<hr/>
+<h2 id="4-r5">4. 함수로 안 쪼개지는 것 — R5(메모리)</h2>
+<p>주의할 점: <strong>R5(대화 기억)는 함수가 아닙니다.</strong></p>
+<pre><code class="language-text">R1~R4: 입력 → 출력이 명확한 '함수(도구)'
+R5:    "아까 그 정책" 을 이해하려면 → 대화 맥락을 유지하는 '메모리'
+</code></pre>
+<p>"아까 그거 다시 알려줘"는 특정 입력→출력 함수로 만들 수 없습니다. <strong>이전 대화를 기억하는 장치(메모리)</strong> 가 필요하죠. 그래서 R5는 도구가 아니라 <strong><code>thread_id</code> 별 단기 메모리</strong>(19강)로 처리합니다.</p>
+<p>이렇게 요구사항을 분해하다 보면 <strong>"이건 도구, 저건 메모리, 그건 RAG"</strong> 가 자연스럽게 갈립니다. 그 판단을 체계적으로 하는 게 다음 절(3단계, 구성요소 필요성 판단)입니다.</p>
+<hr/>
+<h2 id="5">5. 분해 결과 정리</h2>
+<p>지금까지의 결과를 모으면:</p>
+<pre><code class="language-text">도구 4개:   get_order_status, get_stock, search_faq, policy_search
+RAG:        policy_search 가 정책/멤버십 PDF를 검색 (R1)
+메모리:     thread_id 별 단기 메모리 (R5)
+멀티에이전트: ? (아직 판단 안 함 — 3단계에서)
+</code></pre>
+<p>요구사항 5개가 <strong>구체적인 구성요소 목록</strong>으로 바뀌었습니다. "CS 봇 만들기"라는 막연한 목표가, 이제 "도구 4개 + RAG + 메모리"라는 <strong>만들 수 있는 단위</strong>가 됐죠.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li><strong>1단계(요구사항)</strong>: "무엇을 해결하나"를 <strong>사용자 시나리오(R1~R5)</strong> 로 적는다 — 기능이 아니라 사용자의 말에서 출발.</li>
+<li><strong>2단계(기능 분해)</strong>: 각 요구사항을 <strong>함수(입력→출력)</strong> 로 쪼갠다 — 백엔드 유스케이스 분해와 동일.</li>
+<li>시그니처를 먼저 정하면 <strong>합의 고정·도구화·테스트·병렬작업</strong>에 유리.</li>
+<li><strong>R5(메모리)</strong> 는 함수로 안 쪼개짐 → <code>thread_id</code> 별 단기 메모리로 처리.</li>
+<li>다음 절에서 3단계 — 구성요소(도구·RAG·메모리·멀티에이전트) <strong>필요성 판단</strong>을 다룹니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="01_바로-코딩이-망하는-이유.html"><span class="lbl">← 이전 절</span>01. 바로 코딩이 망하는 이유</a><a class="nxt" href="03_구성요소-필요성-판단.html"><span class="lbl">다음 절 →</span>03. 구성요소 필요성 판단</a></div>
+</div>
+</body></html>

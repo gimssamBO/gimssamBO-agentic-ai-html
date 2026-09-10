@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제10강 — 보안 주의사항과 실무 대안</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제10강 · code execution agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제10강 · code execution agent — 세부 목차</b><a class="" href="01_LLM은-계산기가-아니다.html">01. LLM은 계산기가 아니다</a><a class="" href="02_코드-생성-실행-루프.html">02. 코드 생성 실행 루프</a><a class="" href="03_안전한-실행-네임스페이스-제한.html">03. 안전한 실행 네임스페이스 제한</a><a class="" href="04_따라하기-pandas-식-실행-도구.html">04. 따라하기 pandas 식 실행 도구</a><a class="" href="05_따라하기-자연어로-집계-질문.html">05. 따라하기 자연어로 집계 질문</a><a class="" href="06_코드-실행-실패시-재시도.html">06. 코드 실행 실패시 재시도</a><a class="cur" href="07_보안-주의사항과-실무-대안.html">07. 보안 주의사항과 실무 대안</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">보안 주의사항과 실무 대안</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>화이트리스트 <code>eval</code>(03번)은 위험을 줄이지만 <strong>완벽한 방어는 아닙니다.</strong> 외부 사용자 입력을 그대로 실행하지 말고, 실무에서는 <strong>별도 샌드박스(격리 환경)</strong> 에서 코드를 실행하는 것이 안전합니다.</p>
+<hr/>
+<h2 id="1">1. 왜 코드 실행은 본질적으로 위험한가</h2>
+<p>코드 실행 에이전트는 강력합니다 — 어떤 분석이든 코드만 바꾸면 되니까요. 하지만 그 유연함의 대가가 <strong>위험</strong>입니다. "임의의 코드를 실행한다"는 건, <strong>악의적 코드도 실행될 수 있다</strong>는 뜻이거든요.</p>
+<pre><code class="language-python"># 만약 누군가 이런 식을 주입할 수 있다면?
+"파일 삭제", "비밀번호 읽기", "외부로 데이터 전송"
+</code></pre>
+<p>03번의 화이트리스트(<code>{"__builtins__": {}}</code> + <code>df, pd</code>만)는 이런 시도를 <strong>상당 부분</strong> 막습니다. 하지만 보안에서 "상당 부분"은 충분하지 않을 수 있습니다.</p>
+<hr/>
+<h2 id="2">2. 화이트리스트의 한계</h2>
+<p><code>{"__builtins__": {}}</code>로 빌트인을 막아도, 정교한 우회가 가능할 수 있습니다.</p>
+<ul>
+<li><strong>pandas 자체의 위험 기능</strong>: pandas에도 파일을 읽고 쓰는 기능(<code>df.to_csv</code>, <code>pd.read_csv</code>)이 있습니다. <code>pd</code>를 노출했으니 이론적으로 접근 가능합니다.</li>
+<li><strong>객체 탐색을 통한 우회</strong>: 파이썬 객체의 속성을 타고 들어가 차단된 기능에 도달하는 고급 기법이 존재합니다.</li>
+</ul>
+<p>즉, 화이트리스트는 <strong>"실수로 인한 사고"나 "단순한 공격"</strong> 은 막지만, <strong>작정한 공격자</strong>는 우회할 여지가 있습니다.</p>
+<blockquote>
+<p>비유: 화이트리스트는 <strong>현관문 잠금</strong>입니다. 일반적인 침입은 막지만, 전문 도둑은 창문을 노릴 수 있죠. 정말 중요한 걸 지키려면 <strong>금고(샌드박스)</strong> 가 따로 필요합니다.</p>
+</blockquote>
+<hr/>
+<h2 id="3">3. 황금률 — 외부 입력을 그대로 실행하지 마라</h2>
+<p>가장 중요한 원칙입니다.</p>
+<blockquote>
+<p><strong>신뢰할 수 없는 외부 사용자의 입력을, 코드로 그대로 실행하지 마라.</strong></p>
+</blockquote>
+<p>이 강의 실습은 <strong>개발자가 통제하는 환경</strong>(우리가 만든 데이터, 우리가 던지는 질문)이라 비교적 안전합니다. 하지만 만약 이 에이전트를 <strong>외부 고객에게 공개</strong>한다면, 고객이 악의적 프롬프트로 위험한 코드를 유도할 수 있습니다(3강 프롬프트 인젝션 복습).</p>
+<ul>
+<li>✅ 사내 분석 도구 (개발자·분석가만 사용) → 화이트리스트 <code>eval</code>로 충분할 수 있음</li>
+<li>⚠️ 외부 고객 대상 서비스 → 반드시 샌드박스 필요</li>
+</ul>
+<hr/>
+<h2 id="4-1">4. 실무 대안 ① — 샌드박스</h2>
+<p><strong>샌드박스(sandbox)</strong> 는 코드를 <strong>격리된 환경</strong>에서 실행하는 것입니다. 그 안에서 무슨 일이 일어나도 바깥(진짜 시스템)에는 영향이 없습니다.</p>
+<ul>
+<li><strong>별도 프로세스</strong>: 권한을 제한한 별도 프로세스에서 실행 (오류·악성 코드가 메인을 못 건드림)</li>
+<li><strong>컨테이너(Docker)</strong>: 격리된 컨테이너에서 실행, 끝나면 폐기</li>
+<li>
+<p><strong>전용 샌드박스 서비스</strong>: 코드 실행 전용 격리 환경 (클라우드 서비스로도 제공됨)</p>
+</li>
+<li>
+<p><strong>메인 시스템</strong> → (코드 전송) → <strong>샌드박스(격리 환경)</strong></p>
+</li>
+<li>샌드박스에서 <strong>코드 실행</strong> — 위험해도 격리돼 있어 본 시스템에 영향 없음</li>
+<li>샌드박스 → (결과만) → <strong>메인 시스템</strong> 으로 반환</li>
+</ul>
+<p>샌드박스가 망가져도 버리고 새로 만들면 되니, 진짜 시스템은 안전합니다.</p>
+<hr/>
+<h2 id="5-2">5. 실무 대안 ② — 더 안전한 실행 방식</h2>
+<p><code>eval</code> 자체를 피하는 방법도 있습니다.</p>
+<ul>
+<li><strong>AST 파싱·검증</strong>: 코드를 실행 전에 분석해, 허용된 연산만 있는지 검사한 뒤 실행.</li>
+<li><strong>제한된 쿼리 언어</strong>: 자유로운 코드 대신, 안전한 쿼리 API(예: pandas의 <code>df.query()</code>)나 SQL만 허용.</li>
+<li><strong>함수 화이트리스트</strong>: 자유 코드 대신, 미리 만든 안전한 분석 함수들 중에서만 고르게 함(5강 방식으로 회귀).</li>
+</ul>
+<p>각 방식은 "유연함 ↔ 안전함"의 트레이드오프가 있습니다. 더 안전할수록 할 수 있는 게 줄어들죠.</p>
+<hr/>
+<h2 id="6">6. 정리 — 환경에 맞는 안전 수준</h2>
+<table>
+<thead>
+<tr>
+<th>환경</th>
+<th>권장 안전장치</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>학습·실습 (이 강의)</td>
+<td>화이트리스트 <code>eval</code></td>
+</tr>
+<tr>
+<td>사내 분석 도구</td>
+<td>화이트리스트 <code>eval</code> + 입력 검증</td>
+</tr>
+<tr>
+<td>외부 공개 서비스</td>
+<td><strong>샌드박스 필수</strong> (별도 프로세스/컨테이너)</td>
+</tr>
+</tbody>
+</table>
+<p>핵심은 <strong>"이 코드가 잘못되면 얼마나 위험한가"</strong> 를 따져 안전 수준을 정하는 것입니다. 위험이 클수록 더 강한 격리가 필요합니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>화이트리스트 <code>eval</code>은 위험을 <strong>줄이지만 완벽하지 않다</strong>(pandas 기능·우회 가능).</li>
+<li>황금률: <strong>외부 입력을 코드로 그대로 실행하지 마라</strong>.</li>
+<li>실무 대안: <strong>샌드박스</strong>(별도 프로세스·컨테이너)로 격리 실행.</li>
+<li>더 안전하게: AST 검증, 제한된 쿼리, 함수 화이트리스트.</li>
+<li><strong>환경의 위험 수준에 맞게</strong> 안전장치를 고른다.</li>
+<li>다음 절에서 10강을 정리합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_코드-실행-실패시-재시도.html"><span class="lbl">← 이전 절</span>06. 코드 실행 실패시 재시도</a><a class="nxt" href="08_정리-체크리스트.html"><span class="lbl">다음 절 →</span>08. 정리 체크리스트</a></div>
+</div>
+</body></html>

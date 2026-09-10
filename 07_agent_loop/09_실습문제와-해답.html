@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제7강 — 실습문제와 해답</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제7강 · agent loop</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제7강 · agent loop — 세부 목차</b><a class="" href="01_한번-묻고-끝나지-않는-일.html">01. 한번 묻고 끝나지 않는 일</a><a class="" href="02_ReAct-패턴-생각-행동-관찰.html">02. ReAct 패턴 생각 행동 관찰</a><a class="" href="03_직접-돌리는-루프와-종료조건.html">03. 직접 돌리는 루프와 종료조건</a><a class="" href="04_따라하기-미니-에이전트-루프-구현.html">04. 따라하기 미니 에이전트 루프 구현</a><a class="" href="05_따라하기-2-3스텝-작업-실행.html">05. 따라하기 2 3스텝 작업 실행</a><a class="" href="06_무한루프와-반복호출-방지.html">06. 무한루프와 반복호출 방지</a><a class="" href="07_대화기록-누적과-토큰-관리.html">07. 대화기록 누적과 토큰 관리</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="cur" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">실습문제와 해답</h1>
+<p>직접 코드를 고쳐 보며 7강 내용을 손에 익힙니다. 먼저 <strong>스스로 풀어 본 뒤</strong> 해답을 펼쳐 보세요.</p>
+<hr/>
+<h2 id="1-max_steps">문제 1 — 안전장치 max_steps 실험</h2>
+<p><code>run_agent(...)</code> 호출을 <code>max_steps=1</code>로 바꿔 <code>"스마트워치 재고를 확인하고, 재주문이 필요하면 알려줘."</code>를 실행하세요.</p>
+<ul>
+<li>기대 결과: 재고 조회 1스텝만 돌고 최종 답에 도달하지 못한 채 <code>[종료] 최대 스텝 도달 — 안전장치 작동</code>이 출력되어, 무한 루프를 막는 안전장치 역할을 확인하면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python"># run_agent 정의는 04번과 동일. 호출만 max_steps=1로:
+run_agent("스마트워치 재고를 확인하고, 재주문이 필요하면 알려줘.", max_steps=1)
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">[STEP 1] 호출: get_stock {'product_name': '스마트워치'}
+           관찰: 승승 스마트워치 Fit 5 현재 재고 3개
+[종료] 최대 스텝 도달 — 안전장치 작동
+</code></pre>
+
+
+**해설**: 이 작업은 "재고 확인 → 재주문 기준 확인 → 판단"으로 최소 2~3스텝이 필요합니다. 그런데 `max_steps=1`로 묶으니 첫 스텝(재고 조회)만 돌고, 판단에 이르기 전에 안전장치가 작동해 멈췄습니다. `max_steps`가 **"여기까지만"** 이라는 상한선임을 직접 확인한 거죠. 실무에서는 작업이 필요로 하는 스텝 수보다 넉넉하게(5~10) 잡되, 반드시 둡니다.
+
+</details>
+<hr/>
+<h2 id="2-3">문제 2 — 3스텝 이상 다단계 처리</h2>
+<p><code>code/ch07_agent_loop.py</code>에 도구 <code>get_warehouse_total(product_name)</code>을 추가하세요.</p>
+<ul>
+<li><code>data/inventory.csv</code>를 읽어 같은 상품이 여러 창고(warehouse)에 있을 때 <code>stock</code> 합계를 반환하고 <code>TOOLS</code>에 등록합니다.</li>
+<li><code>"스마트워치의 전 창고 재고 합계를 구하고, 재주문 기준과 비교해 재주문이 필요한지 알려줘."</code>로 <code>run_agent</code>를 실행합니다.</li>
+<li>사용 파일: <code>data/inventory.csv</code> (컬럼: product_name, stock, warehouse, reorder_level)</li>
+<li>기대 결과: 합계 조회 → 재주문 기준 조회 → 판단의 3스텝 이상이 로그에 찍히고 최종 답에 도달하면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_genai_client, GEMINI_MODEL, DATA
+from google.genai import types
+import pandas as pd
+
+client = get_genai_client()
+inv = pd.read_csv(DATA / "inventory.csv", encoding="utf-8-sig")
+
+def get_warehouse_total(product_name: str) -&gt; str:
+    """상품명을 받아 모든 창고의 재고(stock) 합계를 반환한다. 여러 창고에 흩어진 총재고가 궁금할 때 사용."""
+    hit = inv[inv["product_name"].str.contains(product_name, na=False)]
+    if hit.empty:
+        return f"'{product_name}' 재고 정보 없음"
+    total = int(hit["stock"].sum())
+    name = hit.iloc[0]["product_name"]
+    return f"{name} 전 창고 재고 합계 {total}개 (창고 {len(hit)}곳)"
+
+def get_reorder_level(product_name: str) -&gt; str:
+    """상품명을 받아 재주문 기준 수량을 반환한다. 재고가 이 값 이하이면 재주문이 필요하다."""
+    row = inv[inv["product_name"].str.contains(product_name, na=False)]
+    if row.empty:
+        return f"'{product_name}' 재주문 기준 정보 없음"
+    return f"{row.iloc[0]['product_name']} 재주문 기준 {int(row.iloc[0]['reorder_level'])}개"
+
+# 새 도구를 TOOLS에 등록
+TOOLS = {"get_warehouse_total": get_warehouse_total, "get_reorder_level": get_reorder_level}
+
+# (run_agent 는 04번과 동일 — TOOLS만 위 것으로)
+run_agent("스마트워치의 전 창고 재고 합계를 구하고, 재주문 기준과 비교해 재주문이 필요한지 알려줘.")
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">[STEP 1] 호출: get_warehouse_total {'product_name': '스마트워치'}
+           관찰: 승승 스마트워치 Fit 5 전 창고 재고 합계 12개 (창고 3곳)
+[STEP 2] 호출: get_reorder_level {'product_name': '스마트워치'}
+           관찰: 승승 스마트워치 Fit 5 재주문 기준 30개
+[STEP 3] 최종 답변
+Final Answer: 전 창고 합계 재고는 12개로 재주문 기준(30개)보다 적습니다. 재주문이 필요합니다.
+</code></pre>
+
+
+**해설**: 새 도구를 추가하니 모델이 "합계 조회 → 기준 조회 → 판단"의 다단계를 스스로 밟았습니다. 도구를 잘 설계하면(독스트링에 "여러 창고에 흩어진 총재고가 궁금할 때 사용"), 모델이 적절히 골라 씁니다. 6강(도구 설계)과 7강(루프)이 결합된 문제였습니다.
+
+</details>
+<hr/>
+<h2 id="_2">정리</h2>
+<ul>
+<li>문제 1로 <strong>max_steps 안전장치</strong>가 작동하는 걸 직접 확인했습니다.</li>
+<li>문제 2로 <strong>새 도구를 추가해 더 긴 다단계</strong> 작업을 처리했습니다.</li>
+</ul>
+<p>이것으로 7강과 1부를 마칩니다. 다음 8강부터는 LangChain 프레임워크로 넘어갑니다!</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="08_정리-체크리스트.html"><span class="lbl">← 이전 절</span>08. 정리 체크리스트</a><span class="nxt off"><span class="lbl"> </span> </span></div>
+</div>
+</body></html>

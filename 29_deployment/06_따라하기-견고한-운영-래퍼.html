@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제29강 — 따라하기 — 견고한 운영 래퍼</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제29강 · deployment</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제29강 · deployment — 세부 목차</b><a class="" href="01_내-PC에선-됐는데요.html">01. 내 PC에선 됐는데요</a><a class="" href="02_설정-분리-env와-config.html">02. 설정 분리 env와 config</a><a class="" href="03_구조적-로깅.html">03. 구조적 로깅</a><a class="" href="04_예외처리와-재시도-지수백오프.html">04. 예외처리와 재시도 지수백오프</a><a class="" href="05_비용-지연-관리.html">05. 비용 지연 관리</a><a class="cur" href="06_따라하기-견고한-운영-래퍼.html">06. 따라하기 견고한 운영 래퍼</a><a class="" href="07_따라하기-FastAPI-엔드포인트로-감싸기.html">07. 따라하기 FastAPI 엔드포인트로 감싸기</a><a class="" href="08_응답-캐싱으로-비용-줄이기.html">08. 응답 캐싱으로 비용 줄이기</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">따라하기 — 견고한 운영 래퍼</h1>
+<h2 id="_2">목표</h2>
+<p>02~05번에서 배운 <strong>설정 분리·로깅·재시도/폴백</strong>을 하나의 파일로 묶어, 운영 가능한 견고한 래퍼를 만듭니다. 실제 파일은 <code>code/ch29_deploy.py</code> 입니다.</p>
+<hr/>
+<h2 id="0">0. 실습 준비</h2>
+<pre><code class="language-bash">conda activate agentic
+
+# 29강에서 쓰는 라이브러리
+#  - pyyaml                 : config.yaml 로드
+#  - langchain-google-genai : get_chat 내부 Gemini 모델
+pip install -U pyyaml langchain-google-genai
+
+python code/common.py        # GOOGLE_API_KEY: True 확인
+</code></pre>
+<ul>
+<li>설정 파일 <code>data/config.yaml</code>은 이미 있습니다(app/llm/rag/logging).</li>
+</ul>
+<hr/>
+<h2 id="1">1. 시작부 &amp; 설정 로더</h2>
+<p><code>code/ch29_deploy.py</code>를 만듭니다.</p>
+<pre><code class="language-python"># -*- coding: utf-8 -*-
+# 실행: python code/ch29_deploy.py
+import sys, pathlib, time, logging
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))  # code/ 를 import 경로에
+from common import DATA, ROOT, get_chat
+
+import yaml
+
+# [이 강의 핵심] '내 PC에선 됐는데요' 방지. 설정 분리 / 구조적 로깅 / 재시도+폴백으로
+#   어디서 돌려도 똑같이 동작하고, 일시 오류에도 죽지 않는 견고한 서비스로 만든다.
+
+
+def load_config() -&gt; dict:
+    """data/config.yaml 을 읽어 dict로 반환한다(하드코딩 금지)."""
+    with open(DATA / "config.yaml", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+</code></pre>
+<p><code>load_config</code>는 02번에서 본 설정 로더입니다. 모델명·온도·재시도 횟수를 <strong>코드가 아니라 config에서</strong> 읽습니다.</p>
+<hr/>
+<h2 id="2">2. 로깅 설정</h2>
+<p>03번의 구조적 로깅을 함수로 만듭니다.</p>
+<pre><code class="language-python">def setup_logging(cfg: dict) -&gt; logging.Logger:
+    """config의 logging 설정으로 로거를 구성한다(콘솔+파일 동시 출력)."""
+    level = getattr(logging, cfg["logging"]["level"].upper(), logging.INFO)
+    log_path = ROOT / cfg["logging"]["file"]
+    log_path.parent.mkdir(parents=True, exist_ok=True)   # logs/ 자동 생성
+
+    logger = logging.getLogger("cs_agent")
+    logger.setLevel(level)
+    logger.handlers.clear()                              # 재호출 시 핸들러 중복 방지
+    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+
+    sh = logging.StreamHandler();  sh.setFormatter(fmt)              # 콘솔
+    fh = logging.FileHandler(log_path, encoding="utf-8"); fh.setFormatter(fmt)  # 파일
+    logger.addHandler(sh); logger.addHandler(fh)
+    return logger
+</code></pre>
+<hr/>
+<h2 id="3-llm">3. 견고한 LLM 호출 래퍼</h2>
+<p>04번의 재시도 + 폴백을 함수로 만듭니다.</p>
+<pre><code class="language-python">def robust_invoke(llm, message: str, logger, max_retries: int = 3) -&gt; str:
+    """LLM 호출을 재시도+폴백으로 감싼다. 끝내 실패해도 서비스는 죽지 않는다."""
+    for attempt in range(1, max_retries + 1):
+        try:
+            logger.info(f"LLM 호출 시도 {attempt}/{max_retries}")
+            resp = llm.invoke(message)
+            logger.info("LLM 호출 성공")
+            return resp.content                          # 성공하면 즉시 반환
+        except Exception as e:
+            wait = 2 ** (attempt - 1)                    # 지수 백오프: 1, 2, 4초
+            logger.warning(f"LLM 호출 실패({attempt}회): {e} → {wait}초 후 재시도")
+            time.sleep(wait)
+    logger.error("LLM 호출 최종 실패 — 폴백 응답 반환")
+    return "죄송합니다. 일시적인 오류로 답변을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요."
+</code></pre>
+<hr/>
+<h2 id="4">4. 조립 &amp; 실행</h2>
+<p>세 함수를 묶어 main에서 흐름을 만듭니다.</p>
+<pre><code class="language-python">def main():
+    cfg = load_config()                  # 1) 설정 로드
+    logger = setup_logging(cfg)          # 2) 로깅 구성
+    logger.info(f"앱 시작: {cfg['app']['name']} v{cfg['app']['version']}")
+
+    # config의 값으로 LLM 생성(코드에 모델명·온도를 박지 않음 = 하드코딩 아님)
+    llm = get_chat(provider=cfg["llm"]["provider"],
+                   temperature=cfg["llm"]["temperature"])
+
+    answer = robust_invoke(
+        llm, "승승장구몰 무료배송 기준을 한 문장으로 알려줘.",
+        logger, max_retries=cfg["llm"]["max_retries"],
+    )
+    print("\n[답변]", answer)
+    logger.info("앱 종료")
+
+
+if __name__ == "__main__":
+    main()
+</code></pre>
+<p>세 단계가 깔끔히 흐릅니다.</p>
+<pre><code class="language-text">1) load_config()    → 설정을 코드 밖에서 로드
+2) setup_logging()  → 콘솔+파일 로깅 준비
+3) robust_invoke()  → 재시도+폴백으로 안전하게 LLM 호출
+</code></pre>
+<hr/>
+<h2 id="5">5. 실행 결과</h2>
+<pre><code class="language-text">2026-06-01 10:00:00 [INFO] 앱 시작: 승승장구 CS Agent v1.0.0
+2026-06-01 10:00:00 [INFO] LLM 호출 시도 1/3
+2026-06-01 10:00:01 [INFO] LLM 호출 성공
+[답변] 3만원 이상 구매 시 무료배송입니다.
+2026-06-01 10:00:01 [INFO] 앱 종료
+</code></pre>
+<p>같은 로그가 <strong><code>logs/agent.log</code> 파일에도</strong> 쌓입니다(03번 FileHandler).</p>
+<p><strong>관찰 포인트</strong></p>
+<ul>
+<li>키·모델·온도가 <strong>코드에 없습니다</strong> — <code>.env</code>와 <code>config.yaml</code>에서 옴(하드코딩 제거).</li>
+<li>모든 단계가 <strong>시각·레벨과 함께 로깅</strong> — 나중에 추적 가능.</li>
+<li>LLM이 실패해도 <strong>재시도 → 폴백</strong>으로 서비스가 안 죽음.</li>
+</ul>
+<hr/>
+<h2 id="6">6. 이게 "운영 코드"다</h2>
+<p>01번의 데모 코드와 비교해 봅시다.</p>
+<pre><code class="language-text">[데모 (01번)]              [운영 (이 절)]
+키가 코드에 박힘      →     .env / config.yaml 에서 로드
+실패하면 죽음        →     재시도 + 폴백 (안 죽음)
+print, 기록 없음     →     logging 콘솔 + 파일
+모델·온도 박제       →     config.yaml 에서 (코드 수정 없이 변경)
+</code></pre>
+<p>같은 "LLM에게 무료배송 기준 묻기"인데, <strong>운영 품질</strong>이 완전히 다릅니다. 이 <code>ch29_deploy.py</code>의 세 함수(<code>load_config</code>·<code>setup_logging</code>·<code>robust_invoke</code>)는 <strong>재사용 가능한 운영 자산</strong>입니다. 07번 FastAPI, 08번 캐싱이 이 자산을 그대로 가져다 씁니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>02~05번의 이론을 <strong>하나의 파일</strong>로 묶음: <code>load_config</code>·<code>setup_logging</code>·<code>robust_invoke</code>.</li>
+<li>main 흐름: <strong>설정 로드 → 로깅 구성 → 견고한 호출</strong>.</li>
+<li>키·모델·온도가 코드에 없고, 실패해도 안 죽고, 모든 게 로깅됨 = <strong>운영 코드</strong>.</li>
+<li>이 세 함수는 <strong>재사용 가능한 운영 자산</strong> — 07·08번이 그대로 활용.</li>
+<li>다음 절에서 이 래퍼를 <strong>FastAPI 엔드포인트</strong>로 감싸 HTTP API로 노출합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="05_비용-지연-관리.html"><span class="lbl">← 이전 절</span>05. 비용 지연 관리</a><a class="nxt" href="07_따라하기-FastAPI-엔드포인트로-감싸기.html"><span class="lbl">다음 절 →</span>07. 따라하기 FastAPI 엔드포인트로 감싸기</a></div>
+</div>
+</body></html>

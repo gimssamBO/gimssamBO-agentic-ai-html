@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제9강 — 따라하기 — 검색 과정 관찰하기</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제9강 · search agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제9강 · search agent — 세부 목차</b><a class="" href="01_지식-컷오프-문제.html">01. 지식 컷오프 문제</a><a class="" href="02_검색으로-보강하기.html">02. 검색으로 보강하기</a><a class="" href="03_따라하기-웹검색-도구-붙이기.html">03. 따라하기 웹검색 도구 붙이기</a><a class="cur" href="04_따라하기-검색-과정-관찰하기.html">04. 따라하기 검색 과정 관찰하기</a><a class="" href="05_검색결과-신뢰성과-재검증.html">05. 검색결과 신뢰성과 재검증</a><a class="" href="06_네트워크-오류-처리와-재시도.html">06. 네트워크 오류 처리와 재시도</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">따라하기 — 검색 과정 관찰하기</h1>
+<h2 id="_2">목표</h2>
+<p><code>stream</code>으로 에이전트가 "검색어 생성 → 검색 → 결과 관찰 → 요약"하는 <strong>과정을 단계별로</strong> 봅니다. 그리고 네트워크 오류에 대비한 예외 처리를 적용합니다.</p>
+<hr/>
+<h2 id="1-invoke-vs-stream">1. invoke vs stream</h2>
+<p>8강에서는 <code>invoke</code>로 <strong>최종 답만</strong> 받았습니다. <code>stream</code>을 쓰면 에이전트가 일하는 <strong>중간 과정</strong>을 단계별로 볼 수 있습니다.</p>
+<pre><code class="language-python"># invoke — 최종 답만 (과정 안 보임)
+result = agent.invoke({"messages": [...]})
+
+# stream — 매 단계를 순서대로 (과정 보임)
+for step in agent.stream({"messages": [...]}, stream_mode="values"):
+    step["messages"][-1].pretty_print()
+</code></pre>
+<p><code>stream_mode="values"</code>는 "매 단계마다 현재까지의 전체 메시지 상태를 내놓아라"는 뜻입니다. 그래서 검색 도구 호출, 검색 결과, 최종 요약이 차례로 출력됩니다.</p>
+<hr/>
+<h2 id="2">2. 과정을 보며 실행하기</h2>
+<p>네트워크 오류에 대비해 <code>try/except</code>로 감쌉니다.</p>
+<pre><code class="language-python">q = "요즘 인기 있는 무선 이어버드 트렌드를 조사해서 핵심만 3가지로 요약해줘."
+
+try:
+    for step in search_agent.stream(
+        {"messages": [{"role": "user", "content": q}]}, stream_mode="values"
+    ):
+        step["messages"][-1].pretty_print()
+except Exception as e:
+    # 네트워크/검색 호출 제한 등으로 실패할 수 있어 안내 메시지로 감싼다
+    print("검색 중 오류가 발생했습니다:", e)
+    print("네트워크 상태를 확인하거나 잠시 후 다시 시도하세요. (ddgs 설치 여부도 확인)")
+</code></pre>
+<hr/>
+<h2 id="3">3. 출력 읽는 법</h2>
+<p><code>pretty_print()</code>는 각 메시지를 보기 좋게 출력합니다.</p>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">================================ Human Message =================================
+요즘 인기 있는 무선 이어버드 트렌드를 조사해서 핵심만 3가지로 요약해줘.
+
+================================== Ai Message ==================================
+Tool Calls:
+  duckduckgo_results_json
+   Args:
+     query: 2026 무선 이어버드 인기 트렌드          ← LLM이 만든 검색어!
+
+================================= Tool Message =================================
+[snippet: ANC(액티브 노이즈 캔슬링) 강화, ... link: ...]   ← 검색 결과(관찰)
+
+================================== Ai Message ==================================
+무선 이어버드 트렌드 핵심 3가지:                          ← 최종 요약
+1) 능동 소음 차단(ANC) 성능 경쟁 심화
+2) 멀티포인트 동시 연결 등 편의 기능 보편화
+3) 공간음향·저지연 게이밍 모드 확대
+</code></pre>
+<p>네 개의 메시지가 순서대로 보입니다.</p>
+<ol>
+<li><strong>Human Message</strong>: 사용자 질문</li>
+<li><strong>Ai Message (Tool Calls)</strong>: LLM이 만든 검색어 — <code>query: 2026 무선 이어버드 인기 트렌드</code></li>
+<li><strong>Tool Message</strong>: 검색 도구가 돌려준 결과(스니펫)</li>
+<li><strong>Ai Message</strong>: 결과를 읽고 만든 최종 요약</li>
+</ol>
+<p>7강에서 손으로 찍던 STEP 로그를, LangChain <code>stream</code>이 <strong>자동으로</strong> 보여 주는 셈입니다.</p>
+<hr/>
+<h2 id="4">4. 무엇을 관찰했나</h2>
+<p>이 출력에서 두 가지를 확인하세요.</p>
+<ul>
+<li><strong>LLM이 검색어를 만들었다</strong>: 우리가 "이어버드 트렌드"라고 물었는데, LLM이 "2026 무선 이어버드 인기 트렌드"라는 <strong>검색에 적합한 키워드</strong>로 변환했습니다.</li>
+<li><strong>결과를 읽고 요약했다</strong>: 검색 스니펫(원본은 어수선함)을 읽고 <strong>깔끔한 3가지</strong>로 정리했습니다.</li>
+</ul>
+<p>이게 검색 에이전트의 핵심 가치입니다 — 사용자는 일상 언어로 묻고, 에이전트가 검색·해석·요약을 다 합니다.</p>
+<hr/>
+<h2 id="5-tryexcept">5. 왜 try/except가 필수인가</h2>
+<p>검색은 <strong>외부 네트워크에 의존</strong>합니다. 인터넷이 끊기거나, DuckDuckGo가 호출 제한을 걸면 실패합니다. 이때 예외를 안 잡으면 프로그램이 <strong>죽어 버립니다.</strong></p>
+<pre><code class="language-python">try:
+    # 검색 실행
+except Exception as e:
+    print("검색 중 오류:", e)   # 죽지 않고 안내
+</code></pre>
+<p>이건 5강의 "도구 오류 처리"와 같은 원칙입니다. 외부에 의존하는 도구는 <strong>항상 실패에 대비</strong>해야 합니다. 06번에서 이걸 재시도까지 포함해 더 견고하게 만듭니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li><code>stream(stream_mode="values")</code>으로 검색 <strong>과정을 단계별로</strong> 본다.</li>
+<li>출력은 Human → Ai(검색어) → Tool(결과) → Ai(요약) 순서.</li>
+<li>LLM이 <strong>검색어를 스스로 생성</strong>하고 결과를 요약하는 게 핵심.</li>
+<li>외부 의존 도구는 <strong><code>try/except</code>로 실패에 대비</strong>(필수).</li>
+<li>다음 절에서 검색 결과의 <strong>신뢰성을 검증</strong>하는 법을 배웁니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="03_따라하기-웹검색-도구-붙이기.html"><span class="lbl">← 이전 절</span>03. 따라하기 웹검색 도구 붙이기</a><a class="nxt" href="05_검색결과-신뢰성과-재검증.html"><span class="lbl">다음 절 →</span>05. 검색결과 신뢰성과 재검증</a></div>
+</div>
+</body></html>

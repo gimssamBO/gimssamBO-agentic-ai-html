@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제7강 — ReAct 패턴 — 생각·행동·관찰</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제7강 · agent loop</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제7강 · agent loop — 세부 목차</b><a class="" href="01_한번-묻고-끝나지-않는-일.html">01. 한번 묻고 끝나지 않는 일</a><a class="cur" href="02_ReAct-패턴-생각-행동-관찰.html">02. ReAct 패턴 생각 행동 관찰</a><a class="" href="03_직접-돌리는-루프와-종료조건.html">03. 직접 돌리는 루프와 종료조건</a><a class="" href="04_따라하기-미니-에이전트-루프-구현.html">04. 따라하기 미니 에이전트 루프 구현</a><a class="" href="05_따라하기-2-3스텝-작업-실행.html">05. 따라하기 2 3스텝 작업 실행</a><a class="" href="06_무한루프와-반복호출-방지.html">06. 무한루프와 반복호출 방지</a><a class="" href="07_대화기록-누적과-토큰-관리.html">07. 대화기록 누적과 토큰 관리</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="react">ReAct 패턴 — 생각·행동·관찰</h1>
+<h2 id="_1">한 줄 요약</h2>
+<p><strong>ReAct</strong>는 <strong>Reason(추론) + Act(행동)</strong> 의 합성어입니다. 매 스텝마다 모델이 <strong>생각(Thought) → 행동(Action) → 관찰(Observation)</strong> 을 거치고, 그 관찰 결과를 다음 입력으로 되돌려 반복합니다. 이 "관찰을 되돌리기"가 ReAct의 핵심입니다.</p>
+<hr/>
+<h2 id="1-react">1. ReAct의 세 박자</h2>
+<p>매 스텝마다 모델은 세 가지를 거칩니다.</p>
+<table>
+<thead>
+<tr>
+<th>단계</th>
+<th>하는 일</th>
+<th>연관 강</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Thought (생각)</strong></td>
+<td>"지금 무엇을 해야 하나?"</td>
+<td>4강 CoT</td>
+</tr>
+<tr>
+<td><strong>Action (행동)</strong></td>
+<td>"get_stock을 '스마트워치'로 부르자"</td>
+<td>5·6강</td>
+</tr>
+<tr>
+<td><em>(우리가 도구 실행)</em></td>
+<td>모델이 정한 도구를 실제로 호출</td>
+<td>—</td>
+</tr>
+<tr>
+<td><strong>Observation (관찰)</strong></td>
+<td>"재고 3개" — 도구가 돌려준 결과</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>그리고 <strong>"충분한가?"</strong> 를 판단합니다 — 아니면 다시 <strong>Thought</strong> 로 돌아가 반복하고, 충분하면 <strong>Final Answer(최종 답변)</strong> 를 내놓습니다.</p>
+<ul>
+<li><strong>Thought</strong>: 모델이 "다음에 뭘 할지" 추론합니다(4강 CoT의 응용).</li>
+<li><strong>Action</strong>: 어떤 도구를 어떤 인자로 부를지 정합니다(5·6강 Function Calling).</li>
+<li><strong>Observation</strong>: 우리가 도구를 실행한 결과입니다.</li>
+</ul>
+<p>그리고 "충분한가?"를 판단해, 아니면 다시 Thought로 돌아가 반복합니다.</p>
+<hr/>
+<h2 id="2">2. 핵심은 "관찰을 되돌리기"</h2>
+<p>ReAct에서 가장 중요한 건, <strong>Observation(관찰 결과)을 다음 입력으로 다시 모델에 넣는</strong> 것입니다.</p>
+<ul>
+<li><strong>1스텝</strong>: 질문 → 모델 → "get_stock 호출" → 실행 → "재고 3개"</li>
+<li><strong>2스텝</strong>: 질문 <strong>+ "재고 3개"</strong>(관찰 결과를 되돌려 넣음) → 모델 → "재고가 적네, 기준도 봐야겠다" → …</li>
+</ul>
+<p>2스텝에서 모델은 "재고 3개"라는 <strong>관찰 결과를 보고</strong> 다음 행동을 정합니다. 만약 이 결과를 안 넣어 주면, 모델은 "방금 뭘 봤는지" 기억하지 못해 같은 행동을 반복하거나 엉뚱한 판단을 합니다.</p>
+<blockquote>
+<p>비유: 탐정 수사와 같습니다. 단서 하나(관찰)를 찾으면 그걸 <strong>수첩에 적고</strong>(되돌리기), 그 단서를 바탕으로 다음 수사 방향(행동)을 정합니다. 단서를 적지 않으면 같은 곳을 계속 뒤지겠죠.</p>
+</blockquote>
+<hr/>
+<h2 id="3">3. 왜 도구를 둘로 나눴나</h2>
+<p>이 강에서는 재고 도구를 <strong>둘로 나눕니다</strong>: <code>get_stock</code>(재고)과 <code>get_reorder_level</code>(재주문 기준).</p>
+<pre><code class="language-python">def get_stock(product_name: str) -&gt; str:
+    """상품명을 받아 현재 재고 수량을 반환한다."""
+    ...
+
+def get_reorder_level(product_name: str) -&gt; str:
+    """상품명을 받아 재주문 기준 수량을 반환한다. 재고가 이 값 이하이면 재주문이 필요하다."""
+    ...
+</code></pre>
+<p>만약 두 정보를 한 도구로 묶었다면, 모델은 한 번 호출로 끝내고 루프가 안 돕니다. <strong>일부러 나눠</strong> 모델이 "재고 확인 → (관찰) → 기준 확인 → (관찰) → 판단"의 <strong>여러 스텝</strong>을 밟게 만든 겁니다. 다단계 루프를 연습하기 위한 설계죠.</p>
+<hr/>
+<h2 id="4-react-456">4. ReAct와 4·5·6강의 관계</h2>
+<p>ReAct는 사실 <strong>지금까지 배운 모든 걸 한 루프에 모은 것</strong>입니다.</p>
+<ul>
+<li><strong>Thought</strong> = 4강에서 배운 "단계적으로 생각하기"(CoT)</li>
+<li><strong>Action</strong> = 5강에서 배운 "도구 호출 결정"</li>
+<li><strong>도구 선택</strong> = 6강에서 배운 "여러 도구 중 고르기"</li>
+<li><strong>반복</strong> = 5강 수동 루프를 <code>while</code>로 여러 번</li>
+</ul>
+<p>그래서 7강이 1부(2~7강)의 <strong>종착점</strong>입니다. 다음 절에서 이걸 실제 <code>while</code> 루프 코드로 만듭니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>ReAct = <strong>생각(Thought) → 행동(Action) → 관찰(Observation)</strong> 의 반복.</li>
+<li>핵심은 <strong>관찰 결과를 다음 입력으로 되돌리는</strong> 것.</li>
+<li>도구를 둘로 나눠 모델이 <strong>여러 스텝</strong>을 밟게 설계했다.</li>
+<li>ReAct는 4강(생각)·5강(행동)·6강(선택)의 종합이다.</li>
+<li>다음 절에서 루프의 <strong>종료 조건</strong>을 설계합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="01_한번-묻고-끝나지-않는-일.html"><span class="lbl">← 이전 절</span>01. 한번 묻고 끝나지 않는 일</a><a class="nxt" href="03_직접-돌리는-루프와-종료조건.html"><span class="lbl">다음 절 →</span>03. 직접 돌리는 루프와 종료조건</a></div>
+</div>
+</body></html>

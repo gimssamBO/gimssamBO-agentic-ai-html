@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제6강 — 모델은 무엇을 보고 도구를 고르나</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제6강 · tool system</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제6강 · tool system — 세부 목차</b><a class="" href="01_도구가-많아지면-생기는-문제.html">01. 도구가 많아지면 생기는 문제</a><a class="cur" href="02_모델은-무엇을-보고-도구를-고르나.html">02. 모델은 무엇을 보고 도구를 고르나</a><a class="" href="03_좋은-도구-설계-원칙.html">03. 좋은 도구 설계 원칙</a><a class="" href="04_따라하기-도구-4개-등록하고-관찰.html">04. 따라하기 도구 4개 등록하고 관찰</a><a class="" href="05_따라하기-독스트링-망가뜨려보기.html">05. 따라하기 독스트링 망가뜨려보기</a><a class="" href="06_비슷한-도구-구분하기.html">06. 비슷한 도구 구분하기</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">모델은 무엇을 보고 도구를 고르나</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>모델은 함수 본문을 <strong>보지 못합니다.</strong> 오직 <strong>함수 이름 + 인자 + 독스트링(설명)</strong> 만 봅니다. 이 셋과 사용자 질문을 비교해 가장 잘 맞는 도구를 고릅니다. 그래서 독스트링이 곧 도구 선택의 정확도입니다.</p>
+<hr/>
+<h2 id="1-vs">1. 모델이 보는 것 vs 못 보는 것</h2>
+<p>5강에서 배웠듯, 모델은 함수의 <strong>코드(본문)</strong> 를 절대 못 봅니다. 모델이 보는 건 이것뿐입니다.</p>
+<pre><code class="language-text">함수 이름     : get_price
+인자          : product_name (문자열)
+독스트링(설명): "상품명을 받아 판매가(원)를 반환한다. 가격/얼마 질문에 사용."
+</code></pre>
+<p>함수 안에서 <code>products.csv</code>를 읽든 뭘 하든, 모델은 모릅니다. <strong>이름·인자·설명, 이 세 가지가 모델이 가진 정보의 전부</strong>입니다.</p>
+<hr/>
+<h2 id="2">2. 도구 선택은 '매칭'이다</h2>
+<p>모델은 <strong>사용자 질문</strong>과 <strong>각 도구의 (이름+인자+설명)</strong> 을 비교해, 가장 잘 맞는 걸 고릅니다. "청바지 얼마야?"라는 질문이 오면 이런 일이 일어납니다.</p>
+<p>질문 <strong>"슬림핏 청바지 얼마야?"</strong> 를 각 도구 설명과 견줘 봅니다.</p>
+<table>
+<thead>
+<tr>
+<th>도구(설명)</th>
+<th>질문과의 매칭</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>get_stock</code> (재고 수량 반환)</td>
+<td>'얼마'와 안 맞음 ✗</td>
+</tr>
+<tr>
+<td><code>get_price</code> (판매가 반환, 얼마 질문)</td>
+<td>'얼마 = 가격' 딱 맞음 ✓ <strong>선택!</strong></td>
+</tr>
+<tr>
+<td><code>get_order_status</code> (주문 배송 상태)</td>
+<td>주문번호 없음 ✗</td>
+</tr>
+<tr>
+<td><code>search_product</code> (키워드로 상품 검색)</td>
+<td>특정 상품이 지목됨 ✗</td>
+</tr>
+</tbody>
+</table>
+<p><code>get_price</code>의 독스트링에 <strong>"가격/얼마 질문에 사용"</strong> 이라고 적어 둔 게 결정적이었습니다. 질문의 "얼마"와 설명의 "얼마"가 매칭된 거죠.</p>
+<blockquote>
+<p>비유: 모델은 <strong>도서관 사서</strong>입니다. 책 내용(함수 본문)은 안 읽었지만, <strong>책 제목과 요약(이름·설명)</strong> 을 보고 "이 질문엔 이 책!"을 골라 줍니다. 그래서 요약을 잘 써 두는 게 중요합니다.</p>
+</blockquote>
+<hr/>
+<h2 id="3">3. 코드로 도구 선택 들여다보기</h2>
+<p>5강의 <code>which_tool</code>처럼, 자동 실행을 끄고 모델이 <strong>무엇을 골랐는지</strong> 봅니다.</p>
+<pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
+from google.genai import types
+
+client = get_genai_client()
+TOOLS = [get_price, get_stock, get_order_status, search_product]
+
+def which_tool(question: str):
+    """자동 호출을 끄고 모델이 '어떤 도구를 고를지'만 출력한다."""
+    resp = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=question,
+        config=types.GenerateContentConfig(
+            tools=TOOLS,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+            temperature=0,
+        ),
+    )
+    for fc in (resp.function_calls or []):
+        print(f"  '{question}' → {fc.name}({dict(fc.args)})")
+
+which_tool("슬림핏 청바지 얼마야?")
+which_tool("이어버드 재고 있어?")
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">  '슬림핏 청바지 얼마야?' → get_price({'product_name': '슬림핏 청바지'})
+  '이어버드 재고 있어?' → get_stock({'product_name': '이어버드'})
+</code></pre>
+<p>모델이 질문에 딱 맞는 도구를, <strong>인자까지 정확히 채워</strong> 골랐습니다.</p>
+<hr/>
+<h2 id="4">4. 좋은 독스트링의 두 가지 조건</h2>
+<p>매칭이 잘 되려면 독스트링이 두 가지를 담아야 합니다.</p>
+<ol>
+<li><strong>무엇을 하는가</strong>: "상품명을 받아 판매가(원)를 반환한다"</li>
+<li><strong>언제 쓰는가</strong>: "가격/얼마 질문에 사용"</li>
+</ol>
+<p>특히 2번("언제 쓰는가")이 도구 선택에 큰 도움이 됩니다. 모델이 "이 질문이 이 도구를 써야 하는 상황인가?"를 판단하는 힌트가 되니까요.</p>
+<pre><code class="language-python">def get_stock(product_name: str) -&gt; str:
+    """상품명을 받아 현재 재고 수량과 창고를 반환한다. 재고/품절 질문에 사용."""
+    # 독스트링 = '무엇을 하는가'(상품명→재고) + '언제 쓰는가'(재고/품절 질문)
+    ...
+</code></pre>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>모델은 함수 본문을 못 보고, <strong>이름 + 인자 + 독스트링</strong>만 본다.</li>
+<li>도구 선택 = 질문과 도구 설명의 <strong>매칭</strong>.</li>
+<li>좋은 독스트링은 <strong>"무엇을 하는가" + "언제 쓰는가"</strong> 를 담는다.</li>
+<li><code>which_tool</code>로 모델의 선택을 직접 관찰할 수 있다.</li>
+<li>다음 절에서 좋은 도구 설계의 5가지 원칙을 배웁니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="01_도구가-많아지면-생기는-문제.html"><span class="lbl">← 이전 절</span>01. 도구가 많아지면 생기는 문제</a><a class="nxt" href="03_좋은-도구-설계-원칙.html"><span class="lbl">다음 절 →</span>03. 좋은 도구 설계 원칙</a></div>
+</div>
+</body></html>

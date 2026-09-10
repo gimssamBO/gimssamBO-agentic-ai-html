@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제27강 — 따라하기 — StateGraph로 연결</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제27강 · ai team</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제27강 · ai team — 세부 목차</b><a class="" href="01_if문-대신-그래프로-흐름-선언.html">01. if문 대신 그래프로 흐름 선언</a><a class="" href="02_Researcher-Analyst-Writer-파이프라인.html">02. Researcher Analyst Writer 파이프라인</a><a class="" href="03_공유상태와-그래프-구성요소.html">03. 공유상태와 그래프 구성요소</a><a class="" href="04_따라하기-3개-노드-에이전트.html">04. 따라하기 3개 노드 에이전트</a><a class="cur" href="05_따라하기-StateGraph로-연결.html">05. 따라하기 StateGraph로 연결</a><a class="" href="06_조건부-분기로-품질-재검토.html">06. 조건부 분기로 품질 재검토</a><a class="" href="07_중간-산출물-저장.html">07. 중간 산출물 저장</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="stategraph">따라하기 — StateGraph로 연결</h1>
+<h2 id="_1">목표</h2>
+<p>04번에서 만든 세 노드를 <strong>StateGraph로 등록·연결</strong>해 실행 가능한 팀(그래프)으로 컴파일하고, <code>stream</code>으로 진행 상황을 보며 최종 리포트를 얻습니다.</p>
+<hr/>
+<h2 id="1">1. 그래프 조립</h2>
+<p>세 노드를 등록하고 엣지로 순서를 잇습니다.</p>
+<pre><code class="language-python">def build_team():
+    """세 에이전트를 노드로 등록하고 순서대로 엣지를 이어 팀(그래프)을 컴파일한다."""
+    g = StateGraph(TeamState)              # State 모양으로 그래프 시작
+    g.add_node("researcher", researcher)   # 노드 = 에이전트 등록
+    g.add_node("analyst", analyst)
+    g.add_node("writer", writer)
+
+    g.add_edge(START, "researcher")     # 시작 → 리서처
+    g.add_edge("researcher", "analyst") # 리서처 → 분석가
+    g.add_edge("analyst", "writer")     # 분석가 → 작성자
+    g.add_edge("writer", END)           # 작성자 → 끝
+    return g.compile()                  # 실행 가능한 그래프로 컴파일
+</code></pre>
+<blockquote>
+<p>START → researcher → analyst → writer → END</p>
+</blockquote>
+<p>흐름이 <strong>이 함수 한 곳에</strong> 그림처럼 선언됐습니다. 단계를 추가하거나 순서를 바꾸려면 <strong>여기 엣지만</strong> 고치면 되죠.</p>
+<ul>
+<li><code>add_node("이름", 함수)</code> — 노드 등록. 첫 인자는 그래프 안에서 부를 <strong>이름</strong>.</li>
+<li><code>add_edge(A, B)</code> — "A 다음엔 B" 라는 연결.</li>
+<li><code>START</code>/<code>END</code> — 그래프의 진입·종료 지점(LangGraph 내장 상수).</li>
+<li><code>g.compile()</code> — 그래프를 <strong>실행 가능한 객체</strong>로 만듦.</li>
+</ul>
+<hr/>
+<h2 id="2-stream">2. 실행 — stream으로 진행 보기</h2>
+<pre><code class="language-python">def main():
+    team = build_team()
+    # 초기 상태: raw 에 원천 텍스트를 넣고, 나머지 칸은 빈 문자열로 시작
+    initial = {"raw": load_competitor_text(), "analysis": "", "report": ""}
+
+    print("AI 팀 가동: Researcher → Analyst → Writer\n")
+    final = initial
+    for state in team.stream(initial, stream_mode="values"):
+        final = state                  # 매번 최신 누적 상태를 잡아둠(마지막이 최종 결과)
+        done = [k for k in ("analysis", "report") if state.get(k)]
+        print(f"  [진행] 누적 상태: {', '.join(done) if done else '시작'}")
+
+    print("\n" + "=" * 60)
+    print(final["report"])
+
+
+if __name__ == "__main__":
+    main()
+</code></pre>
+<p><strong>초기 상태</strong>가 중요합니다. <code>raw</code>에 <strong>원천 텍스트</strong>를 넣고, 아직 안 채워진 <code>analysis</code>·<code>report</code>는 빈 문자열로 시작합니다. 그래프가 돌면서 빈 칸들이 차례로 채워집니다.</p>
+<hr/>
+<h2 id="3-stream_modevalues">3. stream_mode="values" — 진행과 결과를 한 번에</h2>
+<pre><code class="language-python">for state in team.stream(initial, stream_mode="values"):
+    final = state
+</code></pre>
+<p><code>stream(stream_mode="values")</code>는 <strong>매 노드 실행 후 누적된 전체 상태</strong>를 하나씩 내보냅니다.</p>
+<pre><code class="language-text">researcher 끝 → {raw: 정리본, analysis: "",    report: ""}
+analyst 끝    → {raw: 정리본, analysis: 분석,   report: ""}
+writer 끝     → {raw: 정리본, analysis: 분석,   report: 리포트}   ← 마지막 = 최종
+</code></pre>
+<p><code>final = state</code>로 <strong>매번 최신 상태를 잡아두면</strong>, 루프가 끝났을 때 <code>final</code>에 최종 결과가 들어 있습니다.</p>
+<blockquote>
+<p>⚠️ <strong>왜 stream을 한 번만 쓰나</strong> — 진행 상황은 <code>stream</code>으로 보고 결과는 <code>invoke</code>로 또 받으면, <strong>파이프라인이 두 번 실행</strong>되어 LLM 호출 비용이 그대로 2배가 됩니다. 그래서 <code>final</code> 변수에 마지막 상태를 잡아두는 방식으로 <strong>딱 한 번만</strong> 실행합니다. (실무 비용 감각 — 2강 토큰·비용.)</p>
+</blockquote>
+<hr/>
+<h2 id="4">4. 실행 결과</h2>
+<pre><code class="language-text">AI 팀 가동: Researcher → Analyst → Writer
+
+  [진행] 누적 상태: 시작
+  [진행] 누적 상태: 시작
+  [진행] 누적 상태: analysis
+  [진행] 누적 상태: analysis, report
+
+============================================================
+# 승승장구몰 경쟁사 분석 리포트
+
+## 요약
+쾌속마켓은 당일배송이 강점이나 가격 경쟁력이 약하고, 알뜰몰은 최저가가 강점이나 배송이 느립니다 ...
+
+## 경쟁사별 정리
+- **쾌속마켓** (평점 4.3): 강점 당일배송 / 약점 가격 약간 높음 ...
+- **알뜰몰** (평점 4.0): 강점 최저가 정책 / 약점 배송 느림 ...
+
+## 결론 — 전략 제언
+1. 가격 민감 고객을 겨냥한 ...
+</code></pre>
+<p><strong>관찰 포인트</strong></p>
+<ul>
+<li><code>[진행]</code>이 <code>시작 → 시작 → analysis → analysis, report</code>로 변합니다. 빈 칸이 <strong>차례로 채워지는</strong> 모습이죠.</li>
+<li>(처음 두 줄이 "시작"인 이유: 초기 상태 1번 + researcher가 <code>raw</code>만 채운 상태 1번 — <code>analysis</code>·<code>report</code>는 아직 비어 있어 둘 다 "시작"으로 표시됩니다.)</li>
+<li>세 노드는 <strong>공유 State</strong>를 통해서만 데이터를 주고받습니다(느슨한 결합).</li>
+<li>경쟁사 CSV 한 장에서 <strong>완성된 분석 리포트</strong>가 나왔습니다.</li>
+</ul>
+<hr/>
+<h2 id="5">5. 단계를 바꿔보기 — 그래프의 장점</h2>
+<p>만약 Analyst 앞에 'Critic(비평가)' 노드를 넣고 싶다면?</p>
+<pre><code class="language-python">g.add_node("critic", critic)
+g.add_edge("researcher", "critic")   # researcher → critic
+g.add_edge("critic", "analyst")      # critic → analyst (기존 researcher→analyst 대체)
+</code></pre>
+<p><strong>그래프(엣지)만 수정</strong>하면 됩니다. 노드 함수들은 그대로죠. 흐름이 한 곳에 선언돼 있어 <strong>확장이 명확</strong>합니다. 06번에서는 여기에 <strong>조건부 분기</strong>(검수 후 되돌리기)를 더해, "왜 그래프인가"를 제대로 체감합니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li><code>build_team()</code>: <code>add_node</code>로 노드 등록 → <code>add_edge</code>로 순서 연결 → <code>compile()</code>.</li>
+<li>초기 상태는 <code>raw</code>에 <strong>원천 텍스트</strong>, 나머지 칸은 빈 문자열로 시작.</li>
+<li><code>stream(stream_mode="values")</code>: 매 노드 후 <strong>누적 상태</strong>를 내보냄 → <code>final</code>에 잡아두면 최종 결과.</li>
+<li><strong>stream은 한 번만</strong> — invoke를 또 부르면 파이프라인이 2번 돌아 비용 2배.</li>
+<li>단계 추가·순서 변경은 <strong>그래프(엣지)만</strong> 고치면 됨.</li>
+<li>다음 절에서 <strong>조건부 분기</strong>로 품질 재검토 루프를 더합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="04_따라하기-3개-노드-에이전트.html"><span class="lbl">← 이전 절</span>04. 따라하기 3개 노드 에이전트</a><a class="nxt" href="06_조건부-분기로-품질-재검토.html"><span class="lbl">다음 절 →</span>06. 조건부 분기로 품질 재검토</a></div>
+</div>
+</body></html>

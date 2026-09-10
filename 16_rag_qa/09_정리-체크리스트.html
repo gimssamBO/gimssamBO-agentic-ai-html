@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제16강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제16강 · rag qa</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제16강 · rag qa — 세부 목차</b><a class="" href="01_문서-근거로만-답하고-출처-밝히기.html">01. 문서 근거로만 답하고 출처 밝히기</a><a class="" href="02_QA-체인-구조-LCEL.html">02. QA 체인 구조 LCEL</a><a class="" href="03_환각을-억제하는-프롬프트.html">03. 환각을 억제하는 프롬프트</a><a class="" href="04_출처를-함께-반환하기.html">04. 출처를 함께 반환하기</a><a class="" href="05_따라하기-QA-체인-만들기.html">05. 따라하기 QA 체인 만들기</a><a class="" href="06_따라하기-답변과-출처-모듈화.html">06. 따라하기 답변과 출처 모듈화</a><a class="" href="07_따라하기-모르는-질문엔-모른다고.html">07. 따라하기 모르는 질문엔 모른다고</a><a class="" href="08_검색-품질-높이기-k값과-재정렬.html">08. 검색 품질 높이기 k값과 재정렬</a><a class="cur" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="16">16강에서 배운 것</h2>
+<p>16강에서 RAG가 완성됐습니다 — 검색한 문서를 근거로 답하고 출처를 밝히는 QA 시스템.</p>
+<ul>
+<li><strong>LCEL 체인</strong>: <code>{context, question} | 프롬프트 | LLM | 파서</code>로 검색→생성을 한 줄에.</li>
+<li><strong>환각 억제</strong>: "문서 근거로만, 없으면 모른다, 추측 금지" 프롬프트가 RAG의 핵심.</li>
+<li><strong>출처 반환</strong>: retriever로 문서를 먼저 뽑아 <code>{answer, sources}</code> dict로.</li>
+<li><strong>모듈화</strong>: <code>answer(q) -&gt; dict</code>로 백엔드에 바로 연결.</li>
+<li><strong>검색 품질</strong>: k값 딜레마 + LLM 재정렬(rerank).</li>
+</ul>
+<hr/>
+<h2 id="_2">한눈에 보는 핵심 코드</h2>
+<pre><code class="language-python">from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
+
+PROMPT = ChatPromptTemplate.from_template(
+    "아래 [문서]만 근거로 답하라. 없으면 '찾을 수 없습니다'.\n[문서]\n{context}\n[질문] {question}")
+
+def format_docs(docs):
+    return "\n\n".join(d.page_content for d in docs)
+
+retriever = vs.as_retriever(search_kwargs={"k": 4})
+chain = ({"context": retriever | format_docs, "question": RunnablePassthrough()}
+         | PROMPT | llm | StrOutputParser())
+
+def answer(q):                              # 출처까지 묶어 반환
+    docs = retriever.invoke(q)
+    text = (PROMPT | llm | StrOutputParser()).invoke(
+        {"context": format_docs(docs), "question": q})
+    sources = [{"source": d.metadata["source"].split("/")[-1],
+                "page": d.metadata.get("page")} for d in docs]
+    return {"answer": text, "sources": sources}
+</code></pre>
+<hr/>
+<h2 id="_3">이 강에서 설치한 라이브러리</h2>
+<pre><code class="language-bash">pip install langchain langchain-community langchain-google-genai faiss-cpu pypdf
+</code></pre>
+<p>새로 설치할 라이브러리는 없습니다(13~15강 것 사용).</p>
+<hr/>
+<h2 id="rag-5">RAG 5단계 완성!</h2>
+<pre><code class="language-text">✓ ① 로드  ✓ ② 청킹  ✓ ③ 임베딩  ✓ ④ 저장/검색  ✓ ⑤ 생성(16강)
+</code></pre>
+<p>🎉 <strong>RAG 파이프라인이 완성됐습니다!</strong> 사내 문서를 근거로 답하는 진짜 QA 시스템을 만들 수 있게 됐습니다.</p>
+<hr/>
+<h2 id="_4">체크리스트</h2>
+<ul>
+<li>[ ] RAG QA = retriever + 프롬프트 + LLM을 LCEL로 연결한다.</li>
+<li>[ ] 환각 억제 프롬프트("문서만, 없으면 모른다")의 중요성을 안다.</li>
+<li>[ ] 답변과 함께 출처(파일명·페이지)를 반환한다.</li>
+<li>[ ] <code>answer(q) -&gt; dict</code>로 모듈화해 백엔드에 연결할 수 있다.</li>
+<li>[ ] k값과 재정렬로 검색 품질을 높일 수 있다.</li>
+</ul>
+<hr/>
+<h2 id="_5">한 줄 핵심</h2>
+<blockquote>
+<p><strong>RAG QA = 검색 + "문서 근거로만 답하라" 제약 + 출처 표시. 검색만 붙인다고 RAG가 아니라, 제약과 출처가 신뢰를 만든다.</strong></p>
+</blockquote>
+<hr/>
+<h2 id="_6">다음 강 예고</h2>
+<p>지금까지 RAG는 "항상 검색"했습니다. 하지만 "안녕하세요" 같은 인사에도 굳이 문서를 검색할 필요가 있을까요? 17강 <strong>Knowledge Agent</strong>에서는 RAG를 <strong>도구로</strong> 만들어, LLM이 "정책 질문엔 검색, 일상 대화엔 검색 안 함"을 스스로 판단하게 합니다. RAG와 에이전트(5~12강)가 만나는 지점입니다.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="08_검색-품질-높이기-k값과-재정렬.html"><span class="lbl">← 이전 절</span>08. 검색 품질 높이기 k값과 재정렬</a><a class="nxt" href="10_실습문제와-해답.html"><span class="lbl">다음 절 →</span>10. 실습문제와 해답</a></div>
+</div>
+</body></html>

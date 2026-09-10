@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제22강 — 리서치 에이전트 패턴</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제22강 · research agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제22강 · research agent — 세부 목차</b><a class="" href="01_최신-시장동향을-매번-사람이.html">01. 최신 시장동향을 매번 사람이</a><a class="cur" href="02_리서치-에이전트-패턴.html">02. 리서치 에이전트 패턴</a><a class="" href="03_네트워크-의존성.html">03. 네트워크 의존성</a><a class="" href="04_따라하기-리서치-에이전트와-폴백.html">04. 따라하기 리서치 에이전트와 폴백</a><a class="" href="05_따라하기-마크다운-리포트-저장.html">05. 따라하기 마크다운 리포트 저장</a><a class="" href="06_복잡한-주제를-하위질의로-쪼개기.html">06. 복잡한 주제를 하위질의로 쪼개기</a><a class="" href="07_검색결과-교차검증.html">07. 검색결과 교차검증</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">리서치 에이전트 패턴</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>리서치 에이전트는 <strong>검색 → 수집 → 요약 → 리포트</strong> 4단계로 동작합니다. 이번 강에서는 <code>create_agent</code>에 검색 도구를 붙여, <strong>에이전트가 스스로 검색하고 요약</strong>하게 한 뒤 결과를 <code>.md</code>로 저장합니다.</p>
+<hr/>
+<h2 id="1-4">1. 4단계 패턴</h2>
+<p>리서치 에이전트의 표준 흐름은 다음과 같습니다.</p>
+<p>조사 주제가 들어오면 <strong>검색 → 수집 → 요약 → 리포트</strong> 순서로 흐릅니다.</p>
+<table>
+<thead>
+<tr>
+<th>단계</th>
+<th>하는 일</th>
+<th>구현</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>검색</td>
+<td>키워드로 웹 질의</td>
+<td><code>DuckDuckGoSearchResults</code></td>
+</tr>
+<tr>
+<td>수집</td>
+<td>결과 스니펫/링크 모음</td>
+<td>도구 반환값</td>
+</tr>
+<tr>
+<td>요약</td>
+<td>잡음 제거·핵심 정리</td>
+<td>LLM</td>
+</tr>
+<tr>
+<td>리포트</td>
+<td>사람이 읽을 문서화</td>
+<td>마크다운 + 파일 저장</td>
+</tr>
+</tbody>
+</table>
+<p>핵심은 <strong>검색(사실 수집)과 요약(글쓰기)을 분업</strong>한다는 점입니다. 검색은 도구가, 요약은 LLM이 담당하죠.</p>
+<hr/>
+<h2 id="2">2. 누가 검색을 결정하나 — 에이전트의 자율성</h2>
+<p>여기서 중요한 설계 선택이 있습니다. <strong>"검색을 언제, 몇 번 할지"를 누가 정하느냐</strong>입니다.</p>
+<pre><code class="language-text">[방법 A] 사람이 코드로 강제: 검색() → 요약()  (07강 수동 루프 스타일)
+[방법 B] 에이전트가 스스로 판단: create_agent에 도구만 주고 맡김  ← 이번 강
+</code></pre>
+<p>이번 강은 <strong>방법 B</strong>입니다. <code>create_agent</code>에 검색 도구를 넘기면, 에이전트가 <strong>스스로</strong> "이 주제는 검색이 필요하군 → 검색 → 결과를 보니 부족하군 → 한 번 더 검색 → 이제 요약하자"를 반복합니다(7강 ReAct 루프). 우리는 주제만 던지면 됩니다.</p>
+<pre><code class="language-python">from langchain_community.tools import DuckDuckGoSearchResults
+from langchain.agents import create_agent
+
+agent = create_agent(
+    llm,
+    tools=[DuckDuckGoSearchResults()],   # 검색 도구를 주면
+    system_prompt="...시장 조사 애널리스트...",
+)
+# 검색 → 요약은 에이전트가 알아서 (우리는 주제만 던진다)
+result = agent.invoke({"messages": [{"role": "user", "content": "...리포트 작성해줘"}]})
+</code></pre>
+<hr/>
+<h2 id="3">3. 시스템 프롬프트로 역할·출력 형식 고정</h2>
+<p>에이전트가 "아무 글"이나 쓰면 곤란합니다. <strong>항상 같은 양식의 리포트</strong>가 나오도록 시스템 프롬프트로 역할과 출력 형식을 못박습니다(2강·3강).</p>
+<pre><code class="language-python">system_prompt=(
+    "너는 승승장구몰의 시장 조사 애널리스트다. "
+    "주어진 주제를 웹에서 검색해 핵심 사실을 수집하고, "
+    "한국어 마크다운 리포트로 정리하라. "
+    "리포트는 '## 개요 / ## 핵심 동향 / ## 시사점' 섹션을 포함한다."
+)
+</code></pre>
+<p>이렇게 하면 어떤 주제를 넣어도 <strong>개요·핵심 동향·시사점</strong> 세 섹션을 갖춘 리포트가 나옵니다. 출력 형식을 고정하는 건 자동화의 기본이죠 — 뒷단에서 파싱·저장·비교하기 쉬워지니까요.</p>
+<hr/>
+<h2 id="4-9">4. 9강과 무엇이 다른가</h2>
+<p>9강에서도 검색 도구를 붙인 에이전트를 만들었습니다. 22강은 그걸 <strong>리포트 생산</strong>으로 발전시킵니다.</p>
+<pre><code class="language-text">[9강]  질문 → 검색 → 답변 (일회성 Q&amp;A, 화면 출력)
+[22강] 주제 → 검색 → 요약 → 마크다운 리포트 → 파일 저장 (재사용 가능한 산출물)
+        + 폴백(03번) + 하위질의 분해(06번) + 교차검증(07번)
+</code></pre>
+<p>9강이 "물어보면 검색해서 답하는 챗봇"이었다면, 22강은 <strong>"주제를 주면 보고서를 만들어 파일로 떨어뜨리는 자동 애널리스트"</strong> 입니다. 산출물(.md)이 남고, 배치로 돌릴 수 있다는 게 결정적 차이죠.</p>
+<hr/>
+<h2 id="5">5. 전체 그림</h2>
+<p>이번 강에서 만들 코드의 구조를 미리 봅니다.</p>
+<ul>
+<li><code>build_research_agent()</code> — 검색 도구 붙인 에이전트 생성</li>
+<li><code>research(topic)</code> — 에이전트 호출(검색·요약 자동), 실패 시 폴백</li>
+<li><code>save_report(topic, body)</code> — 결과를 <code>reports/*.md</code> 로 저장</li>
+</ul>
+<p>함수를 <strong>세 개로 분리</strong>한 이유는 재사용·테스트 때문입니다. 배치 스케줄러는 <code>research → save_report</code>만 호출하면 되고, API는 <code>research()</code> 결과를 바로 JSON으로 응답할 수 있죠. 모듈화는 운영의 기본입니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>리서치 에이전트 = <strong>검색 → 수집 → 요약 → 리포트</strong> 4단계.</li>
+<li><strong>검색은 도구</strong>(사실 수집), <strong>요약은 LLM</strong>(글쓰기)으로 분업.</li>
+<li><code>create_agent</code>에 도구를 주면 <strong>에이전트가 스스로</strong> 검색·요약(ReAct 루프).</li>
+<li>시스템 프롬프트로 <strong>역할·출력 형식</strong>(섹션 구조)을 고정 → 자동화에 유리.</li>
+<li>9강 Q&amp;A를 <strong>재사용 가능한 리포트 산출물</strong>로 발전시킨 것.</li>
+<li>다음 절에서 네트워크 의존성과 폴백을 다룹니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="01_최신-시장동향을-매번-사람이.html"><span class="lbl">← 이전 절</span>01. 최신 시장동향을 매번 사람이</a><a class="nxt" href="03_네트워크-의존성.html"><span class="lbl">다음 절 →</span>03. 네트워크 의존성</a></div>
+</div>
+</body></html>

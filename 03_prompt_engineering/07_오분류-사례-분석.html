@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제3강 — 오분류 사례 분석</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제3강 · prompt engineering</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제3강 · prompt engineering — 세부 목차</b><a class="" href="01_왜-프롬프트가-중요한가.html">01. 왜 프롬프트가 중요한가</a><a class="" href="02_좋은-프롬프트의-4요소.html">02. 좋은 프롬프트의 4요소</a><a class="" href="03_zero-shot-vs-few-shot.html">03. zero shot vs few shot</a><a class="" href="04_JSON-출력-강제하기.html">04. JSON 출력 강제하기</a><a class="" href="05_프롬프트-인젝션-기초-방어.html">05. 프롬프트 인젝션 기초 방어</a><a class="" href="06_따라하기-고객문의-분류와-정확도-측정.html">06. 따라하기 고객문의 분류와 정확도 측정</a><a class="cur" href="07_오분류-사례-분석.html">07. 오분류 사례 분석</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">오분류 사례 분석</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>정확도 숫자 하나만 보면 "88%네" 하고 끝입니다. 하지만 <strong>틀린 건을 들여다보고 "어떤 카테고리끼리 헷갈리는지"를 집계</strong>하면, 무엇을 고쳐야 정확도가 오를지 정확히 알 수 있습니다.</p>
+<hr/>
+<h2 id="1">1. 왜 틀린 걸 봐야 하나</h2>
+<p>정확도 88%는 "60건 중 7건 틀렸다"는 뜻입니다. 그런데 그 7건이:</p>
+<ul>
+<li>전부 <strong>"환불을 결제로"</strong> 잘못 분류한 거라면 → 환불/결제 경계 예시를 추가하면 됩니다.</li>
+<li>제각각 흩어져 있다면 → 다른 접근이 필요합니다.</li>
+</ul>
+<p>즉, <strong>틀린 패턴</strong>을 알아야 올바른 처방을 내릴 수 있습니다. 의사가 증상을 봐야 약을 처방하듯이요.</p>
+<blockquote>
+<p>비유: 시험에서 70점 받았을 때, 점수만 보면 막막합니다. 하지만 <strong>틀린 문제를 모아 보면</strong> "아, 나는 분수 계산에서 자꾸 틀리는구나"가 보입니다. 그 부분만 집중 공부하면 점수가 오릅니다.</p>
+</blockquote>
+<hr/>
+<h2 id="2">2. 틀린 케이스만 모아 보기</h2>
+<p>(실습 파일: <code>sections/03_prompt_engineering/07_오분류-사례-분석.py</code>)</p>
+<p>03강의 <code>classify</code> 함수를 그대로 재사용해 60건을 분류한 뒤, <strong>틀린 것만</strong> 골라 사람이 읽을 수 있게 출력합니다.</p>
+<pre><code class="language-python">import pandas as pd
+from collections import Counter
+# (classify 함수와 FEWSHOT 은 06번/ch03_prompt.py 와 동일 — 재사용)
+
+df = pd.read_csv(DATA / "cs_inquiries.csv", encoding="utf-8-sig")
+df["pred"] = df["content"].apply(classify)
+
+correct = (df["pred"] == df["category_hint"]).sum()
+print(f"전체 정확도: {correct/len(df):.1%}  ({correct}/{len(df)})")
+
+# [핵심] 틀린 케이스만 모아서 '왜 틀렸나'를 사람이 읽을 수 있게 출력
+wrong = df[df["pred"] != df["category_hint"]]
+print(f"틀린 케이스: {len(wrong)}건")
+for i, (_, r) in enumerate(wrong.iterrows(), 1):
+    print(f"[{i}] 정답={r['category_hint']} / 예측={r['pred']}")
+    print(f"     내용: {r['content']}")
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">전체 정확도: 88.3%  (53/60)
+틀린 케이스: 7건
+[1] 정답=환불 / 예측=결제
+     내용: 환불 받은 줄 알았는데 다시 결제됐어요
+[2] 정답=불만 / 예측=상품문의
+     내용: 이 제품 왜 이렇게 자주 고장나요? 너무 불편해요
+...
+</code></pre>
+<hr/>
+<h2 id="3">3. 혼동쌍 집계 — 어느 경계가 약한가</h2>
+<p>한 건씩 보는 것도 좋지만, <strong>"정답 → 예측" 쌍을 집계</strong>하면 약점이 한눈에 보입니다. <code>collections.Counter</code>를 씁니다.</p>
+<pre><code class="language-python"># [왜] 혼동쌍을 집계하면 '어느 경계가 약한가'가 한눈에 보인다
+confusion = Counter(
+    (r["category_hint"], r["pred"]) for _, r in wrong.iterrows()
+)
+print("혼동쌍 집계 (정답 → 예측, 많은 순):")
+for (gold, pred), cnt in confusion.most_common():
+    print(f"  {gold} → {pred} : {cnt}건")
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">혼동쌍 집계 (정답 → 예측, 많은 순):
+  환불 → 결제 : 3건
+  불만 → 상품문의 : 2건
+  교환 → 환불 : 2건
+</code></pre>
+<p>이제 명확합니다. <strong>환불↔결제</strong>, <strong>불만↔상품문의</strong>, <strong>교환↔환불</strong> 이 세 경계가 약합니다.</p>
+<hr/>
+<h2 id="4">4. 처방 — 약한 경계에 예시를 추가</h2>
+<p>혼동쌍을 알았으니, few-shot 예시에 <strong>그 경계를 가르는 예시</strong>를 추가하면 됩니다.</p>
+<pre><code class="language-python"># 약한 경계(환불 vs 결제, 불만 vs 상품문의)를 콕 집은 예시 추가
+FEWSHOT_PLUS = FEWSHOT + """문의: 결제는 됐는데 환불은 언제 되나요?       → 환불
+문의: 결제창에서 자꾸 오류가 나요.              → 결제
+문의: 배송이 자꾸 늦어서 너무 불편해요.         → 불만
+문의: 이 제품 방수 되나요?                      → 상품문의
+"""
+</code></pre>
+<p>이렇게 예시를 보강하면 보통 정확도가 88% → 91~93%로 오릅니다. (이 실험은 연습문제에서 직접 해 봅니다.)</p>
+<hr/>
+<h2 id="5">5. 이 방법이 중요한 이유</h2>
+<p>이건 단순한 분류 팁이 아닙니다. <strong>"AI 시스템을 데이터로 개선하는 사고방식"</strong> 입니다.</p>
+<ol>
+<li>측정한다 (정확도)</li>
+<li>틀린 걸 분석한다 (혼동쌍)</li>
+<li>약점을 처방한다 (예시 추가)</li>
+<li>다시 측정한다 (개선 확인)</li>
+</ol>
+<p>이 순환은 분류뿐 아니라 RAG(16강), 에이전트 평가(30강) 등 <strong>모든 AI 시스템 개선</strong>에 똑같이 적용됩니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>정확도 숫자만 보지 말고 <strong>틀린 케이스를 들여다본다</strong>.</li>
+<li><code>Counter</code>로 <strong>"정답 → 예측" 혼동쌍을 집계</strong>하면 약한 경계가 보인다.</li>
+<li>약한 경계를 가르는 <strong>few-shot 예시를 추가</strong>해 처방한다.</li>
+<li>이 "측정 → 분석 → 처방 → 재측정" 순환은 모든 AI 개선의 핵심이다.</li>
+<li>다음 절에서 3강을 정리합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_따라하기-고객문의-분류와-정확도-측정.html"><span class="lbl">← 이전 절</span>06. 따라하기 고객문의 분류와 정확도 측정</a><a class="nxt" href="08_정리-체크리스트.html"><span class="lbl">다음 절 →</span>08. 정리 체크리스트</a></div>
+</div>
+</body></html>

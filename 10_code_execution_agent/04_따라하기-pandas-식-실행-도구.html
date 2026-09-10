@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제10강 — 따라하기 — pandas 식 실행 도구</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제10강 · code execution agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제10강 · code execution agent — 세부 목차</b><a class="" href="01_LLM은-계산기가-아니다.html">01. LLM은 계산기가 아니다</a><a class="" href="02_코드-생성-실행-루프.html">02. 코드 생성 실행 루프</a><a class="" href="03_안전한-실행-네임스페이스-제한.html">03. 안전한 실행 네임스페이스 제한</a><a class="cur" href="04_따라하기-pandas-식-실행-도구.html">04. 따라하기 pandas 식 실행 도구</a><a class="" href="05_따라하기-자연어로-집계-질문.html">05. 따라하기 자연어로 집계 질문</a><a class="" href="06_코드-실행-실패시-재시도.html">06. 코드 실행 실패시 재시도</a><a class="" href="07_보안-주의사항과-실무-대안.html">07. 보안 주의사항과 실무 대안</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="pandas">따라하기 — pandas 식 실행 도구</h1>
+<h2 id="_1">목표</h2>
+<p>LLM이 만든 pandas 식을 안전하게 실행하는 <code>run_pandas</code> 도구를 만듭니다. 실제 파일은 <code>code/ch10_code_exec.py</code> 입니다.</p>
+<hr/>
+<h2 id="0">0. 실습 준비 (설치)</h2>
+<pre><code class="language-bash">conda activate agentic
+
+# 10강에 필요한 라이브러리 (앞 강에서 설치했다면 생략 가능)
+pip install langchain langchain-google-genai langgraph pandas
+</code></pre>
+<p>이번 강은 <code>data/sales_daily.csv</code>(컬럼: <code>date</code>, <code>sales</code>)를 씁니다.</p>
+<hr/>
+<h2 id="1">1. 공통 시작부 + 데이터 로드</h2>
+<pre><code class="language-python"># 실행: python code/ch10_code_exec.py
+import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+import pandas as pd
+from langchain_core.tools import tool          # @tool: 함수를 도구로 등록
+from langchain.agents import create_agent       # create_agent: ReAct 에이전트 생성
+from common import get_chat, DATA
+
+llm = get_chat(provider="gemini")
+# 일자별 매출 데이터 로드 (컬럼: date, sales)
+df = pd.read_csv(DATA / "sales_daily.csv")
+</code></pre>
+<p><code>df</code>는 모듈을 로드할 때 <strong>한 번만</strong> 읽습니다. 이 <code>df</code>가 도구 안에서 계속 쓰입니다.</p>
+<hr/>
+<h2 id="2-run_pandas-docstring">2. run_pandas 도구 — docstring이 핵심</h2>
+<p>03번에서 본 안전한 실행 함수에 <code>@tool</code>을 붙입니다. <strong>docstring에 컬럼명과 사용 예시</strong>를 적는 게 매우 중요합니다.</p>
+<pre><code class="language-python">@tool
+def run_pandas(expr: str) -&gt; str:
+    """미리 로드된 일별 매출 DataFrame(df)에 대한 pandas 식을 실행해 결과를 문자열로 반환한다.
+    df 컬럼: date(날짜 문자열 'YYYY-MM-DD'), sales(정수 매출).
+    예: "df['sales'].sum()", "df['sales'].mean()",
+        "df.loc[df['sales'].idxmax(), 'date']".
+    식 안에서는 df, pd 만 사용할 수 있다."""
+    # 빌트인 차단 + df/pd 화이트리스트 (03번)
+    try:
+        result = eval(expr, {"__builtins__": {}}, {"df": df, "pd": pd})
+    except Exception as e:
+        return f"실행 오류: {e}"     # 잘못된 식이어도 에이전트가 죽지 않게
+    return str(result)
+</code></pre>
+<p>docstring을 잘 보세요. 세 가지 정보를 줍니다.</p>
+<ul>
+<li><strong>컬럼명</strong>: <code>date</code>(날짜 문자열), <code>sales</code>(정수 매출) → LLM이 올바른 컬럼을 씀</li>
+<li><strong>사용 예시</strong>: <code>df['sales'].sum()</code> 등 → LLM이 식의 형태를 참고</li>
+<li><strong>제약</strong>: "df, pd 만 사용 가능" → LLM이 허용 범위를 앎</li>
+</ul>
+<p>이 docstring 덕분에 LLM이 <strong>올바른 pandas 식</strong>을 훨씬 잘 만듭니다. 6강에서 배운 "독스트링 = 도구 성능"이 여기서도 빛납니다.</p>
+<hr/>
+<h2 id="3-docstring">3. 왜 docstring에 컬럼명을 적나</h2>
+<p>LLM은 <code>df</code> 안에 어떤 컬럼이 있는지 <strong>모릅니다.</strong> docstring에 "컬럼: date, sales"라고 알려 주지 않으면, LLM이 엉뚱한 컬럼명(<code>revenue</code>, <code>amount</code> 등)을 써서 오류가 납니다.</p>
+<pre><code class="language-python"># docstring에 컬럼 정보 없으면:
+"df['revenue'].sum()"   # → 실행 오류! (revenue 컬럼 없음)
+
+# docstring에 "컬럼: date, sales" 있으면:
+"df['sales'].sum()"     # → 정상! (올바른 컬럼명 사용)
+</code></pre>
+<p>도구가 다루는 데이터의 <strong>구조(스키마)</strong> 를 docstring으로 알려 주는 게 핵심입니다.</p>
+<hr/>
+<h2 id="4">4. 도구 단독 테스트</h2>
+<p>에이전트에 붙이기 전, 도구가 잘 도는지 확인합니다(디버깅 습관).</p>
+<pre><code class="language-python"># @tool로 감싼 함수는 .invoke()로 직접 호출 가능
+print(run_pandas.invoke({"expr": "df['sales'].sum()"}))    # → 324286050
+print(run_pandas.invoke({"expr": "len(df)"}))              # → 실행 오류 (len은 빌트인이라 차단!)
+print(run_pandas.invoke({"expr": "df.shape[0]"}))          # → 600 (행 개수, 정상)
+</code></pre>
+<p>흥미로운 점: <code>len(df)</code>는 <strong>오류</strong>가 납니다. <code>len</code>이 빌트인 함수라 <code>{"__builtins__": {}}</code>로 차단됐기 때문이죠. 대신 <code>df.shape[0]</code>처럼 pandas 메서드를 써야 합니다. 안전장치가 작동하는 증거입니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li><code>run_pandas</code> 도구 = 03번의 안전한 <code>eval</code> + <code>@tool</code> 데코레이터.</li>
+<li><strong>docstring에 컬럼명·예시·제약</strong>을 적어야 LLM이 올바른 식을 만든다.</li>
+<li>도구가 다루는 데이터의 <strong>스키마(컬럼)</strong> 를 알려 주는 게 핵심.</li>
+<li><code>len()</code> 같은 빌트인은 차단되니 pandas 메서드(<code>df.shape</code>)를 쓴다.</li>
+<li>다음 절에서 이 도구로 자연어 질문에 답하는 에이전트를 만듭니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="03_안전한-실행-네임스페이스-제한.html"><span class="lbl">← 이전 절</span>03. 안전한 실행 네임스페이스 제한</a><a class="nxt" href="05_따라하기-자연어로-집계-질문.html"><span class="lbl">다음 절 →</span>05. 따라하기 자연어로 집계 질문</a></div>
+</div>
+</body></html>

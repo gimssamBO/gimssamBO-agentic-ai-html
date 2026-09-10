@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제26강 — 따라하기 — Planner 작업 분해</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제26강 · role based agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제26강 · role based agent — 세부 목차</b><a class="" href="01_무엇을-할지와-어떻게-할지-나누기.html">01. 무엇을 할지와 어떻게 할지 나누기</a><a class="" href="02_Planner-Worker-협업구조.html">02. Planner Worker 협업구조</a><a class="" href="03_Supervisor-vs-Planner-Worker.html">03. Supervisor vs Planner Worker</a><a class="cur" href="04_따라하기-Planner-작업-분해.html">04. 따라하기 Planner 작업 분해</a><a class="" href="05_따라하기-Worker-작업-실행.html">05. 따라하기 Worker 작업 실행</a><a class="" href="06_따라하기-오케스트레이터-취합.html">06. 따라하기 오케스트레이터 취합</a><a class="" href="07_Worker-실패-처리와-재시도.html">07. Worker 실패 처리와 재시도</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="planner">따라하기 — Planner 작업 분해</h1>
+<h2 id="_1">목표</h2>
+<p>캠페인 브리프를 읽어, Planner가 <strong>하위 작업 3~4개를 JSON 리스트로 분해</strong>하게 만듭니다. 구조화 출력으로 작업 리스트를 안전하게 받습니다.</p>
+<hr/>
+<h2 id="0">0. 실습 준비</h2>
+<pre><code class="language-bash">conda activate agentic
+pip install -U langchain langchain-google-genai pydantic pandas
+python code/common.py            # GOOGLE_API_KEY: True 확인
+</code></pre>
+<ul>
+<li><code>pydantic</code>: 구조화 출력 스키마(8강).</li>
+<li><code>pandas</code>: 캠페인 CSV 읽기(11강).</li>
+<li>데이터: <code>data/marketing_brief.csv</code> (campaign_id, title, category, target, budget, key_offer).</li>
+</ul>
+<hr/>
+<h2 id="1">1. 시작부와 데이터 로드</h2>
+<p><code>code/ch26_role_agent.py</code>를 만듭니다.</p>
+<pre><code class="language-python"># -*- coding: utf-8 -*-
+# 실행: python code/ch26_role_agent.py
+import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))  # code/ 를 import 경로에
+from common import get_chat, DATA
+
+import pandas as pd
+from pydantic import BaseModel, Field           # 구조화 출력(JSON 스키마) 정의용
+from langchain_core.messages import SystemMessage, HumanMessage
+
+# [왜 Planner/Worker 분리] 한 LLM에게 '계획도 세우고 실행도 하라'고 하면 둘 다 어설퍼진다.
+#   Planner(계획 세우는 역할)가 작업을 잘게 쪼개고, Worker(실행 역할)가 한 작업씩
+#   집중 수행하면 각자 잘하는 일에만 몰두해 품질이 올라간다. (25강 역할 분리의 연장선)
+
+
+def load_brief_text(campaign_id: str = "CMP02") -&gt; str:
+    """캠페인 ID로 브리프 1건을 읽어 LLM에 넣을 한 줄 텍스트로 만든다."""
+    brief = pd.read_csv(DATA / "marketing_brief.csv")
+    campaign = brief[brief["campaign_id"] == campaign_id].iloc[0]   # 캠페인 1건 선택
+    return (
+        f"캠페인명: {campaign.title} / 카테고리: {campaign.category} / "
+        f"타깃: {campaign.target} / 예산: {campaign.budget:,}원 / "
+        f"핵심혜택: {campaign.key_offer}"
+    )
+</code></pre>
+<p><code>load_brief_text</code>는 CSV의 한 행을 <strong>LLM이 읽기 좋은 한 줄 텍스트</strong>로 만듭니다. 여러 컬럼을 "캠페인명: ... / 카테고리: ..." 형태로 합치죠.</p>
+<hr/>
+<h2 id="2">2. 구조화 출력 스키마</h2>
+<p>Planner의 출력을 <strong>JSON 리스트로 강제</strong>할 스키마입니다(02번 원칙).</p>
+<pre><code class="language-python">class Plan(BaseModel):
+    """Planner가 만드는 실행 계획(구조화 출력 스키마)."""
+    # [왜 구조화 출력] 자유 텍스트가 아니라 list[str] 형태로 강제해, 코드가
+    #   결과를 바로 반복(for)할 수 있게 한다. 파싱 실수가 사라진다.
+    subtasks: list[str] = Field(description="이 캠페인을 위해 필요한 하위 작업 3~4개")
+</code></pre>
+<p><code>subtasks: list[str]</code> — 무슨 일이 있어도 결과가 <strong>문자열 리스트</strong>로 나옵니다. <code>Field(description=...)</code>은 LLM에게 "이 필드에 뭘 채울지" 알려주는 설명이죠.</p>
+<hr/>
+<h2 id="3-planner">3. Planner 함수</h2>
+<p>역할 프롬프트와 <code>with_structured_output</code>으로 작업을 분해합니다.</p>
+<pre><code class="language-python">PLANNER_SYSTEM = (        # Planner 역할 고정 프롬프트 — '쪼개기만, 실행은 금지'
+    "너는 마케팅 캠페인 '기획 설계자(Planner)'다. "
+    "주어진 캠페인 브리프를 보고, 실행에 필요한 하위 작업을 3~4개로 쪼개라. "
+    "작업은 서로 겹치지 않게, 한 문장 명령형으로 작성하라. 실행은 하지 마라."
+)
+
+
+def plan(llm, brief_text: str) -&gt; list[str]:
+    """브리프를 보고 하위 작업 리스트(JSON)로 분해한다."""
+    planner = llm.with_structured_output(Plan)   # 출력을 Plan 스키마로 강제
+    result = planner.invoke([
+        SystemMessage(PLANNER_SYSTEM),           # 역할 지시
+        HumanMessage(f"[캠페인 브리프]\n{brief_text}"),  # 입력 데이터
+    ])
+    return result.subtasks                       # 하위 작업 문자열 리스트
+</code></pre>
+<p><strong>핵심</strong></p>
+<ul>
+<li><code>llm.with_structured_output(Plan)</code> — 이 LLM은 이제 <strong>Plan 스키마</strong>로만 답합니다.</li>
+<li><code>SystemMessage</code>(역할) + <code>HumanMessage</code>(데이터) — 역할과 입력을 분리(2강 메시지 구조).</li>
+<li><code>result.subtasks</code> — <code>.invoke</code> 결과가 <code>Plan</code> 객체라, <code>.subtasks</code>로 리스트를 바로 꺼냄.</li>
+</ul>
+<hr/>
+<h2 id="4">4. 실행해 확인</h2>
+<pre><code class="language-python">if __name__ == "__main__":
+    brief_text = load_brief_text("CMP02")
+    print("[브리프]", brief_text)
+    print()
+
+    llm_plan = get_chat(temperature=0)    # 계획은 재현성 → 0
+    subtasks = plan(llm_plan, brief_text)
+    print("[Planner 분해 결과]")
+    for i, t in enumerate(subtasks, 1):
+        print(f"   {i}. {t}")
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[브리프] 캠페인명: 신학기 전자기기 프로모션 / 카테고리: 전자기기 / 타깃: 대학생 / 예산: 8,000,000원 / 핵심혜택: 이어버드+보조배터리 번들
+
+[Planner 분해 결과]
+   1. 대학생 타깃의 핵심 니즈와 구매 동기를 분석하라
+   2. '이어버드+보조배터리 번들' 혜택을 강조한 광고 카피 3종을 작성하라
+   3. 800만원 예산을 채널별로 배분하는 방안을 제안하라
+   4. 캠페인 성과를 측정할 핵심 지표(KPI)를 정의하라
+</code></pre>
+<p><strong>관찰 포인트</strong></p>
+<ul>
+<li>Planner가 캠페인을 <strong>3~4개 작업으로 깔끔히 쪼갰습니다.</strong> 각 작업은 한 문장 명령형이죠.</li>
+<li>"실행은 하지 마라"를 지켜, <strong>카피 자체는 안 쓰고</strong> "카피를 작성하라"는 작업만 만들었습니다.</li>
+<li>결과가 <strong>리스트</strong>라 <code>for</code>로 바로 순회 가능 — 05번 Worker 루프에 그대로 넘어갑니다.</li>
+</ul>
+<hr/>
+<h2 id="5">5. 구조화 출력의 가치 재확인</h2>
+<p>만약 구조화 출력 없이 자유 텍스트로 받았다면:</p>
+<pre><code class="language-text">Planner: "먼저 대학생 타깃을 분석하고, 그 다음 번들 혜택 카피를 쓰고,
+          예산은 800만원을 채널별로 나누면 됩니다."
+   → 이걸 어떻게 ['작업1', '작업2', '작업3']로 쪼개지? (정규식? 줄바꿈? 번호?)
+   → 형식이 매번 달라 파싱이 깨짐
+</code></pre>
+<p><code>with_structured_output(Plan)</code> 덕에 <strong>항상 깔끔한 리스트</strong>를 받습니다. "LLM이 자유롭게 답하면 코드가 고생한다 → 형식을 강제하자"는 게 핵심이죠(8강). 에이전트 간 데이터 전달의 기본기입니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li><code>load_brief_text()</code>: 캠페인 CSV 한 행을 <strong>LLM용 한 줄 텍스트</strong>로.</li>
+<li><code>Plan(subtasks: list[str])</code>: 출력을 <strong>JSON 리스트로 강제</strong>하는 스키마.</li>
+<li><code>PLANNER_SYSTEM</code>: "쪼개기만, <strong>실행 금지</strong>" + "겹치지 않게, 명령형".</li>
+<li><code>llm.with_structured_output(Plan)</code> → <code>.subtasks</code>로 작업 리스트 획득.</li>
+<li>구조화 출력 덕에 결과가 <strong>항상 리스트</strong> → Worker 루프에 안전 전달.</li>
+<li>다음 절에서 Worker가 각 작업을 실행합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="03_Supervisor-vs-Planner-Worker.html"><span class="lbl">← 이전 절</span>03. Supervisor vs Planner Worker</a><a class="nxt" href="05_따라하기-Worker-작업-실행.html"><span class="lbl">다음 절 →</span>05. 따라하기 Worker 작업 실행</a></div>
+</div>
+</body></html>

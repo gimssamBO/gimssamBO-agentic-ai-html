@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제15강 — FAISS vs Chroma</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제15강 · vector database</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제15강 · vector database — 세부 목차</b><a class="" href="01_대량-검색과-인덱스-저장.html">01. 대량 검색과 인덱스 저장</a><a class="" href="02_벡터DB의-역할.html">02. 벡터DB의 역할</a><a class="cur" href="03_FAISS-vs-Chroma.html">03. FAISS vs Chroma</a><a class="" href="04_인덱스-영속화-아키텍처.html">04. 인덱스 영속화 아키텍처</a><a class="" href="05_따라하기-FAISS-인덱스-만들기.html">05. 따라하기 FAISS 인덱스 만들기</a><a class="" href="06_따라하기-인덱스-저장과-재로드.html">06. 따라하기 인덱스 저장과 재로드</a><a class="" href="07_메타데이터-필터링-검색.html">07. 메타데이터 필터링 검색</a><a class="" href="08_인덱스-증분-업데이트.html">08. 인덱스 증분 업데이트</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="faiss-vs-chroma">FAISS vs Chroma</h1>
+<h2 id="_1">한 줄 요약</h2>
+<p><strong>FAISS</strong>는 가볍고 빠른 라이브러리(읽기 위주·단순·고속에 적합), <strong>Chroma</strong>는 메타데이터 필터·컬렉션 관리가 강한 임베디드 DB입니다. 이 과정은 FAISS를 주력으로 하고, 필터가 필요할 때 Chroma를 씁니다.</p>
+<hr/>
+<h2 id="1">1. 두 벡터스토어 비교</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>FAISS</th>
+<th>Chroma</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>형태</td>
+<td>라이브러리(인메모리 인덱스)</td>
+<td>임베디드 DB(메타데이터·필터 강함)</td>
+</tr>
+<tr>
+<td>영속화</td>
+<td><code>save_local</code> / <code>load_local</code>(파일)</td>
+<td><code>persist_directory</code>(자동 저장)</td>
+</tr>
+<tr>
+<td>장점</td>
+<td>매우 빠름, 의존성 가벼움</td>
+<td>메타데이터 필터·컬렉션 관리 편함</td>
+</tr>
+<tr>
+<td>추천 상황</td>
+<td>읽기 위주·단순·고속</td>
+<td>문서 갱신·필터·다중 컬렉션</td>
+</tr>
+</tbody>
+</table>
+<hr/>
+<h2 id="2-faiss">2. FAISS — 가볍고 빠른 라이브러리</h2>
+<p><strong>FAISS</strong>(Facebook AI Similarity Search)는 Meta가 만든 벡터 검색 라이브러리입니다.</p>
+<pre><code class="language-python">from langchain_community.vectorstores import FAISS
+
+vs = FAISS.from_documents(chunks, emb)   # 인덱스 생성
+vs.save_local("faiss_index")             # 파일로 저장
+vs2 = FAISS.load_local("faiss_index", emb, allow_dangerous_deserialization=True)  # 로드
+</code></pre>
+<p><strong>장점</strong>:<br/>
+- <strong>매우 빠름</strong>: 대량 벡터 검색에 최적화<br/>
+- <strong>가벼움</strong>: 의존성이 적어 설치·배포가 간단<br/>
+- <strong>영속화가 명확</strong>: <code>save_local</code>/<code>load_local</code>로 파일에 저장/로드</p>
+<p><strong>적합한 상황</strong>: 문서가 자주 안 바뀌고, 빠른 검색이 중요하고, 복잡한 필터가 필요 없을 때. 대부분의 RAG에 충분합니다.</p>
+<hr/>
+<h2 id="3-chroma-db">3. Chroma — 메타데이터에 강한 DB</h2>
+<p><strong>Chroma</strong>는 메타데이터 필터링과 컬렉션 관리가 강한 임베디드 데이터베이스입니다.</p>
+<pre><code class="language-python">from langchain_community.vectorstores import Chroma
+
+vs = Chroma.from_documents(chunks, emb, persist_directory="chroma_db")  # 자동 저장
+# 메타데이터 필터로 특정 문서 안에서만 검색
+results = vs.similarity_search("질문", k=3, filter={"source": "멤버십정책.pdf"})
+</code></pre>
+<p><strong>장점</strong>:<br/>
+- <strong>메타데이터 필터</strong>: <code>filter={"source": "..."}</code>로 특정 조건의 청크만 검색<br/>
+- <strong>자동 영속화</strong>: <code>persist_directory</code>만 주면 알아서 저장<br/>
+- <strong>컬렉션 관리</strong>: 여러 문서 그룹을 따로 관리</p>
+<p><strong>적합한 상황</strong>: "특정 문서 안에서만 검색", "최신 문서만 검색" 같은 <strong>필터링</strong>이 필요할 때. (07번에서 실습)</p>
+<hr/>
+<h2 id="4">4. 무엇을 언제 쓰나</h2>
+<p><strong>복잡한 메타데이터 필터가 필요한가?</strong>(특정 문서/날짜/카테고리만 검색)</p>
+<ul>
+<li><strong>아니오</strong> → <strong>FAISS</strong> (가볍고 빠름) — 대부분 이걸로 충분</li>
+<li><strong>예</strong> → <strong>Chroma</strong> (필터 강함)</li>
+</ul>
+<p>대부분의 경우 <strong>FAISS로 충분</strong>합니다. "정책 문서 전체에서 의미 검색"이면 FAISS가 빠르고 간단하죠. <strong>"멤버십 문서 안에서만"</strong> 처럼 정밀한 필터가 필요할 때만 Chroma를 씁니다.</p>
+<hr/>
+<h2 id="5-similarity_search">5. similarity_search의 점수</h2>
+<p>검색 결과의 "유사도 점수"를 볼 때 주의할 점이 있습니다. <strong>FAISS는 거리(distance)</strong> 를 씁니다.</p>
+<pre><code class="language-python">scored = vs.similarity_search_with_score(query, k=2)
+for d, score in scored:
+    print(f"거리 {score:.3f} | {d.page_content[:50]}")
+</code></pre>
+<p><strong>중요</strong>: FAISS 점수는 <strong>"거리"라서 작을수록 가깝습니다</strong>(코사인 유사도와 반대 방향!). 14강 코사인 유사도는 "클수록 가까움"이었는데, FAISS 거리는 "작을수록 가까움"입니다. 헷갈리기 쉬우니 기억해 두세요. (벡터스토어마다 점수 의미가 다를 수 있어, 문서를 확인하는 게 안전합니다.)</p>
+<hr/>
+<h2 id="6-db">6. 더 큰 벡터DB들</h2>
+<p>FAISS와 Chroma 외에도 많은 벡터DB가 있습니다 — Pinecone, Weaviate, Milvus, pgvector 등. 이들은 <strong>분산·대규모·클라우드</strong> 환경을 위한 것입니다.</p>
+<pre><code class="language-text">소규모·로컬     → FAISS, Chroma (이 과정)
+대규모·클라우드  → Pinecone, Weaviate, Milvus, pgvector
+</code></pre>
+<p>원리는 모두 같습니다 — "벡터를 저장하고 유사도로 검색". 규모와 운영 방식이 다를 뿐이죠. 이 과정은 원리 학습이 목적이라 가벼운 FAISS/Chroma로 충분합니다. 실무에서 규모가 커지면 큰 벡터DB로 갈아타되, 개념은 그대로 적용됩니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li><strong>FAISS</strong>: 가볍고 빠른 라이브러리, <code>save_local</code>/<code>load_local</code>, 대부분의 RAG에 충분.</li>
+<li><strong>Chroma</strong>: 메타데이터 필터·자동 영속화에 강함, 정밀 필터 필요 시.</li>
+<li>대부분 <strong>FAISS로 충분</strong>, 필터가 필요할 때만 Chroma.</li>
+<li>FAISS 점수는 <strong>거리</strong>라 <strong>작을수록 가까움</strong>(코사인과 반대).</li>
+<li>큰 규모는 Pinecone·Milvus 등 — 원리는 같다.</li>
+<li>다음 절에서 인덱스 영속화 아키텍처를 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="02_벡터DB의-역할.html"><span class="lbl">← 이전 절</span>02. 벡터DB의 역할</a><a class="nxt" href="04_인덱스-영속화-아키텍처.html"><span class="lbl">다음 절 →</span>04. 인덱스 영속화 아키텍처</a></div>
+</div>
+</body></html>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제9강 — 네트워크 오류 처리와 재시도</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제9강 · search agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제9강 · search agent — 세부 목차</b><a class="" href="01_지식-컷오프-문제.html">01. 지식 컷오프 문제</a><a class="" href="02_검색으로-보강하기.html">02. 검색으로 보강하기</a><a class="" href="03_따라하기-웹검색-도구-붙이기.html">03. 따라하기 웹검색 도구 붙이기</a><a class="" href="04_따라하기-검색-과정-관찰하기.html">04. 따라하기 검색 과정 관찰하기</a><a class="" href="05_검색결과-신뢰성과-재검증.html">05. 검색결과 신뢰성과 재검증</a><a class="cur" href="06_네트워크-오류-처리와-재시도.html">06. 네트워크 오류 처리와 재시도</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">네트워크 오류 처리와 재시도</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>웹 검색은 네트워크·호출 제한으로 <strong>일시 실패가 잦습니다.</strong> 한 번 실패했다고 포기하지 말고, <strong>지수 백오프(1→2→4초)로 재시도</strong>하고, 끝내 실패하면 <strong>폴백 메시지</strong>를 돌려줘 프로그램이 죽지 않게 합니다.</p>
+<hr/>
+<h2 id="1">1. 검색은 자주 실패한다</h2>
+<p>검색은 외부 서버에 의존하므로, 우리 잘못이 아니어도 실패합니다.</p>
+<ul>
+<li><strong>일시적 타임아웃</strong>: 네트워크가 잠깐 느림</li>
+<li><strong>호출 제한(rate limit)</strong>: 짧은 시간에 너무 많이 요청</li>
+<li><strong>빈 결과</strong>: 검색은 됐지만 결과가 없음</li>
+</ul>
+<p>중요한 건, 이런 실패의 상당수는 <strong>잠깐 기다렸다 다시 하면 성공</strong>한다는 것입니다. 그래서 <strong>재시도</strong>가 효과적입니다.</p>
+<blockquote>
+<p>비유: 전화가 통화 중이면, 끊고 <strong>잠깐 기다렸다 다시</strong> 거는 것과 같습니다. 한 번 통화 중이라고 포기하지 않죠. 그리고 다시 걸 때 점점 간격을 두면(바로 또 걸지 않고) 상대도 받을 여유가 생깁니다.</p>
+</blockquote>
+<hr/>
+<h2 id="2">2. 지수 백오프 — 점점 간격을 늘리는 재시도</h2>
+<p><strong>지수 백오프(exponential backoff)</strong> 는 재시도 간격을 점점 늘리는 기법입니다: 1초 → 2초 → 4초.</p>
+<pre><code class="language-text">1차 시도 실패 → 1초 기다림 → 2차 시도
+2차 시도 실패 → 2초 기다림 → 3차 시도
+3차 시도 실패 → 4초 기다림 → (최종 실패 시 폴백)
+</code></pre>
+<p>왜 간격을 늘릴까요? 서버가 과부하라 막혔는데 <strong>바로 또 때리면</strong> 상황이 더 나빠집니다. 간격을 두면 서버가 <strong>회복할 틈</strong>을 줍니다.</p>
+<hr/>
+<h2 id="3-robust_search">3. robust_search — 견고한 검색</h2>
+<p>(실습 파일: <code>sections/09_search_agent/06_네트워크-오류-처리와-재시도.py</code>) — 이 패턴은 29강의 <code>robust_invoke</code>를 검색에 적용한 것입니다.</p>
+<pre><code class="language-python">import time
+from langchain_community.tools import DuckDuckGoSearchResults
+
+search = DuckDuckGoSearchResults()
+
+def robust_search(message: str, max_retries: int = 3) -&gt; str:
+    """검색을 재시도 + 지수 백오프 + 폴백으로 감싼다."""
+    for attempt in range(1, max_retries + 1):
+        try:
+            print(f"검색 시도 {attempt}/{max_retries}: {message}")
+            result = search.invoke(message)
+            if not result or not str(result).strip():
+                raise ValueError("빈 검색 결과")          # 빈 결과도 실패로 보고 재시도
+            return result                                 # 성공!
+        except Exception as e:
+            wait = 2 ** (attempt - 1)                     # 지수 백오프: 1, 2, 4초
+            print(f"실패({attempt}회): {e} → {wait}초 후 재시도")
+            time.sleep(wait)
+    # 끝까지 실패 — 예외로 죽지 않고 폴백 문구를 돌려준다
+    return "죄송합니다. 일시적인 네트워크 오류로 검색하지 못했습니다. 잠시 후 다시 시도해 주세요."
+</code></pre>
+<p>세 가지가 핵심입니다.</p>
+<ul>
+<li><strong><code>for attempt in range(1, max_retries+1)</code></strong>: 최대 3번 시도</li>
+<li><strong><code>wait = 2 ** (attempt-1)</code></strong>: 1, 2, 4초로 간격 증가 (<code>time.sleep(wait)</code>)</li>
+<li><strong>폴백</strong>: 끝까지 실패해도 예외로 죽지 않고 <strong>안내 문구</strong> 반환</li>
+</ul>
+<hr/>
+<h2 id="4">4. 왜 빈 결과도 실패로 보나</h2>
+<pre><code class="language-python">if not result or not str(result).strip():
+    raise ValueError("빈 검색 결과")   # 빈 결과도 재시도 대상
+</code></pre>
+<p>검색이 "성공"했지만 결과가 <strong>비어 있을 수</strong> 있습니다. 일시적 문제로 빈 결과가 올 때가 있거든요. 이걸 그냥 두면 "검색 결과 없음"으로 잘못 답할 수 있으니, <strong>빈 결과도 실패로 간주</strong>해 재시도합니다.</p>
+<hr/>
+<h2 id="5">5. 폴백 — 죽지 않는 게 핵심</h2>
+<p>가장 중요한 건 <strong>끝까지 실패해도 프로그램이 죽지 않는</strong> 것입니다.</p>
+<pre><code class="language-python"># 재시도 다 실패 → 예외를 던지면? → 프로그램 중단 (나쁨)
+# 재시도 다 실패 → 폴백 문구 반환 → 사용자에게 안내 (좋음)
+return "죄송합니다. 일시적인 네트워크 오류로 ..."
+</code></pre>
+<p>5강의 도구 오류 처리와 같은 철학입니다 — <strong>에이전트는 실패해도 멈추지 않고 안내</strong>해야 합니다. 콜센터 상담원이 시스템 오류로 전화를 끊으면 안 되는 것처럼요.</p>
+<hr/>
+<h2 id="6">6. 실행 — 정상과 실패 둘 다 시연</h2>
+<pre><code class="language-python"># 정상: 재시도 래퍼로 안전하게 검색
+print(search_and_summarize("무선 이어버드 인기 트렌드"))
+
+# 강제 실패: 항상 실패하는 가짜 검색으로 백오프·폴백 확인
+class _AlwaysFail:
+    def invoke(self, q):
+        raise ConnectionError("네트워크 연결 실패(시뮬레이션)")
+
+search = _AlwaysFail()
+print(robust_search("연결되지 않는 검색", max_retries=3))
+</code></pre>
+<p><strong>예상 출력 (강제 실패)</strong></p>
+<pre><code class="language-text">검색 시도 1/3 → 실패 → 1초 후 재시도
+검색 시도 2/3 → 실패 → 2초 후 재시도
+검색 시도 3/3 → 실패 → 4초 후 재시도
+[종료] 검색 최종 실패 — 폴백 응답 반환
+죄송합니다. 일시적인 네트워크 오류로 검색하지 못했습니다. 잠시 후 다시 시도해 주세요.
+</code></pre>
+<p>지수 백오프로 1→2→4초씩 기다리며 3번 시도하고, 끝내 실패하자 <strong>폴백 문구</strong>로 우아하게 마무리합니다. 프로그램은 죽지 않았죠.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>검색은 <strong>네트워크·호출 제한</strong>으로 일시 실패가 잦다 → 재시도가 효과적.</li>
+<li><strong>지수 백오프</strong>(1→2→4초)로 서버에 회복할 틈을 준다.</li>
+<li><strong>빈 결과도 실패</strong>로 간주해 재시도한다.</li>
+<li>끝까지 실패해도 <strong>폴백 문구</strong>로 프로그램이 죽지 않게 한다.</li>
+<li>이 <code>robust_search</code> 패턴은 <strong>29강 robust_invoke</strong>의 검색 버전이다.</li>
+<li>다음 절에서 9강을 정리합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="05_검색결과-신뢰성과-재검증.html"><span class="lbl">← 이전 절</span>05. 검색결과 신뢰성과 재검증</a><a class="nxt" href="07_정리-체크리스트.html"><span class="lbl">다음 절 →</span>07. 정리 체크리스트</a></div>
+</div>
+</body></html>

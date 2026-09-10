@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제16강 — 문서 근거로만 답하고 출처를 밝혀라</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제16강 · rag qa</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제16강 · rag qa — 세부 목차</b><a class="cur" href="01_문서-근거로만-답하고-출처-밝히기.html">01. 문서 근거로만 답하고 출처 밝히기</a><a class="" href="02_QA-체인-구조-LCEL.html">02. QA 체인 구조 LCEL</a><a class="" href="03_환각을-억제하는-프롬프트.html">03. 환각을 억제하는 프롬프트</a><a class="" href="04_출처를-함께-반환하기.html">04. 출처를 함께 반환하기</a><a class="" href="05_따라하기-QA-체인-만들기.html">05. 따라하기 QA 체인 만들기</a><a class="" href="06_따라하기-답변과-출처-모듈화.html">06. 따라하기 답변과 출처 모듈화</a><a class="" href="07_따라하기-모르는-질문엔-모른다고.html">07. 따라하기 모르는 질문엔 모른다고</a><a class="" href="08_검색-품질-높이기-k값과-재정렬.html">08. 검색 품질 높이기 k값과 재정렬</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">문서 근거로만 답하고 출처를 밝혀라</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>15강까지 "관련 청크 k개"를 찾을 수 있게 됐습니다. 하지만 고객에게 청크 덩어리를 던질 순 없죠. 필요한 건 <strong>자연어 답변</strong>입니다. 그것도 <strong>문서에 없으면 지어내지 않고(환각 억제)</strong>, <strong>출처를 함께 밝히는</strong> 답변입니다. 이게 RAG QA 시스템입니다.</p>
+<hr/>
+<h2 id="1">1. 검색만으로는 부족하다</h2>
+<p>15강까지의 RAG는 "검색"까지였습니다.</p>
+<pre><code class="language-python">results = vs.similarity_search("환불 며칠 걸려?", k=4)
+# → [청크1, 청크2, 청크3, 청크4]  ← 청크 덩어리!
+</code></pre>
+<p>고객에게 이 청크 4개를 그대로 보여 줄 순 없습니다. "환불은 영업일 기준 3일 이내입니다"처럼 <strong>깔끔한 답</strong>이 필요하죠. 검색한 청크를 LLM에게 주고 <strong>답을 만들게</strong> 해야 합니다 — 이게 RAG의 마지막 단계 <strong>⑤ 생성</strong>입니다.</p>
+<hr/>
+<h2 id="2">2. 두 가지가 더 필요하다</h2>
+<p>단순히 "청크를 LLM에게 줘서 답하게" 하면 될까요? 두 가지 문제가 남습니다.</p>
+<h3 id="1_1">① 환각 억제</h3>
+<p>LLM은 청크에 없는 내용을 <strong>그럴듯하게 지어낼 수</strong> 있습니다(1강 환각). CS 답변이 틀리면 사고죠.</p>
+<pre><code class="language-text">청크에 "환불 3일"만 있는데
+LLM이 "환불 3일, 그리고 무료로 반품 픽업도 해드립니다" 라고 덧붙이면? → 거짓 정보!
+</code></pre>
+<h3 id="2_1">② 출처 표시</h3>
+<p>답변이 <strong>어느 문서 몇 페이지</strong> 근거인지 보여야 신뢰가 갑니다. 감사·디버깅에도 필수죠.</p>
+<blockquote>
+<p>"환불은 3일 이내입니다. <strong>(출처: 환불교환정책.pdf 1페이지)</strong>"</p>
+</blockquote>
+<p>괄호 안 <strong>출처</strong>가 있어야 답을 믿을 수 있습니다.</p>
+<hr/>
+<h2 id="3-rag-qa">3. RAG QA = 검색 + 제약 + 출처</h2>
+<p>이 셋을 한 번에 푸는 게 <strong>RAG QA 체인</strong>입니다.</p>
+<p><strong>질문</strong> 이 들어오면:</p>
+<ol>
+<li><strong>① 검색</strong>(15강) — 관련 청크 k개</li>
+<li><strong>② 프롬프트 조립</strong> — "이 문서 근거로만 답하라"</li>
+<li><strong>③ 생성</strong> — LLM이 답변</li>
+<li><strong>④ 출처 첨부</strong> — 어느 문서 몇 페이지</li>
+</ol>
+<p>→ 결과: <code>{"answer": "환불은 3일 이내", "sources": [{"환불교환정책.pdf", 1}]}</code></p>
+<p>핵심은 "검색만 붙인다고 RAG가 아니라, <strong>검색 결과 안에서만 답하라는 제약</strong>"이 RAG를 RAG답게 만든다는 것입니다.</p>
+<hr/>
+<h2 id="4">4. 이 강에서 배울 것</h2>
+<table>
+<thead>
+<tr>
+<th>목차</th>
+<th>내용</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>02</td>
+<td>QA 체인 구조 (LCEL)</td>
+</tr>
+<tr>
+<td>03</td>
+<td>환각을 억제하는 프롬프트</td>
+</tr>
+<tr>
+<td>04</td>
+<td>출처를 함께 반환하기</td>
+</tr>
+<tr>
+<td>05~07</td>
+<td>QA 체인 만들기 → 모듈화 → 모르면 모른다</td>
+</tr>
+<tr>
+<td>08</td>
+<td>검색 품질 높이기 (k값·재정렬, 신규)</td>
+</tr>
+</tbody>
+</table>
+<p>그리고 QA 로직을 <code>answer(question) -&gt; dict</code> 함수로 모듈화해, <strong>백엔드 서비스(FastAPI 등)에 바로</strong> 쓸 수 있게 만듭니다.</p>
+<hr/>
+<h2 id="5-rag-5">5. RAG 완성 — ⑤ 생성</h2>
+<p>이 강으로 RAG 5단계가 완성됩니다.</p>
+<blockquote>
+<p>① 로드 ✓ · ② 청킹 ✓ · ③ 임베딩 ✓ · ④ 저장/검색 ✓ · <strong>⑤ 생성 ← 16강(지금)</strong></p>
+</blockquote>
+<p>13~15강에서 만든 검색 인프라 위에, 이 강에서 "근거로 답하기"를 더하면 <strong>완전한 RAG 시스템</strong>이 됩니다. 진짜 사내 문서 기반 상담봇이 완성되는 거죠.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>검색한 청크를 LLM에게 줘 <strong>자연어 답변</strong>으로 만든다(⑤ 생성).</li>
+<li>두 가지 필수: <strong>환각 억제</strong>("문서 없으면 모른다") + <strong>출처 표시</strong>.</li>
+<li>RAG QA = <strong>검색 + "근거로만 답하라" 제약 + 출처</strong>.</li>
+<li><code>answer(q) -&gt; dict</code>로 모듈화해 백엔드에 바로 연결.</li>
+<li>이 강으로 RAG 5단계가 <strong>완성</strong>된다.</li>
+<li>다음 절에서 QA 체인 구조(LCEL)를 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><span class="prv off"><span class="lbl"> </span> </span><a class="nxt" href="02_QA-체인-구조-LCEL.html"><span class="lbl">다음 절 →</span>02. QA 체인 구조 LCEL</a></div>
+</div>
+</body></html>

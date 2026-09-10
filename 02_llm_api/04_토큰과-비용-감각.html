@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제2강 — 토큰과 비용 감각</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제2강 · llm api</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제2강 · llm api — 세부 목차</b><a class="" href="01_왜-LLM-API를-알아야-하는가.html">01. 왜 LLM API를 알아야 하는가</a><a class="" href="02_요청-응답-구조.html">02. 요청 응답 구조</a><a class="" href="03_시스템-지시로-역할-부여.html">03. 시스템 지시로 역할 부여</a><a class="cur" href="04_토큰과-비용-감각.html">04. 토큰과 비용 감각</a><a class="" href="05_temperature와-생성-제어.html">05. temperature와 생성 제어</a><a class="" href="06_따라하기-Gemini-호출.html">06. 따라하기 Gemini 호출</a><a class="" href="07_따라하기-OpenAI-호환-호출.html">07. 따라하기 OpenAI 호환 호출</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">토큰과 비용 감각</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>LLM은 글자가 아니라 <strong>토큰(token)</strong> 단위로 글을 읽고 씁니다. 그리고 <strong>요금은 토큰 수로 매겨집니다.</strong> 토큰을 이해하면 "이 서비스 월 얼마 나올까?"를 숫자로 예측하고, 비용을 줄일 수 있습니다.</p>
+<hr/>
+<h2 id="1">1. 토큰이란? — 글을 자르는 단위</h2>
+<p>LLM은 문장을 통째로 보지 않고, <strong>토큰</strong>이라는 작은 조각으로 잘라서 처리합니다. 토큰은 대략 "단어 또는 단어의 일부"입니다.</p>
+<ul>
+<li>영어: <code>"earbuds"</code> → 보통 1~2개 토큰</li>
+<li>한국어: <code>"이어버드"</code> → 보통 더 잘게 쪼개져 여러 토큰</li>
+</ul>
+<p>중요한 사실 하나: <strong>같은 뜻이라도 한국어가 영어보다 토큰을 더 많이 먹습니다.</strong> 한글은 영어보다 잘게 쪼개지는 경향이 있기 때문입니다. 이건 비용에 직접 영향을 줍니다.</p>
+<blockquote>
+<p>비유: 토큰은 <strong>택시 미터기</strong>입니다. 거리(글자 수)가 아니라 미터기가 찍는 횟수(토큰 수)로 요금이 매겨집니다. 그리고 한국어는 미터기가 더 자주 찍히는 길이라고 보면 됩니다.</p>
+</blockquote>
+<hr/>
+<h2 id="2-vs">2. 입력 토큰 vs 출력 토큰</h2>
+<p>요금은 두 가지로 나뉩니다.</p>
+<ul>
+<li><strong>입력(prompt) 토큰</strong>: 우리가 보낸 것 — 시스템 지시 + 질문 + (나중엔) 대화 기록·검색 결과</li>
+<li><strong>출력(candidates) 토큰</strong>: 모델이 생성한 답변</li>
+</ul>
+<p>보통 <strong>출력 토큰이 입력보다 비쌉니다.</strong> 그래서 "답을 짧게" 시키는 것도 비용 절감의 한 방법입니다.</p>
+<pre><code class="language-python">u = resp.usage_metadata
+print(u.prompt_token_count)      # 입력 토큰 (내가 보낸 것)
+print(u.candidates_token_count)  # 출력 토큰 (모델이 만든 것)
+print(u.total_token_count)       # 합계
+</code></pre>
+<hr/>
+<h2 id="3-vs">3. 직접 토큰을 세어 보자 (한국어 vs 영어)</h2>
+<p>같은 의미의 문장을 한국어와 영어로 각각 보내, 토큰 수를 비교해 보겠습니다. (실습 파일: <code>sections/02_llm_api/04_토큰과-비용-감각.py</code>)</p>
+<pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
+from google.genai import types
+
+client = get_genai_client()
+
+def count_tokens(text: str):
+    """문장 하나를 보내 입력/출력/합계 토큰을 돌려준다."""
+    resp = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=text,
+        config=types.GenerateContentConfig(temperature=0),
+    )
+    u = resp.usage_metadata
+    return u.prompt_token_count, u.candidates_token_count, u.total_token_count
+
+pairs = {
+    "한국어": "승승장구몰의 무선 블루투스 이어버드를 한 문장으로 친절하게 홍보해줘.",
+    "영어":   "Write one friendly sentence promoting SeungSeung Mall's wireless earbuds.",
+}
+
+for lang, text in pairs.items():
+    in_tok, out_tok, total = count_tokens(text)
+    print(f"[{lang}] 입력={in_tok} / 출력={out_tok} / 합계={total}")
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[한국어] 입력=21 / 출력=18 / 합계=39
+[영어]   입력=15 / 출력=16 / 합계=31
+</code></pre>
+<p>같은 뜻인데도 <strong>한국어 입력 토큰이 더 많죠?</strong> 이게 "한국어가 더 비싸다"의 실체입니다.</p>
+<hr/>
+<h2 id="4">4. 비용을 숫자로 추정하기</h2>
+<p>토큰 수에 <strong>단가</strong>를 곱하면 비용이 나옵니다. 단가는 보통 "토큰 100만 개당 몇 달러" 형식입니다.</p>
+<pre><code class="language-python"># [경고] 아래는 '예시 단가'입니다. 실제 요금은 모델·시점별 공식 단가표를 확인하세요.
+PRICE_IN_PER_1M = 0.075   # 입력 100만 토큰당 $0.075 (예시)
+PRICE_OUT_PER_1M = 0.30   # 출력 100만 토큰당 $0.30  (예시)
+
+def estimate_cost(in_tok: int, out_tok: int) -&gt; float:
+    """1회 호출 비용(USD)을 예시 단가로 계산한다."""
+    return in_tok / 1_000_000 * PRICE_IN_PER_1M + out_tok / 1_000_000 * PRICE_OUT_PER_1M
+
+# 1회는 푼돈처럼 보이지만, 월 호출량을 곱하면 진짜 비용이 보인다
+per_call = estimate_cost(21, 18)        # 한국어 기준
+monthly  = per_call * 10_000            # 월 1만 건
+print(f"1회 ≈ ${per_call:.6f}")
+print(f"월 10,000건 ≈ ${monthly:.2f}  (약 {monthly * 1385:,.0f}원, 환율 1385 가정)")
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">1회 ≈ $0.000007
+월 10,000건 ≈ $0.07  (약 97원, 환율 1385 가정)
+</code></pre>
+<p><code>flash</code> 모델은 이처럼 매우 저렴합니다. 하지만 <strong>답변이 길어지거나(출력 토큰↑), 대화 기록·검색 결과가 쌓이면(입력 토큰↑)</strong> 비용은 빠르게 커집니다. 이 감각을 미리 가지고 있어야 나중에 RAG(13강)나 긴 대화(7·19강)에서 비용 폭탄을 피합니다.</p>
+<hr/>
+<h2 id="5">5. 비용을 줄이는 실전 팁</h2>
+<ul>
+<li><strong>답을 짧게 시킨다</strong>: "3줄 이내로 답하라" → 출력 토큰 절감(가장 비싼 부분).</li>
+<li><strong>시스템 지시를 간결하게</strong>: 매 호출마다 입력 토큰으로 따라붙는다.</li>
+<li><strong>대화 기록을 다듬는다</strong>: 오래된 메시지는 잘라낸다(7강·19강에서 실습).</li>
+<li><strong>싼 모델을 기본값으로</strong>: 어려운 작업만 큰 모델로(가성비 라우팅).</li>
+</ul>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>LLM은 <strong>토큰</strong> 단위로 처리하고, <strong>요금도 토큰으로</strong> 매긴다.</li>
+<li><strong>입력/출력 토큰</strong>이 따로 있고, 보통 <strong>출력이 더 비싸다.</strong></li>
+<li>같은 뜻이라도 <strong>한국어가 토큰을 더 많이</strong> 쓴다.</li>
+<li><code>usage_metadata</code>로 토큰을 확인하고, 단가를 곱해 <strong>월 비용을 예측</strong>할 수 있다.</li>
+<li>다음 절에서는 답변의 일관성을 조절하는 <strong>temperature</strong>를 배웁니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="03_시스템-지시로-역할-부여.html"><span class="lbl">← 이전 절</span>03. 시스템 지시로 역할 부여</a><a class="nxt" href="05_temperature와-생성-제어.html"><span class="lbl">다음 절 →</span>05. temperature와 생성 제어</a></div>
+</div>
+</body></html>

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제13강 — 따라하기 — PDF 로드하기</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제13강 · rag concept</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제13강 · rag concept — 세부 목차</b><a class="" href="01_검색으로-근거를-찾아-답하기.html">01. 검색으로 근거를 찾아 답하기</a><a class="" href="02_LLM의-세가지-한계.html">02. LLM의 세가지 한계</a><a class="" href="03_RAG-파이프라인-5단계.html">03. RAG 파이프라인 5단계</a><a class="" href="04_왜-청킹하는가.html">04. 왜 청킹하는가</a><a class="cur" href="05_따라하기-PDF-로드하기.html">05. 따라하기 PDF 로드하기</a><a class="" href="06_따라하기-청킹하기.html">06. 따라하기 청킹하기</a><a class="" href="07_청크-크기와-오버랩-튜닝.html">07. 청크 크기와 오버랩 튜닝</a><a class="" href="08_다양한-문서-로더.html">08. 다양한 문서 로더</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="pdf">따라하기 — PDF 로드하기</h1>
+<h2 id="_1">목표</h2>
+<p><code>PyPDFLoader</code>로 사내 PDF(환불교환정책.pdf)를 읽어, 페이지 단위 <code>Document</code> 객체로 만듭니다. 실제 파일은 <code>code/ch13_rag_concept.py</code> 입니다.</p>
+<hr/>
+<h2 id="0">0. 실습 준비 (설치)</h2>
+<pre><code class="language-bash">conda activate agentic
+
+# 13강에서 처음 쓰는 라이브러리
+#  - langchain-community      : PyPDFLoader 등 문서 로더
+#  - langchain-text-splitters : RecursiveCharacterTextSplitter
+#  - pypdf                    : PDF 읽기 실제 엔진
+pip install langchain langchain-community langchain-text-splitters pypdf
+</code></pre>
+<p>이번 강은 <code>data/docs/환불교환정책.pdf</code>를 씁니다. <strong>임베딩 없이</strong> 진행하므로 API 키가 없어도 됩니다.</p>
+<hr/>
+<h2 id="1-pypdfloader-pdf">1. PyPDFLoader로 PDF 읽기</h2>
+<p><code>PyPDFLoader</code>는 PDF를 <strong>페이지 단위</strong>로 읽어 <code>Document</code> 객체로 만듭니다.</p>
+<pre><code class="language-python"># 실행: python code/ch13_rag_concept.py
+import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import DOCS            # DOCS = data/docs 폴더 경로
+
+# PyPDFLoader: PDF를 페이지 단위 Document(본문+메타데이터)로 읽어 오는 로더
+from langchain_community.document_loaders import PyPDFLoader
+
+pdf_path = DOCS / "환불교환정책.pdf"
+loader = PyPDFLoader(str(pdf_path))
+docs = loader.load()           # 페이지 단위 Document 리스트
+</code></pre>
+<p><code>loader.load()</code>는 PDF의 <strong>각 페이지마다 <code>Document</code> 하나</strong>를 만듭니다. 3페이지 PDF면 Document 3개가 나오죠.</p>
+<hr/>
+<h2 id="2-document">2. Document 구조 들여다보기</h2>
+<p><code>Document</code>는 두 부분으로 이뤄집니다.</p>
+<pre><code class="language-python">print("로드한 페이지 수:", len(docs))
+print("첫 페이지 메타데이터:", docs[0].metadata)
+print("첫 페이지 내용 일부:")
+print(docs[0].page_content[:200])
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">로드한 페이지 수: 3
+첫 페이지 메타데이터: {'source': '.../환불교환정책.pdf', 'page': 0}
+첫 페이지 내용 일부:
+ 승승장구몰 환불·교환 정책
+1. 환불 규정
+단순 변심에 의한 환불은 상품 수령 후 7일 이내 신청 가능합니다 ...
+</code></pre>
+<p><code>Document</code>의 두 부분:</p>
+<ul>
+<li><strong><code>page_content</code></strong>: 페이지의 <strong>본문 텍스트</strong> (실제 내용)</li>
+<li><strong><code>metadata</code></strong>: <strong>출처 정보</strong> — <code>source</code>(파일 경로), <code>page</code>(페이지 번호)</li>
+</ul>
+<hr/>
+<h2 id="3-metadata">3. metadata가 중요한 이유</h2>
+<p><code>metadata</code>의 <code>page</code> 정보는 단순해 보이지만 <strong>매우 중요</strong>합니다. 나중에 답변에 <strong>출처를 표시</strong>할 때 쓰이거든요(16강).</p>
+<pre><code class="language-python"># 16강에서 이렇게 활용됨:
+# "환불은 7일 이내 가능합니다. (출처: 환불교환정책.pdf 1페이지)"
+# → 괄호 안 출처(파일명·페이지)는 Document.metadata 에서 가져온다.
+</code></pre>
+<p>RAG의 큰 장점 중 하나가 <strong>"답의 출처를 추적할 수 있다"</strong> 는 것인데(02번), 그게 바로 이 <code>metadata</code> 덕분입니다. 어느 문서 몇 페이지에서 나온 답인지 알 수 있죠. 그래서 로드 단계에서 metadata가 잘 보존되는 게 중요합니다.</p>
+<hr/>
+<h2 id="4-document-rag">4. Document — RAG의 공통 화폐</h2>
+<p><code>Document</code>(page_content + metadata)는 RAG 파이프라인 전체에서 쓰이는 <strong>공통 데이터 형식</strong>입니다.</p>
+<blockquote>
+<p>PDF 로드 → <strong>Document</strong> → 청킹 → <strong>Document(조각)</strong> → 임베딩 → 벡터</p>
+</blockquote>
+<p>이처럼 <code>Document</code> 형식이 파이프라인 내내 흐릅니다(굵게 표시한 두 지점).</p>
+<p>PDF든 CSV든 무엇을 로드하든, 결과는 항상 <code>Document</code> 형식입니다(08번에서 확인). 그래서 청킹·임베딩 같은 이후 단계는 <strong>소스 종류와 무관하게</strong> 똑같이 동작합니다. 일종의 "공통 화폐"인 셈이죠.</p>
+<hr/>
+<h2 id="5">5. 파일이 없을 때 대비</h2>
+<p>실무 코드는 파일이 없을 때를 대비합니다.</p>
+<pre><code class="language-python">def load_pdf(name: str):
+    """data/docs 안의 PDF를 로드해 페이지 단위 Document 리스트를 반환."""
+    pdf_path = DOCS / name
+    if not pdf_path.exists():
+        raise SystemExit(f"[파일 없음] {pdf_path}\n  data/docs 폴더에 PDF가 있는지 확인하세요.")
+    return PyPDFLoader(str(pdf_path)).load()
+</code></pre>
+<p>파일이 없으면 친절한 안내와 함께 종료합니다. "FileNotFoundError"라는 알 수 없는 에러보다, "이 경로에 PDF가 있는지 확인하세요"가 훨씬 도움이 되죠.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>13강 설치: <code>pip install langchain langchain-community langchain-text-splitters pypdf</code>.</li>
+<li><code>PyPDFLoader.load()</code>는 PDF를 <strong>페이지 단위 Document</strong>로 만든다.</li>
+<li><code>Document</code> = <strong>page_content</strong>(본문) + <strong>metadata</strong>(출처·페이지).</li>
+<li><code>metadata</code>의 page 정보가 나중에 <strong>출처 표시</strong>의 근거가 된다(16강).</li>
+<li><code>Document</code>는 RAG 파이프라인의 <strong>공통 형식</strong>(소스 무관).</li>
+<li>다음 절에서 이 Document를 청킹합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="04_왜-청킹하는가.html"><span class="lbl">← 이전 절</span>04. 왜 청킹하는가</a><a class="nxt" href="06_따라하기-청킹하기.html"><span class="lbl">다음 절 →</span>06. 따라하기 청킹하기</a></div>
+</div>
+</body></html>

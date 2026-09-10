@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제20강 — 실습문제와 해답</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제20강 · long term memory</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제20강 · long term memory — 세부 목차</b><a class="" href="01_어제-말한걸-기억-못하는-봇.html">01. 어제 말한걸 기억 못하는 봇</a><a class="" href="02_단기기억-vs-장기기억.html">02. 단기기억 vs 장기기억</a><a class="" href="03_도구로서의-장기기억.html">03. 도구로서의 장기기억</a><a class="" href="04_따라하기-프로필-영속-저장-도구.html">04. 따라하기 프로필 영속 저장 도구</a><a class="" href="05_따라하기-새-세션에서도-기억.html">05. 따라하기 새 세션에서도 기억</a><a class="" href="06_SQLite로-장기기억-옮기기.html">06. SQLite로 장기기억 옮기기</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="cur" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">실습문제와 해답</h1>
+<p>직접 코드를 고쳐 보며 20강 내용을 손에 익힙니다. 먼저 <strong>스스로 풀어 본 뒤</strong> 해답을 펼쳐 보세요. (이 실습은 <code>GOOGLE_API_KEY</code>가 필요합니다.)</p>
+<hr/>
+<h2 id="1">문제 1 — 프로필 읽기/쓰기 도구 작성</h2>
+<p><code>get_profile(user_id)</code>와 <code>update_profile(user_id, key, value)</code> 두 도구를 직접 작성해 에이전트에 붙이세요.</p>
+<ul>
+<li>두 도구는 <code>data/user_profiles.json</code>을 읽고 씁니다.</li>
+<li>기대 결과: "내 선호 카테고리를 가전으로 바꿔줘" 호출 후 JSON 파일의 해당 사용자 <code>선호카테고리</code>가 실제로 <code>가전</code>으로 변경되면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib, json, shutil
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_chat, DATA
+from langchain_core.tools import tool
+from langchain.agents import create_agent
+
+STORE = DATA / "user_profiles_rw.json"
+SRC = DATA / "user_profiles.json"
+
+def _load():
+    if not STORE.exists():
+        shutil.copy(SRC, STORE)
+    return json.load(open(STORE, encoding="utf-8"))
+
+def _save(data):
+    json.dump(data, open(STORE, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+
+@tool
+def get_profile(user_id: str) -&gt; str:
+    """고객ID로 프로필을 조회한다."""
+    return json.dumps(_load().get(user_id, {}), ensure_ascii=False)
+
+@tool
+def update_profile(user_id: str, key: str, value: str) -&gt; str:
+    """프로필의 한 항목을 갱신해 영속 저장한다."""
+    data = _load()
+    data.setdefault(user_id, {})[key] = value
+    _save(data)
+    return f"{user_id}의 {key}를 {value}로 저장했습니다."
+
+agent = create_agent(get_chat(temperature=0), tools=[get_profile, update_profile],
+    system_prompt="너는 상담원이다. 선호를 말하면 update_profile로 저장하라.")
+
+out = agent.invoke({"messages": [{"role": "user",
+    "content": "나 C0001인데 선호 카테고리를 가전으로 바꿔줘"}]})
+print(out["messages"][-1].content)
+
+# 파일에서 검증
+print("파일 확인:", _load()["C0001"].get("선호카테고리"))
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">네, C0001님의 선호 카테고리를 가전으로 변경했습니다.
+파일 확인: 가전
+</code></pre>
+
+
+**해설**: `update_profile`이 호출되면서 `_save`로 파일에 쓰였고, 파일을 다시 읽으니 "가전"으로 바뀐 게 확인됩니다. 핵심은 `_save`가 **디스크에 쓰기** 때문에 변경이 영속된다는 것입니다. 에이전트가 "선호를 말하면 저장하라"는 지침에 따라 알아서 도구를 호출했죠.
+
+</details>
+<hr/>
+<h2 id="2">문제 2 — 세션 종료 후에도 기억</h2>
+<p>스크립트를 두 번 실행하는 시나리오를 만드세요. 1차에서 <code>update_profile</code>로 관심사를 저장하고, 2차(재시작 가정)에서 <code>get_profile</code>로 그 값을 읽어 답하세요.</p>
+<ul>
+<li>사용 파일: <code>data/user_profiles.json</code></li>
+<li>기대 결과: 재실행 후에도 1차에서 저장한 값이 답변에 나타나면 성공.</li>
+</ul>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib, json, shutil
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import DATA
+
+STORE = DATA / "user_profiles_rw.json"
+SRC = DATA / "user_profiles.json"
+
+def _load():
+    if not STORE.exists():
+        shutil.copy(SRC, STORE)
+    return json.load(open(STORE, encoding="utf-8"))
+
+def _save(data):
+    json.dump(data, open(STORE, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+
+import sys as _s
+# 실행 인자로 단계 구분: python script.py 1  /  python script.py 2
+phase = _s.argv[1] if len(_s.argv) &gt; 1 else "1"
+
+if phase == "1":
+    # 1차 실행: 관심사 저장
+    data = _load()
+    data.setdefault("C0001", {})["관심사"] = "캠핑 용품"
+    _save(data)
+    print("[1차 실행] C0001 관심사를 '캠핑 용품'으로 저장하고 종료합니다.")
+else:
+    # 2차 실행 (재시작 가정): 저장한 값 읽기
+    data = _load()
+    관심사 = data.get("C0001", {}).get("관심사", "(없음)")
+    print(f"[2차 실행] 재시작 후 읽은 C0001 관심사: {관심사}")
+    print("→ 프로그램을 껐다 켰는데도 값이 살아있음 = 장기 기억!")
+</code></pre>
+
+
+**실행 방법과 출력**
+
+
+<pre><code class="language-text">$ python script.py 1
+[1차 실행] C0001 관심사를 '캠핑 용품'으로 저장하고 종료합니다.
+
+$ python script.py 2        ← 프로그램 완전히 새로 실행
+[2차 실행] 재시작 후 읽은 C0001 관심사: 캠핑 용품
+→ 프로그램을 껐다 켰는데도 값이 살아있음 = 장기 기억!
+</code></pre>
+
+
+**해설**: 1차 실행에서 파일에 "캠핑 용품"을 저장하고 **프로그램을 완전히 종료**했습니다. 그 다음 2차 실행(완전히 새 프로세스)에서 그 값을 읽으니, **그대로 살아 있습니다.** 만약 단기 기억(InMemorySaver, 메모리)이었다면 1차 종료 시 다 사라져 2차에서 "(없음)"이 나왔을 겁니다. 하지만 파일(장기 기억)은 디스크에 영속되니, 프로세스가 바뀌어도 유지되죠. 이게 19강(단기)과 20강(장기)의 결정적 차이를 가장 명확히 보여 주는 실험입니다.
+
+</details>
+<hr/>
+<h2 id="_2">정리</h2>
+<ul>
+<li>문제 1로 <strong>프로필 읽기/쓰기 도구</strong>를 만들어 파일 변경을 확인했습니다.</li>
+<li>문제 2로 <strong>프로그램 재시작 후에도 유지</strong>되는 장기 기억을 검증했습니다.</li>
+</ul>
+<p>이것으로 20강과 3부(RAG·메모리)를 마칩니다. 다음 21강부터 4부 — 워크플로우와 멀티 에이전트로 들어갑니다!</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="07_정리-체크리스트.html"><span class="lbl">← 이전 절</span>07. 정리 체크리스트</a><span class="nxt off"><span class="lbl"> </span> </span></div>
+</div>
+</body></html>

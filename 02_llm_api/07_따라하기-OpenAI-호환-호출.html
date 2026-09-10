@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제2강 — 따라하기 — (보조) OpenAI 호출</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제2강 · llm api</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제2강 · llm api — 세부 목차</b><a class="" href="01_왜-LLM-API를-알아야-하는가.html">01. 왜 LLM API를 알아야 하는가</a><a class="" href="02_요청-응답-구조.html">02. 요청 응답 구조</a><a class="" href="03_시스템-지시로-역할-부여.html">03. 시스템 지시로 역할 부여</a><a class="" href="04_토큰과-비용-감각.html">04. 토큰과 비용 감각</a><a class="" href="05_temperature와-생성-제어.html">05. temperature와 생성 제어</a><a class="" href="06_따라하기-Gemini-호출.html">06. 따라하기 Gemini 호출</a><a class="cur" href="07_따라하기-OpenAI-호환-호출.html">07. 따라하기 OpenAI 호환 호출</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="openai">따라하기 — (보조) OpenAI 호출</h1>
+<h2 id="_1">목표</h2>
+<p>같은 "요청-응답" 구조를 <strong>OpenAI(GPT)</strong> 로도 호출해 봅니다. 핵심은 <strong>"모델 회사가 달라도 구조는 거의 같다"</strong> 를 직접 확인하는 것입니다. 이걸 알면 나중에 모델을 자유롭게 갈아탈 수 있습니다.</p>
+<blockquote>
+<p>이 절은 <strong>보조</strong>입니다. OpenAI 키가 없어도 이 과정은 Gemini만으로 끝까지 진행됩니다. 키가 있는 분만 따라 하세요.</p>
+</blockquote>
+<hr/>
+<h2 id="0">0. 실습 준비 (설치)</h2>
+<pre><code class="language-bash">conda activate agentic
+
+# 2강에서 처음 쓰는 라이브러리
+#  - openai : OpenAI 공식 Python SDK (GPT 모델 호출용)
+pip install openai
+</code></pre>
+<p>그리고 <code>.env</code>에 <code>OPENAI_API_KEY</code>를 추가합니다.</p>
+<pre><code class="language-text">OPENAI_API_KEY=sk-...여러분의_키...
+</code></pre>
+<hr/>
+<h2 id="1-gemini-openai">1. Gemini와 OpenAI, 무엇이 같고 다른가</h2>
+<table>
+<thead>
+<tr>
+<th>구분</th>
+<th>Gemini (google-genai)</th>
+<th>OpenAI (openai)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>클라이언트</td>
+<td><code>genai.Client(api_key=...)</code></td>
+<td><code>OpenAI()</code> (키는 환경변수)</td>
+</tr>
+<tr>
+<td>호출</td>
+<td><code>client.models.generate_content(...)</code></td>
+<td><code>client.chat.completions.create(...)</code></td>
+</tr>
+<tr>
+<td>입력 형식</td>
+<td><code>contents="질문"</code> + <code>config</code>에 시스템 지시</td>
+<td><code>messages=[{role, content}, ...]</code> 리스트</td>
+</tr>
+<tr>
+<td>답 꺼내기</td>
+<td><code>resp.text</code></td>
+<td><code>resp.choices[0].message.content</code></td>
+</tr>
+<tr>
+<td>토큰</td>
+<td><code>resp.usage_metadata</code></td>
+<td><code>resp.usage</code></td>
+</tr>
+</tbody>
+</table>
+<p>가장 큰 차이는 <strong>입력 형식</strong>입니다. OpenAI는 시스템 지시와 질문을 <strong><code>messages</code> 리스트</strong>에 <code>role</code>로 구분해 함께 담습니다.</p>
+<hr/>
+<h2 id="2-openai">2. 코드 — OpenAI로 같은 질문 던지기</h2>
+<pre><code class="language-python">import os
+
+# OpenAI 키가 있을 때만 실행 (없으면 건너뜀)
+key = os.getenv("OPENAI_API_KEY", "")
+if key and not key.startswith("여기에"):
+    from openai import OpenAI
+    oai = OpenAI()                          # 키는 환경변수에서 자동으로 읽음
+
+    # OpenAI 는 messages 리스트로 '시스템 지시'와 '질문'을 함께 보낸다.
+    r = oai.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "너는 승승장구몰 상담원이다."},  # 시스템 지시
+            {"role": "user",   "content": "환불 얼마나 걸려요?"},          # 사용자 질문
+        ],
+    )
+    print("[OpenAI]", r.choices[0].message.content)   # 답 꺼내기
+    print("토큰:", r.usage)                            # 토큰 사용량
+else:
+    print("[OpenAI] OPENAI_API_KEY 미설정 — 생략 (Gemini만으로 충분합니다)")
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[OpenAI] 안녕하세요! 환불은 영업일 기준 평균 3~5일 정도 소요됩니다 ...
+토큰: CompletionUsage(completion_tokens=28, prompt_tokens=24, total_tokens=52)
+</code></pre>
+<blockquote>
+<p>참고: OpenAI 최신 SDK는 <code>system</code> 대신 <code>developer</code> role도 지원합니다. 여기서는 호환성과 직관성을 위해 익숙한 <code>system</code>을 사용합니다 — 둘 다 정상 동작합니다.</p>
+</blockquote>
+<hr/>
+<h2 id="3-messages">3. messages 리스트, 왜 이렇게 생겼나</h2>
+<p><code>messages</code>는 <strong>대화 기록 전체</strong>를 담는 그릇입니다. 그래서 멀티턴 대화를 만들 때 이렇게 쌓아 갑니다.</p>
+<pre><code class="language-python">messages = [
+    {"role": "system", "content": "너는 친절한 상담원이다."},
+    {"role": "user",   "content": "안녕하세요"},
+    {"role": "assistant", "content": "안녕하세요! 무엇을 도와드릴까요?"},  # 모델의 이전 답
+    {"role": "user",   "content": "환불 얼마나 걸려요?"},                # 이어지는 질문
+]
+</code></pre>
+<p>이 "리스트에 대화를 쌓는" 방식은 19강(메모리)에서 매우 중요해집니다. 지금은 "OpenAI는 대화를 리스트로 관리한다"만 기억하면 됩니다.</p>
+<hr/>
+<h2 id="4">4. 핵심 교훈 — 구조는 같다</h2>
+<p>회사가 달라도 결국 <strong>요청(모델+입력+설정) → 응답(텍스트+토큰)</strong> 구조는 똑같습니다. 그래서 이 과정 8강부터는 <strong>LangChain</strong>이라는 도구를 써서, 이 차이마저 감춰 버립니다. <code>get_chat(provider="gemini")</code> 한 줄로 모델을 갈아끼우게 되죠. 그 바탕에는 지금 배운 "구조는 같다"는 원리가 깔려 있습니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>OpenAI 호출은 <code>client.chat.completions.create(model, messages)</code> 형태.</li>
+<li>입력은 <strong><code>messages</code> 리스트</strong>(role: system/user/assistant)로 담는다.</li>
+<li>답은 <code>resp.choices[0].message.content</code>, 토큰은 <code>resp.usage</code>.</li>
+<li><strong>모델 회사가 달라도 요청-응답 구조는 같다</strong> → 모델 교체가 쉽다.</li>
+<li>다음 절에서 2강 전체를 정리합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_따라하기-Gemini-호출.html"><span class="lbl">← 이전 절</span>06. 따라하기 Gemini 호출</a><a class="nxt" href="08_정리-체크리스트.html"><span class="lbl">다음 절 →</span>08. 정리 체크리스트</a></div>
+</div>
+</body></html>

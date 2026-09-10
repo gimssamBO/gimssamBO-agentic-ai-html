@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제5강 — 따라하기 — 자동 Function Calling</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제5강 · function calling</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제5강 · function calling — 세부 목차</b><a class="" href="01_왜-함수호출이-필요한가.html">01. 왜 함수호출이 필요한가</a><a class="" href="02_LLM은-함수를-직접-실행하지-못한다.html">02. LLM은 함수를 직접 실행하지 못한다</a><a class="" href="03_자동실행-vs-수동루프.html">03. 자동실행 vs 수동루프</a><a class="" href="04_따라하기-도구-함수-만들기.html">04. 따라하기 도구 함수 만들기</a><a class="cur" href="05_따라하기-자동-function-calling.html">05. 따라하기 자동 function calling</a><a class="" href="06_따라하기-수동-루프로-결정-관찰.html">06. 따라하기 수동 루프로 결정 관찰</a><a class="" href="07_도구-실행-오류-처리.html">07. 도구 실행 오류 처리</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="function-calling">따라하기 — 자동 Function Calling</h1>
+<h2 id="_1">목표</h2>
+<p>04번에서 만든 도구 두 개를 LLM에 연결합니다. <code>tools=[함수들]</code> 한 줄이면, SDK가 "결정 → 실행 → 결과 전달 → 최종 답"의 5단계를 <strong>자동으로</strong> 돌립니다.</p>
+<hr/>
+<h2 id="1">1. 도구를 한 줄로 연결</h2>
+<pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
+from google.genai import types
+
+client = get_genai_client()
+# (get_stock, get_exchange_rate 는 04번에서 만든 함수)
+
+question = "이어버드 재고 있어? 그리고 가격을 달러로 환산하려면 환율이 얼마야?"
+
+resp = client.models.generate_content(
+    model=GEMINI_MODEL,
+    contents=question,
+    config=types.GenerateContentConfig(
+        tools=[get_stock, get_exchange_rate],   # ← 파이썬 함수를 그대로 도구로!
+        temperature=0,
+    ),
+)
+print(resp.text)
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">승승 무선 블루투스 이어버드 SE는 현재 재고 225개가 있습니다(서울물류).
+달러 환산 시 1 USD = 1,385.50 KRW 환율을 적용하시면 됩니다.
+</code></pre>
+<hr/>
+<h2 id="2">2. 무슨 일이 일어난 걸까?</h2>
+<p>우리는 함수 두 개를 <code>tools</code>에 넘기고 질문만 했을 뿐입니다. 그런데 LLM이 <strong>스스로</strong>:</p>
+<ol>
+<li>질문을 분석해 "재고 도구 + 환율 도구 둘 다 필요하다"고 판단했고,</li>
+<li><code>get_stock(product_name="이어버드")</code>와 <code>get_exchange_rate(currency="USD")</code>를 호출하기로 결정했고,</li>
+<li>(SDK가 자동으로) 두 함수를 실행해 결과를 받았고,</li>
+<li>그 결과를 종합해 최종 답을 만들었습니다.</li>
+</ol>
+<p><strong>우리는 "어떤 도구를 언제 쓰라"고 한마디도 하지 않았습니다.</strong> 모델이 알아서 골랐죠. 이게 Function Calling의 힘입니다.</p>
+<blockquote>
+<p><code>temperature=0</code>을 쓴 이유: 도구 선택은 "정답이 정해진" 판단이라, 매번 같은 도구를 고르도록 무작위성을 끕니다(2강·3강 복습).</p>
+</blockquote>
+<hr/>
+<h2 id="3">3. 도구가 하나만 필요한 질문은?</h2>
+<p>질문에 따라 모델은 <strong>필요한 도구만</strong> 고릅니다.</p>
+<pre><code class="language-python"># 재고만 물으면 → get_stock 만 호출
+resp = client.models.generate_content(
+    model=GEMINI_MODEL,
+    contents="로봇청소기 재고 얼마나 있어?",
+    config=types.GenerateContentConfig(tools=[get_stock, get_exchange_rate], temperature=0),
+)
+print(resp.text)
+# → "로봇청소기 재고는 ...개 입니다." (환율 도구는 안 씀)
+</code></pre>
+<p>모델은 질문을 보고 <strong>필요한 만큼만</strong> 도구를 씁니다. 환율이 필요 없으면 환율 도구를 부르지 않죠.</p>
+<hr/>
+<h2 id="4">4. 도구가 없으면?</h2>
+<p>비교를 위해, 도구 없이 같은 질문을 던져 봅니다.</p>
+<pre><code class="language-python"># 도구 없이 — 1강의 그 한계로 돌아감
+resp = client.models.generate_content(model=GEMINI_MODEL, contents="이어버드 재고 있어?")
+print(resp.text)
+# → "실시간 재고는 확인할 수 없습니다 ..." (또는 환각)
+</code></pre>
+<p>도구가 있고 없고의 차이가 명확합니다. <strong>도구를 쥐여 주는 순간 LLM이 실제 데이터로 답하게</strong> 됩니다.</p>
+<hr/>
+<h2 id="5">5. 자동의 한계 — 안이 안 보인다</h2>
+<p>자동은 편하지만, <strong>중간에 무슨 일이 있었는지 보이지 않습니다.</strong> "모델이 어떤 도구를 어떤 인자로 불렀나?"를 알 수 없죠. 그걸 들여다보려면 <strong>수동 루프</strong>가 필요합니다. 다음 절에서 자동 실행을 끄고 모델의 "결정"을 직접 관찰합니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li><code>tools=[함수들]</code> 한 줄이면 자동으로 5단계가 돈다.</li>
+<li>모델은 질문을 보고 <strong>필요한 도구만 스스로</strong> 고른다.</li>
+<li>도구 선택은 <code>temperature=0</code>으로 일관성을 확보한다.</li>
+<li>자동은 편하지만 <strong>중간 과정이 안 보인다</strong> → 다음 절 수동 루프.</li>
+<li>다음 절에서 모델의 "결정"을 직접 들여다봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="04_따라하기-도구-함수-만들기.html"><span class="lbl">← 이전 절</span>04. 따라하기 도구 함수 만들기</a><a class="nxt" href="06_따라하기-수동-루프로-결정-관찰.html"><span class="lbl">다음 절 →</span>06. 따라하기 수동 루프로 결정 관찰</a></div>
+</div>
+</body></html>

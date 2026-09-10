@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제4강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제4강 · reasoning prompt</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제4강 · reasoning prompt — 세부 목차</b><a class="" href="01_왜-단계적-추론이-필요한가.html">01. 왜 단계적 추론이 필요한가</a><a class="" href="02_CoT-vs-직접답변.html">02. CoT vs 직접답변</a><a class="" href="03_자기검증-검산.html">03. 자기검증 검산</a><a class="" href="04_따라하기-CoT-정답률-비교.html">04. 따라하기 CoT 정답률 비교</a><a class="" href="05_따라하기-자기검증-추가하기.html">05. 따라하기 자기검증 추가하기</a><a class="" href="06_CoT가-효과없는-경우.html">06. CoT가 효과없는 경우</a><a class="cur" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="4">4강에서 배운 것</h2>
+<p>4강에서는 LLM에게 <strong>"생각하는 법"</strong> 을 시키는 추론형 프롬프트를 배웠습니다.</p>
+<ul>
+<li><strong>CoT(Chain-of-Thought)</strong>: "단계적으로 풀어라" 한 줄로 계산·다단계 문제 정답률이 크게 오른다(예: 63% → 100%).</li>
+<li><strong>원리</strong>: 모델은 자기가 쓴 앞 출력을 다음 출력의 <strong>작업 공간(근거)</strong> 으로 삼는다.</li>
+<li><strong>자기검증(검산)</strong>: 답을 다시 계산시켜 신뢰도를 높인다. 민감한 계산의 보험.</li>
+<li><strong>CoT의 한계</strong>: 단순 질문엔 토큰 낭비, 함정 문제엔 오답 위험. 무조건 켜는 게 아니다.</li>
+</ul>
+<hr/>
+<h2 id="_2">한눈에 보는 핵심 코드</h2>
+<pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
+from google.genai import types
+client = get_genai_client()
+
+# 직접 답변 — 빠르지만 다단계 계산에 약함
+def ask_direct(q):
+    r = client.models.generate_content(
+        model=GEMINI_MODEL, contents=f"{q}\n설명 없이 숫자만 답하라.",
+        config=types.GenerateContentConfig(temperature=0))
+    return r.text
+
+# CoT — 단계적으로 풀게 해서 정답률↑
+def ask_cot(q):
+    r = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=f"{q}\n단계적으로 풀어라. 마지막 줄에 '정답: &lt;숫자&gt;'.",
+        config=types.GenerateContentConfig(temperature=0))
+    return r.text
+</code></pre>
+<hr/>
+<h2 id="cot">CoT 사용 판단 (가장 중요)</h2>
+<ul>
+<li><strong>계산 단계가 많은가?</strong> → 예: <strong>CoT 켜기</strong> (민감한 계산이면 검산까지 추가).</li>
+<li>아니오, <strong>단순 사실/상식인가?</strong> → 예: <strong>CoT 끄기</strong> (직접 답변).</li>
+</ul>
+<hr/>
+<h2 id="_3">이 강에서 설치한 라이브러리</h2>
+<pre><code class="language-bash">pip install google-genai python-dotenv pandas   # (앞 강에서 설치했다면 생략 가능)
+</code></pre>
+<p>새로 설치할 라이브러리는 없습니다. <code>re</code>(정규식)는 파이썬 표준 라이브러리입니다.</p>
+<hr/>
+<h2 id="_4">체크리스트</h2>
+<ul>
+<li>[ ] LLM이 암산(직접 답변)을 자주 틀리는 이유를 설명할 수 있다.</li>
+<li>[ ] 직접 답변과 CoT의 정답률 차이를 실험으로 확인했다.</li>
+<li>[ ] "단계적으로 풀어라" 프롬프트와 정답 추출(<code>extract_number</code>)을 작성했다.</li>
+<li>[ ] 자기검증(검산)으로 답을 한 번 더 확인했다.</li>
+<li>[ ] CoT가 손해인 경우(단순 질문·함정 문제)를 구분할 수 있다.</li>
+</ul>
+<hr/>
+<h2 id="_5">한 줄 핵심</h2>
+<blockquote>
+<p><strong>"단계적으로 풀어라" 한 줄이 추론 정답률을 끌어올린다. 단, 다단계 문제에만 켜고, 민감하면 검산을 더한다.</strong></p>
+</blockquote>
+<hr/>
+<h2 id="_6">다음 강 예고</h2>
+<p>5강부터는 드디어 <strong>에이전트의 손발</strong> — 도구(Tool)를 답니다. <strong>Function Calling</strong>으로 LLM이 직접 못 하는 일(재고 조회, 환율 계산)을 파이썬 함수로 대신하게 만듭니다. 두뇌(1~4강)에 손발을 붙이는 첫걸음입니다.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_CoT가-효과없는-경우.html"><span class="lbl">← 이전 절</span>06. CoT가 효과없는 경우</a><a class="nxt" href="08_실습문제와-해답.html"><span class="lbl">다음 절 →</span>08. 실습문제와 해답</a></div>
+</div>
+</body></html>

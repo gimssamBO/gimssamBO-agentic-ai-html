@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제20강 — 따라하기 — 프로필 영속 저장 도구</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제20강 · long term memory</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제20강 · long term memory — 세부 목차</b><a class="" href="01_어제-말한걸-기억-못하는-봇.html">01. 어제 말한걸 기억 못하는 봇</a><a class="" href="02_단기기억-vs-장기기억.html">02. 단기기억 vs 장기기억</a><a class="" href="03_도구로서의-장기기억.html">03. 도구로서의 장기기억</a><a class="cur" href="04_따라하기-프로필-영속-저장-도구.html">04. 따라하기 프로필 영속 저장 도구</a><a class="" href="05_따라하기-새-세션에서도-기억.html">05. 따라하기 새 세션에서도 기억</a><a class="" href="06_SQLite로-장기기억-옮기기.html">06. SQLite로 장기기억 옮기기</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">따라하기 — 프로필 영속 저장 도구</h1>
+<h2 id="_2">목표</h2>
+<p>사용자 프로필을 JSON 파일에 읽고 쓰는 장기 기억 도구(<code>get_profile</code>, <code>update_profile</code>)를 만듭니다. 실제 파일은 <code>code/ch20_ltm.py</code> 입니다.</p>
+<hr/>
+<h2 id="0">0. 실습 준비</h2>
+<p>추가 설치 없음(JSON은 파이썬 표준). 데이터는 <code>data/user_profiles.json</code>(C0001 임도현, C0002 이서윤)을 씁니다.</p>
+<pre><code class="language-bash">conda activate agentic
+python code/common.py
+</code></pre>
+<p>원본을 보호하기 위해 복사본(<code>user_profiles_rw.json</code>)에 읽고 씁니다. 없으면 코드가 자동 생성합니다.</p>
+<hr/>
+<h2 id="1-loadsave">1. 영속 저장소 도우미 (load/save)</h2>
+<p>JSON 파일을 읽고 쓰는 헬퍼입니다. 03번의 "원본 보호" 패턴입니다.</p>
+<pre><code class="language-python">import json, shutil
+from common import DATA
+
+SRC = DATA / "user_profiles.json"        # 원본(읽기 전용)
+STORE = DATA / "user_profiles_rw.json"   # 실제 읽고/쓰는 복사본(영속 저장소)
+
+def _load() -&gt; dict:
+    """저장소(JSON)를 읽어 dict로 반환. 없으면 원본을 복사해 초기화."""
+    if not STORE.exists():
+        shutil.copy(SRC, STORE)              # 최초 실행 시 원본 복사
+    with open(STORE, encoding="utf-8") as f:  # 한글이라 인코딩 명시
+        return json.load(f)
+
+def _save(data: dict) -&gt; None:
+    """dict를 저장소(JSON)에 영속 저장."""
+    with open(STORE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+</code></pre>
+<p>두 가지 포인트:</p>
+<ul>
+<li><strong><code>encoding="utf-8"</code></strong>: 한글 프로필이라 인코딩을 명시(안 하면 깨질 수 있음)</li>
+<li><strong><code>ensure_ascii=False</code></strong>: JSON 저장 시 한글을 <code>\uXXXX</code>가 아니라 그대로 저장(읽기 편함)</li>
+</ul>
+<p>이 <code>_load</code>/<code>_save</code>가 03번에서 말한 "내부 구현"입니다. 나중에 SQLite로 바꿀 부분이죠(06번).</p>
+<hr/>
+<h2 id="2-get_profile">2. 읽기 도구 — get_profile</h2>
+<pre><code class="language-python">from langchain_core.tools import tool
+
+@tool
+def get_profile(customer_id: str) -&gt; str:
+    """고객ID(예: C0001)로 저장된 프로필(이름/선호카테고리/멤버십/관심사/비고)을 조회한다."""
+    data = _load()
+    p = data.get(customer_id)
+    if not p:
+        return f"{customer_id} 프로필이 없습니다."   # 없어도 안전한 메시지
+    return json.dumps(p, ensure_ascii=False)
+</code></pre>
+<p>저장소를 읽어 해당 고객의 프로필을 돌려줍니다. 읽기 도구라 <strong>안전</strong>하죠(데이터 안 바꿈). 없는 고객이어도 예외 없이 안내합니다(18강 도구 원칙).</p>
+<hr/>
+<h2 id="3-update_profile">3. 쓰기 도구 — update_profile</h2>
+<pre><code class="language-python">@tool
+def update_profile(customer_id: str, field: str, value: str) -&gt; str:
+    """고객 프로필의 한 필드를 갱신해 영속 저장한다.
+    field 예: '비고', '관심사', 'membership'."""
+    # [장기기억의 핵심] 이 도구가 파일에 '쓰기' 때문에 세션·재시작을 넘어 정보가 남는다
+    data = _load()
+    if customer_id not in data:
+        data[customer_id] = {"name": "", "선호카테고리": [], "membership": "",
+                             "관심사": "", "비고": ""}
+    data[customer_id][field] = value
+    _save(data)                          # ← 여기서 파일에 영속 저장!
+    return f"{customer_id}의 '{field}'을(를) '{value}'(으)로 저장했습니다."
+</code></pre>
+<p><strong>가장 중요한 줄은 <code>_save(data)</code></strong> 입니다. 이게 파일에 <strong>쓰기</strong> 때문에, 정보가 세션·재시작을 넘어 남습니다. 이게 장기 기억의 본질이죠 — 메모리가 아니라 <strong>파일(영속)</strong> 에 쓰는 것.</p>
+<p>흐름: 저장소 읽기 → 해당 필드 수정 → 저장소에 쓰기. 없는 고객이면 빈 프로필을 먼저 만들고 수정합니다.</p>
+<hr/>
+<h2 id="4">4. 도구 단독 테스트</h2>
+<p>에이전트에 붙이기 전 직접 호출해 봅니다.</p>
+<pre><code class="language-python">print(get_profile.invoke({"customer_id": "C0001"}))   # 기존 프로필 조회
+print(update_profile.invoke({"customer_id": "C0001", "field": "비고", "value": "무향 선호"}))
+print(get_profile.invoke({"customer_id": "C0001"}))   # 변경 확인
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">{"name": "임도현", "선호카테고리": ["가전"], ...}
+C0001의 '비고'을(를) '무향 선호'(으)로 저장했습니다.
+{"name": "임도현", ..., "비고": "무향 선호"}   ← 저장됨!
+</code></pre>
+<p><code>update_profile</code> 후 <code>get_profile</code>로 확인하니 "무향 선호"가 저장됐습니다. 그리고 이건 <strong>파일에 쓰였으니</strong>, 프로그램을 껐다 켜도 남아 있죠(05번에서 확인).</p>
+<hr/>
+<h2 id="5-json">5. JSON 파일 직접 확인</h2>
+<p>실제 파일을 열어 보면 변경이 디스크에 기록된 걸 볼 수 있습니다.</p>
+<pre><code class="language-python">import json
+print(json.dumps(_load()["C0001"], ensure_ascii=False, indent=2))
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">{
+  "name": "임도현",
+  "선호카테고리": ["가전"],
+  "membership": "VIP",
+  "비고": "무향 선호"
+}
+</code></pre>
+<p><code>user_profiles_rw.json</code> 파일에 실제로 "무향 선호"가 적혀 있습니다. 메모리가 아니라 <strong>디스크 파일</strong>에 있으니, 영속적이죠. 이게 단기 기억(메모리)과의 결정적 차이입니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li><code>_load</code>/<code>_save</code>로 JSON 파일을 읽고 쓴다(<code>encoding</code>·<code>ensure_ascii</code> 주의).</li>
+<li><code>get_profile</code>(읽기, 안전), <code>update_profile</code>(쓰기, 영속).</li>
+<li>핵심은 <code>_save(data)</code> — <strong>파일에 쓰기</strong> 때문에 세션·재시작을 넘어 남음.</li>
+<li><strong>원본 보호</strong>(SRC) + 복사본에 쓰기(STORE).</li>
+<li>변경이 <strong>디스크 파일</strong>에 기록 → 영속(메모리와 다름).</li>
+<li>다음 절에서 새 세션·재시작에도 기억하는지 확인합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="03_도구로서의-장기기억.html"><span class="lbl">← 이전 절</span>03. 도구로서의 장기기억</a><a class="nxt" href="05_따라하기-새-세션에서도-기억.html"><span class="lbl">다음 절 →</span>05. 따라하기 새 세션에서도 기억</a></div>
+</div>
+</body></html>

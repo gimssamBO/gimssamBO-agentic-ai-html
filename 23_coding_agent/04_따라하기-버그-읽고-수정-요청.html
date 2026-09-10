@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제23강 — 따라하기 — 버그 읽고 수정 요청</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제23강 · coding agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제23강 · coding agent — 세부 목차</b><a class="" href="01_이-스크립트-왜-안돌지.html">01. 이 스크립트 왜 안돌지</a><a class="" href="02_코딩-에이전트의-핵심-루프.html">02. 코딩 에이전트의 핵심 루프</a><a class="" href="03_안전과-책임.html">03. 안전과 책임</a><a class="cur" href="04_따라하기-버그-읽고-수정-요청.html">04. 따라하기 버그 읽고 수정 요청</a><a class="" href="05_따라하기-저장하고-실행해-검증.html">05. 따라하기 저장하고 실행해 검증</a><a class="" href="06_재귀적-버그수정-오류-피드백-루프.html">06. 재귀적 버그수정 오류 피드백 루프</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">따라하기 — 버그 읽고 수정 요청</h1>
+<h2 id="_2">목표</h2>
+<p>버그가 있는 <code>data/buggy_script.py</code>를 읽어 LLM에게 수정을 요청하고, 응답에서 <strong>순수 코드만 추출</strong>합니다. (실행 검증은 05번에서 붙입니다.)</p>
+<hr/>
+<h2 id="0">0. 실습 준비</h2>
+<pre><code class="language-bash">conda activate agentic
+python code/common.py              # 환경/키 점검
+python data/buggy_script.py        # 먼저 버그를 눈으로 확인 (에러 발생)
+</code></pre>
+<ul>
+<li>추가 설치 라이브러리 <strong>없음</strong> — <code>subprocess</code>, <code>re</code>는 파이썬 표준 라이브러리, <code>get_chat</code>은 앞 강에서 쓰던 헬퍼입니다.</li>
+<li>대상 파일: <code>data/buggy_script.py</code> (버그 3개), 입력: <code>data/sales_daily.csv</code> (date, category, sales).</li>
+</ul>
+<hr/>
+<h2 id="1">1. 임포트와 경로 설정</h2>
+<p><code>code/ch23_coding.py</code>를 만듭니다.</p>
+<pre><code class="language-python"># -*- coding: utf-8 -*-
+# 실행: python code/ch23_coding.py
+import sys, pathlib, subprocess, re
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))  # code/ 를 import 경로에
+from common import get_chat, DATA
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+TARGET = DATA / "buggy_script.py"          # 고칠 대상 (원본, 건드리지 않음)
+FIXED = DATA / "fixed_script.py"           # 수정 결과를 저장할 새 파일
+# [왜 원본 보존] 코딩 에이전트는 결과를 '새 파일'에 쓴다. 원본을 덮어쓰면
+#   잘못 고쳤을 때 되돌릴 수 없으므로, 원본은 비교 기준으로 그대로 둔다.
+</code></pre>
+<p><code>TARGET</code>(원본)과 <code>FIXED</code>(수정본)를 <strong>분리</strong>한 게 핵심입니다(03번 원본 보존). 수정은 항상 새 파일에 씁니다.</p>
+<hr/>
+<h2 id="2">2. 대상 코드 읽기</h2>
+<pre><code class="language-python">def read_code(path: pathlib.Path) -&gt; str:
+    """대상 소스코드를 읽어 문자열로 반환."""
+    return path.read_text(encoding="utf-8")
+</code></pre>
+<p>간단합니다. 파일을 통째로 문자열로 읽어 LLM에게 넘길 준비를 합니다. <code>encoding="utf-8"</code>로 한글 주석도 안전하게 읽죠.</p>
+<hr/>
+<h2 id="3-llm">3. LLM에게 수정 요청</h2>
+<p>핵심 함수입니다. <strong>"버그 고친 전체 코드만 코드블록으로 내놓아라"</strong> 라고 출력 형식을 못박습니다.</p>
+<pre><code class="language-python">def ask_fix(source: str) -&gt; str:
+    """LLM에게 버그 수정된 전체 코드를 받아 순수 코드 문자열로 반환한다."""
+    llm = get_chat(temperature=0)   # [왜 0] 코드 수정은 일관·정확이 생명이라 무작위성 제거
+    prompt = (
+        "다음 파이썬 스크립트에는 버그가 있다. 버그를 모두 찾아 고친 "
+        "**전체 코드**를 하나의 코드블록으로만 출력하라. 설명·주석 외 텍스트는 쓰지 마라.\n"
+        "주의: 한글 CSV 인코딩, 문자열/정수 타입 변환, 숫자 비교를 점검하라.\n\n"
+        f"```python\n{source}\n```"      # 원본 코드를 코드블록에 담아 전달
+    )
+    out = llm.invoke(prompt).content
+    return extract_code(out)         # 응답에서 코드블록만 추출해 반환
+</code></pre>
+<p><strong>프롬프트 설계 포인트</strong></p>
+<ul>
+<li><code>temperature=0</code> — 코드 수정은 <strong>일관·정확</strong>이 생명. 무작위성을 0으로(3·16강).</li>
+<li><code>"전체 코드를 하나의 코드블록으로만"</code> — 일부만 고친 조각이 아니라 <strong>실행 가능한 전체</strong>를 요구.</li>
+<li><code>"설명 텍스트는 쓰지 마라"</code> — 코드만 받아 저장하기 쉽게.</li>
+<li><code>"인코딩·타입 변환·숫자 비교를 점검하라"</code> — 어디를 볼지 <strong>힌트</strong>를 줘 정확도를 높임.</li>
+<li>원본 코드를 <code>```python ... ```</code> 블록에 담아 전달 → LLM이 "이게 입력 코드구나" 명확히 인식.</li>
+</ul>
+<hr/>
+<h2 id="4">4. 코드블록만 추출</h2>
+<p>LLM이 설명을 덧붙여도(02번 함정) <strong>코드블록만</strong> 깔끔히 뽑아냅니다.</p>
+<pre><code class="language-python">def extract_code(text: str) -&gt; str:
+    """LLM 응답에서 ```python ...``` 코드블록만 추출. 없으면 원문 반환.
+
+    [왜 추출] LLM이 코드 앞뒤에 설명을 덧붙이는 경우가 많다. 그대로 실행하면
+    SyntaxError 가 나므로, 정규식으로 코드블록 안쪽만 깔끔히 뽑아낸다.
+    """
+    m = re.search(r"```(?:python)?\s*(.*?)```", text, re.DOTALL)  # 첫 코드블록 매칭
+    return (m.group(1) if m else text).strip()
+</code></pre>
+<p><strong>정규식 해부</strong></p>
+<pre><code class="language-text">```(?:python)?   →  ```python 또는 ``` (python은 있어도 없어도)
+\s*              →  코드블록 시작 직후의 공백/줄바꿈
+(.*?)            →  코드 본문 (캡처 그룹 1) — ? 로 '최소 매칭'(첫 블록만)
+```              →  코드블록 끝
+re.DOTALL        →  . 이 줄바꿈까지 매칭 → 여러 줄 코드 통째로
+</code></pre>
+<p>코드블록이 없으면(<code>m</code>이 <code>None</code>) 원문을 그대로 반환합니다 — LLM이 코드만 깔끔히 줬을 수도 있으니까요.</p>
+<hr/>
+<h2 id="5">5. 여기까지 확인</h2>
+<p>실행 검증(05번)을 붙이기 전에, 수정 코드가 잘 나오는지 출력해 봅니다.</p>
+<pre><code class="language-python">if __name__ == "__main__":
+    source = read_code(TARGET)
+    print("[원본 일부]")
+    print(source[:200], "...\n")
+
+    fixed = ask_fix(source)
+    print("[LLM 수정본 일부]")
+    print(fixed[:300], "...")
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[원본 일부]
+import csv
+with open("data/sales_daily.csv") as f:
+    rows = list(csv.DictReader(f))
+total = 0
+for r in rows:
+    total += r["sales"] ...
+
+[LLM 수정본 일부]
+import csv
+with open("data/sales_daily.csv", encoding="utf-8-sig") as f:   # 인코딩 추가
+    rows = list(csv.DictReader(f))
+total = 0
+for r in rows:
+    total += int(r["sales"])                                    # 정수 변환 ...
+</code></pre>
+<p><strong>관찰 포인트:</strong> LLM이 세 버그를 고친 흔적이 보입니다 — <code>encoding="utf-8-sig"</code> 추가, <code>int()</code> 변환. 하지만 <strong>아직 "정말 돌아가는지"는 모릅니다.</strong> "고친 것처럼 보인다"와 "진짜 고쳐졌다"는 다르죠. 그 검증을 다음 절에서 합니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li><code>TARGET</code>(원본)과 <code>FIXED</code>(수정본)를 <strong>분리</strong> → 원본 보존(03번).</li>
+<li><code>read_code()</code>로 소스를 문자열로 읽어 LLM에 전달.</li>
+<li><code>ask_fix()</code>: <strong><code>temperature=0</code></strong> + "전체 코드만 코드블록으로" + 점검 힌트.</li>
+<li><code>extract_code()</code>: 정규식(<code>re.DOTALL</code>)으로 <strong>코드블록만 추출</strong> → SyntaxError 방지.</li>
+<li>아직은 "고친 것처럼 보일" 뿐 — 다음 절에서 <strong>실행으로 검증</strong>합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="03_안전과-책임.html"><span class="lbl">← 이전 절</span>03. 안전과 책임</a><a class="nxt" href="05_따라하기-저장하고-실행해-검증.html"><span class="lbl">다음 절 →</span>05. 따라하기 저장하고 실행해 검증</a></div>
+</div>
+</body></html>

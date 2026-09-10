@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제6강 — 비슷한 도구 구분하기</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제6강 · tool system</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제6강 · tool system — 세부 목차</b><a class="" href="01_도구가-많아지면-생기는-문제.html">01. 도구가 많아지면 생기는 문제</a><a class="" href="02_모델은-무엇을-보고-도구를-고르나.html">02. 모델은 무엇을 보고 도구를 고르나</a><a class="" href="03_좋은-도구-설계-원칙.html">03. 좋은 도구 설계 원칙</a><a class="" href="04_따라하기-도구-4개-등록하고-관찰.html">04. 따라하기 도구 4개 등록하고 관찰</a><a class="" href="05_따라하기-독스트링-망가뜨려보기.html">05. 따라하기 독스트링 망가뜨려보기</a><a class="cur" href="06_비슷한-도구-구분하기.html">06. 비슷한 도구 구분하기</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">비슷한 도구 구분하기</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>설명이 비슷하게 겹치는 두 도구를 두면, 모델이 <strong>어느 걸 써야 할지 헷갈립니다.</strong> 입력 형태(ID vs 키워드)와 결과 건수(1건 vs 여러 건)를 독스트링에 <strong>명확히 못 박으면</strong>, 비슷한 도구도 또렷이 구분됩니다.</p>
+<hr/>
+<h2 id="1">1. 문제 — 헷갈리게 비슷한 두 도구</h2>
+<p>실무에서는 비슷한 일을 하는 도구가 여럿 생깁니다. 예를 들어 "상품을 찾는" 도구가 두 개 있다고 합시다.</p>
+<pre><code class="language-python">def get_product_info(query: str) -&gt; str:
+    """상품을 조회한다."""        # ← 모호! 언제 쓰는지 모름
+    ...
+
+def search_product(query: str) -&gt; str:
+    """상품을 찾는다."""          # ← 위와 거의 같은 설명!
+    ...
+</code></pre>
+<p><code>"상품을 조회한다"</code> 와 <code>"상품을 찾는다"</code> — 사람이 봐도 차이를 모르겠죠. 모델은 더 헷갈립니다. "상품 정보 알려줘"라는 질문에 둘 중 뭘 골라야 할지 <strong>갈팡질팡</strong>합니다.</p>
+<blockquote>
+<p>비유: 회사에 "고객지원팀"과 "고객서비스팀"이 따로 있는데, 둘 다 설명이 "고객을 돕는다"라면? 전화를 어디로 돌려야 할지 아무도 모릅니다. <strong>역할 경계가 모호</strong>하기 때문입니다.</p>
+</blockquote>
+<hr/>
+<h2 id="2-before">2. BEFORE — 모호한 설명으로 헷갈리는 모습</h2>
+<p>(실습 파일: <code>sections/06_tool_system/06_비슷한-도구-구분하기.py</code>)</p>
+<pre><code class="language-python">def get_product_info(query: str) -&gt; str:
+    """상품을 조회한다."""        # [경고] 모호
+    row = products[products["product_id"] == query]
+    ...
+
+def search_product(query: str) -&gt; str:
+    """상품을 찾는다."""          # [경고] 위와 거의 같은 설명
+    hit = products[products["product_name"].str.contains(query, na=False)]
+    ...
+
+# 두 도구로 질문 → 모델이 헷갈림
+which_tool("상품ID P0001 상세정보 알려줘.", [get_product_info, search_product])
+which_tool("이어버드 들어간 상품들 다 찾아줘.", [get_product_info, search_product])
+</code></pre>
+<p><strong>예상 출력 (BEFORE)</strong></p>
+<pre><code class="language-text">  '상품ID P0001 상세정보 알려줘.' → search_product({'query': 'P0001'})   ← 틀린 선택!
+  '이어버드 들어간 상품들 다 찾아줘.' → get_product_info({'query': '이어버드'})  ← 틀린 선택!
+</code></pre>
+<p>둘 다 <strong>엉뚱하게</strong> 골랐습니다. ID로 1건 찾아야 할 질문에 키워드 검색 도구를, 키워드로 여러 개 찾아야 할 질문에 ID 조회 도구를 골랐죠.</p>
+<hr/>
+<h2 id="3-after">3. AFTER — 경계를 못 박은 설명</h2>
+<p>해결책은 <strong>입력 형태</strong>와 <strong>결과 건수</strong>를 설명에 명확히 적는 것입니다.</p>
+<pre><code class="language-python">def get_product_info_clear(product_id: str) -&gt; str:
+    """[정확검색] 상품ID(예: P0001)로 정확히 1건의 상세정보(이름/카테고리/가격)를 반환한다.
+    상품ID를 이미 알 때만 사용. 상품명·키워드로는 사용하지 말 것."""
+    ...
+
+def search_product_clear(keyword: str) -&gt; str:
+    """[키워드검색] 상품명 일부(예: '이어버드', '청바지')로 여러 후보를 찾아 이름 목록을 반환한다.
+    상품ID를 모르고 이름·키워드만 알 때 사용."""
+    ...
+</code></pre>
+<p>세 가지 장치를 넣었습니다.</p>
+<ul>
+<li><strong>태그</strong>: <code>[정확검색]</code> vs <code>[키워드검색]</code> — 한눈에 역할 구분</li>
+<li><strong>입력 형태 명시</strong>: "상품ID(P0001)" vs "상품명 일부('이어버드')"</li>
+<li><strong>언제 쓰지 말지</strong>: "상품명·키워드로는 사용하지 말 것" — 경계를 양쪽에서 못 박음</li>
+</ul>
+<p><strong>예상 출력 (AFTER)</strong></p>
+<pre><code class="language-text">  '상품ID P0001 상세정보 알려줘.' → get_product_info_clear({'product_id': 'P0001'})   ← 정확!
+  '이어버드 들어간 상품들 다 찾아줘.' → search_product_clear({'keyword': '이어버드'})  ← 정확!
+</code></pre>
+<p>이제 모델이 <strong>정확히</strong> 구분합니다. 설명만 바꿨을 뿐인데 말이죠.</p>
+<hr/>
+<h2 id="4-3">4. 비슷한 도구를 구분하는 3가지 기법</h2>
+<ol>
+<li><strong>입력 형태를 명시</strong>: "ID로" vs "이름 일부로" → 입력이 다르면 도구가 다름이 분명해진다.</li>
+<li><strong>결과 건수를 명시</strong>: "정확히 1건" vs "여러 후보" → 기대 결과로 구분.</li>
+<li><strong>부정 조건을 추가</strong>: "~로는 사용하지 말 것" → 잘못된 선택을 막는 울타리.</li>
+</ol>
+<p>특히 3번(부정 조건)은 강력합니다. "이 도구를 <strong>언제 쓰지 말아야</strong> 하는가"를 적으면, 모델이 경계를 더 또렷이 인식합니다.</p>
+<hr/>
+<h2 id="5">5. 더 나은 해법 — 도구를 합치거나 줄이기</h2>
+<p>사실 가장 좋은 건, <strong>애초에 헷갈리는 중복 도구를 만들지 않는 것</strong>입니다. 두 도구가 정말 비슷하다면:</p>
+<ul>
+<li>하나로 <strong>합칠 수</strong> 있는지 (인자로 구분)</li>
+<li>하나를 <strong>없앨 수</strong> 있는지</li>
+</ul>
+<p>를 먼저 검토하세요. 도구 개수가 적을수록 모델의 선택이 쉬워집니다. 그래도 둘 다 필요하다면, 위의 "경계 못 박기" 기법을 씁니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>설명이 비슷하게 겹치는 도구는 모델을 <strong>헷갈리게</strong> 한다.</li>
+<li>해결: <strong>입력 형태 + 결과 건수 + 부정 조건(언제 쓰지 말지)</strong> 을 명시한다.</li>
+<li>더 근본적으로는 <strong>중복 도구를 합치거나 줄인다</strong>.</li>
+<li>핵심은 변함없다 — "도구 설명은 모델을 위한 프롬프트다."</li>
+<li>다음 절에서 6강을 정리합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="05_따라하기-독스트링-망가뜨려보기.html"><span class="lbl">← 이전 절</span>05. 따라하기 독스트링 망가뜨려보기</a><a class="nxt" href="07_정리-체크리스트.html"><span class="lbl">다음 절 →</span>07. 정리 체크리스트</a></div>
+</div>
+</body></html>

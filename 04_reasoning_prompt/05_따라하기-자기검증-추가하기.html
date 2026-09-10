@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제4강 — 따라하기 — 자기검증(검산) 추가하기</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제4강 · reasoning prompt</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제4강 · reasoning prompt — 세부 목차</b><a class="" href="01_왜-단계적-추론이-필요한가.html">01. 왜 단계적 추론이 필요한가</a><a class="" href="02_CoT-vs-직접답변.html">02. CoT vs 직접답변</a><a class="" href="03_자기검증-검산.html">03. 자기검증 검산</a><a class="" href="04_따라하기-CoT-정답률-비교.html">04. 따라하기 CoT 정답률 비교</a><a class="cur" href="05_따라하기-자기검증-추가하기.html">05. 따라하기 자기검증 추가하기</a><a class="" href="06_CoT가-효과없는-경우.html">06. CoT가 효과없는 경우</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">따라하기 — 자기검증(검산) 추가하기</h1>
+<h2 id="_2">목표</h2>
+<p>04번에서 만든 CoT 풀이에 <strong>검산 단계</strong>를 더해, 답의 신뢰도를 한 단계 높입니다. 실제 파일은 <code>code/ch04_cot.py</code>의 <code>verify()</code> 부분입니다.</p>
+<hr/>
+<h2 id="1-03">1. 검산 함수 (03번 복습)</h2>
+<p>CoT로 푼 답을 모델에게 다시 검토시킵니다.</p>
+<pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
+from google.genai import types
+
+client = get_genai_client()
+
+def verify(question: str, cot_answer: str) -&gt; str:
+    """제출한 풀이를 모델에게 다시 검산시켜 신뢰도를 높인다."""
+    resp = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=(
+            f"[문제] {question}\n[제출한 풀이]\n{cot_answer}\n\n"
+            "위 풀이가 맞는지 다시 계산해 검산하라. "
+            "틀렸다면 올바른 값을, 맞다면 그대로 '정답: &lt;숫자&gt;'로 확정하라."
+        ),
+        config=types.GenerateContentConfig(temperature=0),
+    )
+    return resp.text
+</code></pre>
+<hr/>
+<h2 id="2-2">2. "풀이 → 검산" 2단계 실행</h2>
+<pre><code class="language-python">import pandas as pd
+df = pd.read_csv(DATA / "math_word_problems.csv")
+
+q = df.iloc[0]["question"]
+
+# 1단계: CoT로 푼다
+first = ask_cot(q)
+print("[1차 풀이]\n", first)
+
+# 2단계: 그 풀이를 검산한다
+print("\n[검산 결과]\n", verify(q, first))
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">[1차 풀이]
+1) 79000 × 3 = 237000
+2) 237000 × 10% = 23700
+3) 237000 - 23700 = 213300
+정답: 213300
+
+[검산 결과]
+제출한 풀이를 검토합니다.
+79000 × 3 = 237000 ✓
+237000 × 0.1 = 23700 ✓
+237000 - 23700 = 213300 ✓
+정답: 213300
+</code></pre>
+<p>검산을 거쳐 답이 <strong>확정</strong>되었습니다. 1차 풀이에 오류가 있었다면 여기서 바로잡혔겠죠.</p>
+<hr/>
+<h2 id="3">3. 검산이 오류를 잡는 예 (개념)</h2>
+<p>만약 1차 풀이가 틀렸다고 가정해 봅시다.</p>
+<pre><code class="language-python">wrong_solution = """1) 79000 × 3 = 237000
+2) 237000 × 10% = 23700
+3) 237000 - 23700 = 213000   ← 계산 실수!
+정답: 213000"""
+
+print(verify(q, wrong_solution))
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">검토 결과, 3단계에 오류가 있습니다.
+237000 - 23700 = 213300 이어야 합니다.
+정답: 213300   ← 검산이 실수를 바로잡음
+</code></pre>
+<p>검산 단계가 <strong>틀린 답을 고쳐</strong> 줬습니다. 이것이 자기검증의 가치입니다.</p>
+<hr/>
+<h2 id="4">4. 비용을 고려한 사용 전략</h2>
+<p>검산은 호출을 한 번 더 하므로 <strong>토큰(비용)이 약 2배</strong>입니다. 그래서 모든 질문에 쓰지 않고, 전략적으로 씁니다.</p>
+<pre><code class="language-python">def answer_with_optional_verify(question: str, critical: bool) -&gt; str:
+    """critical=True(돈·재고 등 민감)일 때만 검산을 추가한다."""
+    first = ask_cot(question)
+    if critical:
+        return verify(question, first)   # 민감한 계산 → 검산
+    return first                          # 일반 질문 → 그대로
+</code></pre>
+<p>"이 계산이 틀리면 큰일 나는가?"를 기준으로 <code>critical</code>을 정하면 됩니다. 환불액·발주량 같은 건 <code>True</code>, 단순 안내는 <code>False</code>.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>"CoT 풀이 → 검산"의 <strong>2단계</strong>로 답을 확정한다.</li>
+<li>검산은 1차 풀이의 <strong>계산 실수를 잡아낸다</strong>.</li>
+<li>비용이 2배이므로 <strong>민감한 계산에만</strong> 선택적으로 적용한다.</li>
+<li>다음 절에서는 CoT가 <strong>오히려 손해인 경우</strong>를 살펴봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="04_따라하기-CoT-정답률-비교.html"><span class="lbl">← 이전 절</span>04. 따라하기 CoT 정답률 비교</a><a class="nxt" href="06_CoT가-효과없는-경우.html"><span class="lbl">다음 절 →</span>06. CoT가 효과없는 경우</a></div>
+</div>
+</body></html>

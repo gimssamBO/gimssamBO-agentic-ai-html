@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제7강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제7강 · agent loop</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제7강 · agent loop — 세부 목차</b><a class="" href="01_한번-묻고-끝나지-않는-일.html">01. 한번 묻고 끝나지 않는 일</a><a class="" href="02_ReAct-패턴-생각-행동-관찰.html">02. ReAct 패턴 생각 행동 관찰</a><a class="" href="03_직접-돌리는-루프와-종료조건.html">03. 직접 돌리는 루프와 종료조건</a><a class="" href="04_따라하기-미니-에이전트-루프-구현.html">04. 따라하기 미니 에이전트 루프 구현</a><a class="" href="05_따라하기-2-3스텝-작업-실행.html">05. 따라하기 2 3스텝 작업 실행</a><a class="" href="06_무한루프와-반복호출-방지.html">06. 무한루프와 반복호출 방지</a><a class="" href="07_대화기록-누적과-토큰-관리.html">07. 대화기록 누적과 토큰 관리</a><a class="cur" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="7">7강에서 배운 것</h2>
+<p>7강에서는 에이전트의 <strong>심장</strong> — Agent Loop를 직접 만들었습니다.</p>
+<ul>
+<li><strong>ReAct 패턴</strong>: 생각(Thought) → 행동(Action) → 관찰(Observation)의 반복.</li>
+<li><strong>핵심 원리</strong>: 관찰 결과를 <code>history</code>에 누적해 다음 입력으로 되돌린다.</li>
+<li><strong>종료 조건</strong>: 모델이 도구를 안 부름(정상) + <code>max_steps</code>(안전장치).</li>
+<li><strong>무한루프 방지</strong>: (도구명+인자) 서명을 <code>set</code>에 기록해 반복 호출 차단.</li>
+<li><strong>토큰 관리</strong>: history가 쌓이면 토큰↑ → 트리밍으로 잘라낸다(첫 질문은 보존).</li>
+</ul>
+<hr/>
+<h2 id="_2">한눈에 보는 핵심 코드</h2>
+<pre><code class="language-python">def run_agent(question, max_steps=6):
+    config = types.GenerateContentConfig(
+        tools=list(TOOLS.values()),
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+        system_instruction="너는 재고 관리 에이전트다 ...", temperature=0)
+    history = [types.Content(role="user", parts=[types.Part(text=question)])]
+    seen = set()                                     # 반복 방지
+
+    for step in range(1, max_steps + 1):
+        resp = client.models.generate_content(model=GEMINI_MODEL, contents=history, config=config)
+        if not resp.function_calls:                  # 종료①: 최종 답
+            return resp.text
+        history.append(resp.candidates[0].content)
+        for fc in resp.function_calls:
+            sig = (fc.name, tuple(sorted(dict(fc.args).items())))
+            if sig in seen:                          # 반복 호출 차단
+                return None
+            seen.add(sig)
+            result = TOOLS[fc.name](**dict(fc.args)) # 우리가 실행 (Observation)
+            history.append(types.Content(role="user", parts=[
+                types.Part.from_function_response(name=fc.name, response={"result": result})]))
+    return None                                      # 종료②: max_steps 초과
+</code></pre>
+<hr/>
+<h2 id="_3">이 강에서 설치한 라이브러리</h2>
+<pre><code class="language-bash">pip install google-genai python-dotenv pandas   # (앞 강에서 설치했다면 생략 가능)
+</code></pre>
+<p>새로 설치할 라이브러리는 없습니다.</p>
+<hr/>
+<h2 id="_4">체크리스트</h2>
+<ul>
+<li>[ ] ReAct(생각→행동→관찰 반복) 구조를 그림으로 설명할 수 있다.</li>
+<li>[ ] 관찰 결과를 <code>from_function_response</code>로 되돌려야 한다는 것을 이해했다.</li>
+<li>[ ] <code>for</code> 루프로 미니 에이전트를 직접 구현했다.</li>
+<li>[ ] 종료 조건(최종 답·max_steps)을 두는 이유를 안다.</li>
+<li>[ ] 반복 호출 감지와 history 트리밍으로 비용 사고를 막을 수 있다.</li>
+</ul>
+<hr/>
+<h2 id="_5">한 줄 핵심</h2>
+<blockquote>
+<p><strong>에이전트 = 생각·행동·관찰을 반복하는 루프. 관찰을 되돌려 다음 행동을 정하고, max_steps·반복감지·트리밍으로 안전하고 싸게 돌린다.</strong></p>
+</blockquote>
+<hr/>
+<h2 id="1">1부를 마치며</h2>
+<p>여기까지가 <strong>1부(2~7강)</strong> 입니다. raw SDK(google-genai)로 LLM 호출부터 도구·루프까지 <strong>에이전트의 원리를 손으로</strong> 만들어 봤습니다. 이제 그 원리를 알았으니, 8강부터는 <strong>LangChain·LangGraph</strong> 같은 프레임워크로 같은 일을 더 적은 코드로 합니다. 원리를 알고 프레임워크를 쓰면, 프레임워크가 안에서 무슨 일을 하는지 훤히 보입니다.</p>
+<h2 id="_6">다음 강 예고</h2>
+<p>8강에서는 <strong>Planning Agent</strong>를 만듭니다. ReAct가 "한 스텝씩 즉흥적으로" 움직였다면, Planning은 "먼저 전체 계획을 세우고 실행"하는 방식입니다. 그리고 여기서 <strong>LangChain</strong> 프레임워크와 <strong>구조화 출력(Pydantic)</strong> 을 처음 도입합니다.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="07_대화기록-누적과-토큰-관리.html"><span class="lbl">← 이전 절</span>07. 대화기록 누적과 토큰 관리</a><a class="nxt" href="09_실습문제와-해답.html"><span class="lbl">다음 절 →</span>09. 실습문제와 해답</a></div>
+</div>
+</body></html>

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제4강 — 따라하기 — CoT 정답률 비교</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">🔢 Agentic AI 강의</a>
+<span class="ch">제4강 · reasoning prompt</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제4강 · reasoning prompt — 세부 목차</b><a class="" href="01_왜-단계적-추론이-필요한가.html">01. 왜 단계적 추론이 필요한가</a><a class="" href="02_CoT-vs-직접답변.html">02. CoT vs 직접답변</a><a class="" href="03_자기검증-검산.html">03. 자기검증 검산</a><a class="cur" href="04_따라하기-CoT-정답률-비교.html">04. 따라하기 CoT 정답률 비교</a><a class="" href="05_따라하기-자기검증-추가하기.html">05. 따라하기 자기검증 추가하기</a><a class="" href="06_CoT가-효과없는-경우.html">06. CoT가 효과없는 경우</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="cot">따라하기 — CoT 정답률 비교</h1>
+<h2 id="_1">목표</h2>
+<p>쇼핑 계산 문제 8개를 <strong>직접 답변</strong>과 <strong>CoT</strong> 두 방식으로 풀어, 정답률을 숫자로 비교합니다. "단계적으로 풀어라" 한 줄의 효과를 눈으로 확인합니다. 실제 파일은 <code>code/ch04_cot.py</code> 입니다.</p>
+<hr/>
+<h2 id="0">0. 실습 준비 (설치)</h2>
+<pre><code class="language-bash">conda activate agentic
+
+# 4강에 필요한 라이브러리 (대부분 앞 강에서 설치했다면 생략 가능)
+#  - pandas : 계산 문제 CSV를 다루기 위해
+pip install google-genai python-dotenv pandas
+</code></pre>
+<p>이번 강은 <code>data/math_word_problems.csv</code>(쇼핑 계산 문제 8개 + 정답 <code>answer</code>)를 씁니다.</p>
+<hr/>
+<h2 id="1">1. 공통 시작부 + 데이터 로드</h2>
+<pre><code class="language-python"># 실행: python code/ch04_cot.py
+import sys, pathlib, re
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_genai_client, GEMINI_MODEL, DATA
+from google.genai import types
+import pandas as pd
+
+client = get_genai_client()
+# math_word_problems.csv = 쇼핑 계산 문제 8개. answer 컬럼이 정수 정답.
+df = pd.read_csv(DATA / "math_word_problems.csv")
+print("문제 수:", len(df))
+print(df.iloc[0]["question"], "→ 정답:", df.iloc[0]["answer"])
+</code></pre>
+<p><code>re</code>는 답에서 숫자를 뽑는 정규식, <code>pandas</code>는 문제 CSV를 다루기 위해 가져옵니다.</p>
+<hr/>
+<h2 id="2">2. 세 함수 준비</h2>
+<p>02번에서 만든 <code>ask_direct</code>, <code>ask_cot</code>, <code>extract_number</code>를 그대로 씁니다.</p>
+<pre><code class="language-python">def extract_number(text: str):
+    """답변에서 마지막 숫자를 정수로 반환(콤마 제거)."""
+    nums = re.findall(r"-?\d[\d,]*", text.replace(" ", ""))
+    return int(nums[-1].replace(",", "")) if nums else None
+
+def ask_direct(question: str) -&gt; str:
+    resp = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=f"{question}\n설명 없이 최종 숫자(원)만 답하라.",
+        config=types.GenerateContentConfig(temperature=0),
+    )
+    return resp.text
+
+def ask_cot(question: str) -&gt; str:
+    resp = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=(f"{question}\n단계적으로 풀어라. 각 계산을 한 줄씩 쓰고, "
+                  "맨 마지막 줄에 '정답: &lt;숫자&gt;' 형식으로 답하라."),
+        config=types.GenerateContentConfig(temperature=0),
+    )
+    return resp.text
+</code></pre>
+<hr/>
+<h2 id="3-8">3. 8문제 전체 정답률 비교</h2>
+<p>이게 이 강의 <strong>핵심 실험</strong>입니다. 8문제를 두 방식으로 풀고, 정답(<code>answer</code>)과 비교해 각각 몇 개 맞혔는지 셉니다.</p>
+<pre><code class="language-python">direct_ok = cot_ok = 0
+for _, row in df.iterrows():
+    ans = int(row["answer"])
+    d = extract_number(ask_direct(row["question"]))   # 직접 답변의 숫자
+    c = extract_number(ask_cot(row["question"]))      # CoT 답변의 숫자
+    direct_ok += (d == ans)     # bool(True/False)은 1/0으로 더해진다
+    cot_ok += (c == ans)
+    print(f"{row['problem_id']} 정답={ans:&gt;7} | 직접={d} {'O' if d==ans else 'X'}"
+          f" | CoT={c} {'O' if c==ans else 'X'}")
+
+n = len(df)
+print(f"\n직접 답변 정답률 : {direct_ok}/{n} = {direct_ok/n:.0%}")
+print(f"CoT  정답률      : {cot_ok}/{n} = {cot_ok/n:.0%}")
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">M01 정답= 213300 | 직접=213000 X | CoT=213300 O
+M02 정답= 386650 | 직접=386650 O | CoT=386650 O
+M03 정답=  45000 | 직접=44000 X | CoT=45000 O
+...
+직접 답변 정답률 : 5/8 = 63%
+CoT  정답률      : 8/8 = 100%
+</code></pre>
+<blockquote>
+<p>파이썬 팁: <code>direct_ok += (d == ans)</code> 에서 <code>(d == ans)</code>는 <code>True</code>/<code>False</code>인데, 파이썬은 이를 <code>1</code>/<code>0</code>으로 취급해 더합니다. 그래서 "맞은 개수"가 자동으로 쌓입니다.</p>
+</blockquote>
+<hr/>
+<h2 id="4">4. 결과 해석</h2>
+<p>같은 모델, 같은 문제인데 <strong>프롬프트 한 줄("단계적으로 풀어라")</strong> 로 정답률이 <strong>63% → 100%</strong> 로 뛰었습니다.</p>
+<ul>
+<li>직접 답변이 틀린 문제(M01, M03 …)는 모두 <strong>다단계 계산</strong>입니다.</li>
+<li>M02처럼 단순한 건 직접 답변도 맞힙니다.</li>
+</ul>
+<p>즉, <strong>계산 단계가 많을수록 CoT의 우위가 뚜렷</strong>합니다. (모델 버전에 따라 수치는 달라질 수 있지만 경향은 동일합니다.)</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>8문제 비교로 CoT가 직접 답변보다 <strong>정답률이 크게 높음</strong>을 확인했다(예: 63% → 100%).</li>
+<li><code>(예측 == 정답)</code>을 더해 맞은 개수를 세는 패턴을 익혔다.</li>
+<li>CoT의 우위는 <strong>다단계 계산</strong>에서 특히 뚜렷하다.</li>
+<li>다음 절에서는 답에 <strong>검산을 더해</strong> 신뢰도를 높입니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="03_자기검증-검산.html"><span class="lbl">← 이전 절</span>03. 자기검증 검산</a><a class="nxt" href="05_따라하기-자기검증-추가하기.html"><span class="lbl">다음 절 →</span>05. 따라하기 자기검증 추가하기</a></div>
+</div>
+</body></html>

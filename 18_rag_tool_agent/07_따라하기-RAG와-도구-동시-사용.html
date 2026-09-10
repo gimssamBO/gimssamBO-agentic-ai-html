@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제18강 — 따라하기 — RAG와 도구를 동시에 쓰는 질문</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제18강 · rag tool agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제18강 · rag tool agent — 세부 목차</b><a class="" href="01_문서검색과-실시간데이터를-한-에이전트에.html">01. 문서검색과 실시간데이터를 한 에이전트에</a><a class="" href="02_모든-능력을-도구로-통일.html">02. 모든 능력을 도구로 통일</a><a class="" href="03_멀티스텝-처리.html">03. 멀티스텝 처리</a><a class="" href="04_도구-설계-원칙.html">04. 도구 설계 원칙</a><a class="" href="05_따라하기-정책검색-도구.html">05. 따라하기 정책검색 도구</a><a class="" href="06_따라하기-실시간-데이터-도구.html">06. 따라하기 실시간 데이터 도구</a><a class="cur" href="07_따라하기-RAG와-도구-동시-사용.html">07. 따라하기 RAG와 도구 동시 사용</a><a class="" href="08_읽기-도구와-쓰기-도구의-차이.html">08. 읽기 도구와 쓰기 도구의 차이</a><a class="" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="rag">따라하기 — RAG와 도구를 동시에 쓰는 질문</h1>
+<h2 id="_1">목표</h2>
+<p>정책 검색(RAG)과 데이터 조회(DB) 도구 세 개를 한 에이전트에 묶고, 두 출처가 섞인 복합 질문을 처리합니다. RAG 파트의 종착점입니다.</p>
+<hr/>
+<h2 id="1">1. 한 에이전트에 묶기</h2>
+<p>세 도구를 <strong>같은 목록</strong>에 넣습니다. 이게 이 강의 핵심입니다(01·02번).</p>
+<pre><code class="language-python">from langchain.agents import create_agent
+from common import get_chat
+
+# RAG 도구(문서) + DB 도구 2종(주문·재고)을 '같은 목록'에
+tools = [build_policy_tool(), get_order_status, get_stock]
+llm = get_chat(temperature=0)
+agent = create_agent(
+    llm,
+    tools=tools,
+    system_prompt=(
+        "너는 승승장구몰 CS 에이전트다. 정책은 policy_search로 검색하고, "
+        "주문 상태는 get_order_status, 재고는 get_stock으로 조회해 종합해 답하라."
+    ),
+)
+</code></pre>
+<p><code>build_policy_tool()</code>(RAG)과 <code>get_order_status</code>, <code>get_stock</code>(DB)이 한 리스트에 들어갔습니다. 에이전트에겐 똑같은 도구 3개죠. 시스템 프롬프트에 각 도구의 역할을 적어, 라우팅을 돕습니다.</p>
+<hr/>
+<h2 id="2">2. 복합 질문 던지기</h2>
+<p>두 출처가 섞인 질문을 던집니다.</p>
+<pre><code class="language-python">q = "어제 받은 이어버드 환불하고 싶은데 절차랑, 내 주문 O000902 상태 알려줘"
+out = agent.invoke({"messages": [{"role": "user", "content": q}]})
+for m in out["messages"]:
+    m.pretty_print()
+print("\n[최종 답변]\n", out["messages"][-1].content)
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">Human: 어제 받은 이어버드 환불하고 싶은데 절차랑, 내 주문 O000902 상태 알려줘
+
+Ai: Tool Calls: policy_search({'query': '환불 절차'})            ← RAG 도구
+Tool: 환불은 상품 수령 후 7일 이내 신청 가능하며, 물류센터 도착 후 3일 내...
+
+Ai: Tool Calls: get_order_status({'order_id': 'O000902'})        ← DB 도구
+Tool: 주문 O000902: 상품='승승 무선 블루투스 이어버드 SE', 상태='배송완료'...
+
+Ai: [최종 답변]
+환불 절차는 상품 수령 후 7일 이내에 신청하시면, 반품 상품이 물류센터에 도착한 후
+영업일 기준 3일 이내에 환불됩니다. 주문 O000902(이어버드, 수량 1)은 현재
+'배송완료' 상태이므로 환불 신청이 가능합니다.
+</code></pre>
+<hr/>
+<h2 id="3">3. 무슨 일이 일어났나</h2>
+<p>03번 멀티스텝이 그대로 작동했습니다.</p>
+<pre><code class="language-text">1. 분해: "환불 절차"(문서) + "주문 상태"(DB)로 나눔
+2. 순차: policy_search(RAG) → get_order_status(DB) 차례로 호출
+3. 종합: "환불 절차는... 주문은 배송완료 상태이므로 환불 가능"
+</code></pre>
+<p>특히 마지막 종합이 인상적입니다. 에이전트가 두 정보를 단순 나열이 아니라 <strong>"배송완료 상태이므로 환불 신청 가능"</strong> 이라고 <strong>연결</strong>했죠. 정책(절차)과 데이터(상태)를 엮어 추론한 겁니다. RAG 도구와 DB 도구를 한 에이전트가 함께 쓰니 이런 종합이 가능합니다.</p>
+<hr/>
+<h2 id="4-rag">4. 핵심 — RAG가 다른 도구와 섞였다</h2>
+<p>이 출력의 핵심은 <strong>policy_search(RAG)와 get_order_status(DB)가 한 흐름에서</strong> 호출됐다는 것입니다.</p>
+<pre><code class="language-text">17강: RAG 도구만 (정책)
+12강: DB 도구만 (주문·재고)
+18강: RAG 도구 + DB 도구 함께!  ← 이게 종착점
+</code></pre>
+<p>13~16강에서 복잡했던 RAG가, 17강에서 도구가 되고, 18강에서 다른 도구들과 자연스럽게 섞였습니다. 에이전트에겐 셋 다 "호출하면 결과 주는 함수"니까요(02번). 이게 "모든 능력을 도구로 통일"의 결실입니다.</p>
+<hr/>
+<h2 id="5-rag">5. RAG 파트의 완성</h2>
+<p>13강부터 18강까지의 여정이 여기서 끝납니다.</p>
+<pre><code class="language-text">13강 RAG 개념 → 14강 임베딩 → 15강 벡터DB → 16강 RAG QA
+→ 17강 RAG를 도구로 → 18강 RAG + 데이터 도구 통합 ✓
+</code></pre>
+<p>이제 여러분은 <strong>진짜 사내 문서 기반 상담봇</strong>을 만들 수 있습니다. 정책 문서의 지식과 실시간 DB 데이터를 함께 다루는, 실전에 쓸 수 있는 에이전트죠. 1부(도구)와 2부 RAG가 하나로 합쳐진 것입니다.</p>
+<hr/>
+<h2 id="6">6. 다음은? 쓰기 도구</h2>
+<p>지금까지 도구는 모두 <strong>읽기(조회)</strong> 였습니다. 안전했죠. 하지만 진짜 CS는 "환불 실행", "주문 취소" 같은 <strong>상태 변경(쓰기)</strong> 도 해야 합니다. 그건 위험합니다 — 잘못하면 돈이 나가고 되돌리기 어렵죠. 다음 절(08번)에서 쓰기 도구의 위험성과 안전장치를 배웁니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>RAG 도구 + DB 도구를 <strong>한 목록</strong>에 넣어 에이전트 구성.</li>
+<li>복합 질문을 <strong>분해 → 순차(RAG→DB) → 종합</strong>으로 처리.</li>
+<li>에이전트가 두 정보를 <strong>연결·추론</strong>("배송완료라 환불 가능").</li>
+<li>RAG가 다른 도구와 <strong>자연스럽게 섞임</strong>(02번 통일의 결실).</li>
+<li>13~18강 RAG 파트가 <strong>완성</strong> — 진짜 사내 상담봇.</li>
+<li>다음 절에서 위험한 <strong>쓰기 도구</strong>를 배웁니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="06_따라하기-실시간-데이터-도구.html"><span class="lbl">← 이전 절</span>06. 따라하기 실시간 데이터 도구</a><a class="nxt" href="08_읽기-도구와-쓰기-도구의-차이.html"><span class="lbl">다음 절 →</span>08. 읽기 도구와 쓰기 도구의 차이</a></div>
+</div>
+</body></html>

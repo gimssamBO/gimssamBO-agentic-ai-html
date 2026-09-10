@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제21강 — StateGraph의 3요소</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제21강 · agent workflow</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제21강 · agent workflow — 세부 목차</b><a class="" href="01_자유로운게-항상-좋은건-아니다.html">01. 자유로운게 항상 좋은건 아니다</a><a class="" href="02_에이전트-vs-워크플로우.html">02. 에이전트 vs 워크플로우</a><a class="cur" href="03_StateGraph의-3요소.html">03. StateGraph의 3요소</a><a class="" href="04_따라하기-상태-스키마와-노드-정의.html">04. 따라하기 상태 스키마와 노드 정의</a><a class="" href="05_따라하기-그래프-조립과-일괄처리.html">05. 따라하기 그래프 조립과 일괄처리</a><a class="" href="06_조건부-분기-add_conditional_edges.html">06. 조건부 분기 add_conditional_edges</a><a class="" href="07_노드-실패-처리와-상태-검증.html">07. 노드 실패 처리와 상태 검증</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="stategraph-3">StateGraph의 3요소</h1>
+<h2 id="_1">한 줄 요약</h2>
+<p>LangGraph의 <code>StateGraph</code>는 세 요소로 구성됩니다 — <strong>State(상태)</strong>: 워크플로우가 공유하는 데이터, <strong>Node(노드)</strong>: 상태를 읽고 일부를 채우는 함수, <strong>Edge(엣지)</strong>: 노드 간 실행 순서. 이 셋으로 흐름을 "선언"합니다.</p>
+<hr/>
+<h2 id="1">1. 세 요소 한눈에</h2>
+<p>노드들이 <strong>Edge</strong>(화살표)로 이어지며, 각 노드가 공유 <strong>State</strong>를 채워 갑니다.</p>
+<blockquote>
+<p>START → [분류 노드] → [우선순위 노드] → [배정 노드] → END</p>
+</blockquote>
+<p>이때 모든 노드는 하나의 State <code>{content, category, priority, team}</code>를 공유하며, 각자 자기 칸을 읽고 채웁니다.</p>
+<ul>
+<li><strong>State</strong>: 모든 노드가 공유하는 데이터(가운데 박스)</li>
+<li><strong>Node</strong>: 상태를 읽고 일부를 채우는 함수(분류·우선순위·배정)</li>
+<li><strong>Edge</strong>: 노드를 잇는 화살표(실행 순서)</li>
+</ul>
+<hr/>
+<h2 id="2-state-typeddict">2. State — 공유 상태 (TypedDict)</h2>
+<p>State는 워크플로우 전체가 <strong>공유하는 데이터</strong>입니다. <code>TypedDict</code>로 구조(스키마)를 정의합니다.</p>
+<pre><code class="language-python">from typing import TypedDict
+
+class TicketState(TypedDict):
+    content: str    # 티켓 원문 (입력)
+    category: str   # 분류 노드가 채움
+    priority: str   # 우선순위 노드가 채움
+    team: str       # 배정 노드가 채움
+</code></pre>
+<p>State는 "노드들이 함께 채워 가는 양식 서류"입니다. 처음엔 <code>content</code>(입력)만 있고, 노드들이 차례로 <code>category</code>, <code>priority</code>, <code>team</code>을 채웁니다. 각 노드가 한 칸씩 채워 다음 노드로 넘기는 거죠.</p>
+<blockquote>
+<p><code>TypedDict</code>는 "dict인데 키와 타입이 정해진 것"입니다. 일반 dict처럼 쓰지만, 어떤 키가 있어야 하는지 미리 선언하죠. 8강의 Pydantic처럼 구조를 명시하는 도구입니다.</p>
+</blockquote>
+<hr/>
+<h2 id="3-node">3. Node — 상태를 채우는 함수</h2>
+<p>Node는 <strong><code>state -&gt; dict</code> 함수</strong>입니다. 상태를 읽고, 자기가 담당한 필드만 채워 dict로 반환합니다.</p>
+<pre><code class="language-python">def classify_node(state: TicketState) -&gt; dict:
+    """티켓 내용을 카테고리로 분류한다."""
+    category = ...   # state["content"]를 보고 분류
+    return {"category": category}   # 채운 필드만 반환!
+</code></pre>
+<p>핵심: 노드는 <strong>자기가 채운 필드만</strong> 반환합니다(<code>{"category": ...}</code>). 전체 State를 돌려줄 필요 없죠. LangGraph가 이 부분 결과를 <strong>기존 State에 자동 병합</strong>합니다.</p>
+<pre><code class="language-text">classify_node가 {"category": "결제"} 반환
+  → State에 category="결제"가 자동으로 합쳐짐 (다른 필드는 그대로)
+</code></pre>
+<hr/>
+<h2 id="4-edge">4. Edge — 실행 순서</h2>
+<p>Edge는 노드를 잇는 <strong>화살표(실행 순서)</strong> 입니다.</p>
+<pre><code class="language-python">g.add_edge(START, "classify")      # 시작 → 분류
+g.add_edge("classify", "priority") # 분류 → 우선순위
+g.add_edge("priority", "assign")   # 우선순위 → 배정
+g.add_edge("assign", END)          # 배정 → 끝
+</code></pre>
+<p><code>add_edge(A, B)</code>는 "A 다음에 B를 실행하라"는 뜻입니다. START에서 시작해 END로 끝나죠. 이 엣지들이 <strong>흐름을 고정</strong>합니다 — 항상 분류→우선순위→배정 순서로요.</p>
+<p><strong>START</strong>와 <strong>END</strong>는 시작·종료를 나타내는 가상 노드입니다. START는 "여기서 시작", END는 "여기서 끝".</p>
+<hr/>
+<h2 id="5-api">5. 핵심 API</h2>
+<table>
+<thead>
+<tr>
+<th>API</th>
+<th>역할</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>StateGraph(State)</code></td>
+<td>상태 스키마로 그래프 생성</td>
+</tr>
+<tr>
+<td><code>add_node("name", fn)</code></td>
+<td>노드 등록(이름 → 함수)</td>
+</tr>
+<tr>
+<td><code>add_edge(A, B)</code></td>
+<td>A 다음에 B 실행</td>
+</tr>
+<tr>
+<td><code>START</code> / <code>END</code></td>
+<td>시작/종료 가상 노드</td>
+</tr>
+<tr>
+<td><code>graph.compile()</code></td>
+<td>실행 가능한 워크플로우로 컴파일</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-python">from langgraph.graph import StateGraph, START, END
+
+g = StateGraph(TicketState)        # 1. 상태로 그래프 생성
+g.add_node("classify", classify_node)  # 2. 노드 등록
+g.add_edge(START, "classify")      # 3. 엣지로 순서
+workflow = g.compile()             # 4. 컴파일 → 실행 가능
+</code></pre>
+<p><code>compile()</code>이 그래프를 <strong>실행 가능한 워크플로우</strong>로 만듭니다. 그러면 <code>workflow.invoke(초기상태)</code>로 실행할 수 있죠(05번).</p>
+<hr/>
+<h2 id="6">6. "흐름을 선언한다"</h2>
+<p>StateGraph의 철학은 <strong>"흐름을 선언적으로 표현"</strong> 하는 것입니다.</p>
+<pre><code class="language-text">if문으로 흐름 짜기(명령형):       StateGraph로 선언하기:
+  result1 = classify(input)        g.add_edge(START, "classify")
+  result2 = priority(result1)      g.add_edge("classify", "priority")
+  result3 = assign(result2)        g.add_edge("priority", "assign")
+  → 흐름이 코드 순서에 숨음          → 흐름이 엣지로 한눈에 보임
+</code></pre>
+<p><code>if</code>문으로 짜면 흐름이 코드 곳곳에 숨지만, StateGraph는 <strong>엣지로 흐름을 명시</strong>합니다. "분류→우선순위→배정"이 엣지 선언에 또렷이 보이죠. 복잡한 흐름(분기·반복, 06·27강)일수록 이 선언적 방식의 가치가 커집니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>StateGraph 3요소: <strong>State(공유 데이터)·Node(채우는 함수)·Edge(순서)</strong>.</li>
+<li><strong>State</strong>: <code>TypedDict</code>로 정의, 노드들이 함께 채우는 양식.</li>
+<li><strong>Node</strong>: <code>state -&gt; dict</code>, <strong>채운 필드만</strong> 반환(자동 병합).</li>
+<li><strong>Edge</strong>: <code>add_edge(A, B)</code>로 순서 고정, START~END.</li>
+<li><code>compile()</code>로 실행 가능한 워크플로우 생성.</li>
+<li>흐름을 <strong>선언적으로</strong> 표현(엣지로 한눈에).</li>
+<li>다음 절에서 상태·노드를 직접 정의합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="02_에이전트-vs-워크플로우.html"><span class="lbl">← 이전 절</span>02. 에이전트 vs 워크플로우</a><a class="nxt" href="04_따라하기-상태-스키마와-노드-정의.html"><span class="lbl">다음 절 →</span>04. 따라하기 상태 스키마와 노드 정의</a></div>
+</div>
+</body></html>

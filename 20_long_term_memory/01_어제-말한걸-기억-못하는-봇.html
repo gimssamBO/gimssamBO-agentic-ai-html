@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제20강 — 어제 말한 걸 기억 못 하는 봇</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">📣 Agentic AI 강의 </a>
+<span class="ch">제20강 · long term memory</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제20강 · long term memory — 세부 목차</b><a class="cur" href="01_어제-말한걸-기억-못하는-봇.html">01. 어제 말한걸 기억 못하는 봇</a><a class="" href="02_단기기억-vs-장기기억.html">02. 단기기억 vs 장기기억</a><a class="" href="03_도구로서의-장기기억.html">03. 도구로서의 장기기억</a><a class="" href="04_따라하기-프로필-영속-저장-도구.html">04. 따라하기 프로필 영속 저장 도구</a><a class="" href="05_따라하기-새-세션에서도-기억.html">05. 따라하기 새 세션에서도 기억</a><a class="" href="06_SQLite로-장기기억-옮기기.html">06. SQLite로 장기기억 옮기기</a><a class="" href="07_정리-체크리스트.html">07. 정리 체크리스트</a><a class="" href="08_실습문제와-해답.html">08. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">어제 말한 걸 기억 못 하는 봇</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>19강의 InMemorySaver는 <strong>인메모리</strong>라, 서버를 재시작하면 모든 기억이 사라집니다. "저 선크림 알레르기 있어요" 같은 정보는 <strong>다음에 접속해도</strong> 반영돼야 하죠. 사용자에 귀속되는 정보는 <strong>영속 저장소(파일/DB)</strong> 에 남겨야 합니다.</p>
+<hr/>
+<h2 id="1">1. 단기 기억의 한계</h2>
+<p>19강에서 InMemorySaver로 대화를 기억하게 만들었습니다. 하지만 한계가 있죠.</p>
+<pre><code class="language-text">⚠️ 프로세스가 재시작되면 모든 기억이 사라진다!
+</code></pre>
+<p>서버를 껐다 켜거나, 사용자가 며칠 뒤 다시 접속하면, 19강의 기억은 <strong>다 날아갑니다.</strong> 메모리에만 있었으니까요. 그래서 "오늘 대화"는 기억하지만 "어제 대화"는 못 합니다.</p>
+<hr/>
+<h2 id="2">2. 영속이 필요한 정보들</h2>
+<p>실제 서비스에서는 <strong>세션을 넘어 기억해야</strong> 할 정보가 많습니다.</p>
+<pre><code class="language-text">"저 민감성 피부라 무향 제품만 추천해 주세요."
+  → 다음에 접속해도 이 사실이 반영돼야 함
+
+"제 등급이 VIP인데요."
+  → 매번 다시 물어보면 안 됨
+
+"저는 선크림 알레르기가 있어요."
+  → 화장품 추천 시 항상 고려돼야 함 (안전 문제!)
+</code></pre>
+<p>이런 정보는 <strong>한 대화 세션이 아니라 사용자에 영구히 귀속</strong>됩니다. 며칠 뒤 다시 와도, 서버를 재시작해도 기억해야 하죠. 19강의 단기 기억으로는 부족합니다.</p>
+<blockquote>
+<p>비유: 단기 기억은 <strong>상담 중 메모지</strong>(상담 끝나면 버림), 장기 기억은 <strong>고객 카드(파일)</strong>(영구 보관)입니다. "이 고객은 알레르기 있음"은 메모지가 아니라 고객 카드에 적어야 다음에도 보죠.</p>
+</blockquote>
+<hr/>
+<h2 id="3">3. 백엔드에겐 익숙한 일</h2>
+<p>이 구분은 백엔드 개발자에게 매우 익숙합니다.</p>
+<pre><code class="language-text">세션 데이터(휘발성)  →  메모리/세션 스토어  →  단기 기억 (19강)
+사용자 레코드(영속)  →  데이터베이스        →  장기 기억 (20강)
+</code></pre>
+<p>웹 서비스에서 "장바구니"는 세션에, "회원 정보"는 DB에 저장하죠. LLM 에이전트도 똑같습니다 — "지금 대화 맥락"은 메모리에(단기), "사용자 프로필"은 파일/DB에(장기). 데이터의 <strong>수명</strong>에 따라 저장 위치가 다른 겁니다.</p>
+<hr/>
+<h2 id="4">4. 이 강에서 만들 것</h2>
+<p>사용자 프로필을 <strong>파일(JSON)에 영속 저장</strong>하는 장기 기억을 만듭니다.</p>
+<pre><code class="language-text">사용자: "저 C0001인데 선크림 알레르기 있어요" → 프로필 파일에 저장
+(서버 재시작)
+사용자: "저한테 화장품 추천해줘" → 프로필 파일에서 "알레르기" 불러와 반영
+</code></pre>
+<p>핵심 실험은 <strong>에이전트를 새로 만든 뒤(=재시작)에도</strong> 저장한 정보가 살아 있는지 확인하는 것입니다. 19강 단기 기억은 재시작하면 사라지지만, 20강 장기 기억은 파일에 남아 유지되죠.</p>
+<table>
+<thead>
+<tr>
+<th>목차</th>
+<th>내용</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>02</td>
+<td>단기 기억 vs 장기 기억</td>
+</tr>
+<tr>
+<td>03</td>
+<td>도구로서의 장기 기억</td>
+</tr>
+<tr>
+<td>04~05</td>
+<td>프로필 저장 도구 → 새 세션에서도 기억</td>
+</tr>
+<tr>
+<td>06</td>
+<td>SQLite로 장기 기억 옮기기 (신규)</td>
+</tr>
+</tbody>
+</table>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>19강 InMemorySaver는 <strong>인메모리</strong> → 재시작 시 소멸.</li>
+<li>알레르기·선호·등급 등은 <strong>세션을 넘어</strong> 기억해야 함.</li>
+<li>사용자에 귀속되는 정보는 <strong>영속 저장소(파일/DB)</strong> 에.</li>
+<li>백엔드의 <strong>세션(휘발) vs DB(영속)</strong> 분리와 같다.</li>
+<li>핵심: 에이전트를 <strong>새로 만들어도</strong> 저장 정보가 유지.</li>
+<li>다음 절에서 단기/장기 기억을 비교합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><span class="prv off"><span class="lbl"> </span> </span><a class="nxt" href="02_단기기억-vs-장기기억.html"><span class="lbl">다음 절 →</span>02. 단기기억 vs 장기기억</a></div>
+</div>
+</body></html>

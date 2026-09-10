@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제21강 — 자유로운 게 항상 좋은 건 아니다</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제21강 · agent workflow</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제21강 · agent workflow — 세부 목차</b><a class="cur" href="01_자유로운게-항상-좋은건-아니다.html">01. 자유로운게 항상 좋은건 아니다</a><a class="" href="02_에이전트-vs-워크플로우.html">02. 에이전트 vs 워크플로우</a><a class="" href="03_StateGraph의-3요소.html">03. StateGraph의 3요소</a><a class="" href="04_따라하기-상태-스키마와-노드-정의.html">04. 따라하기 상태 스키마와 노드 정의</a><a class="" href="05_따라하기-그래프-조립과-일괄처리.html">05. 따라하기 그래프 조립과 일괄처리</a><a class="" href="06_조건부-분기-add_conditional_edges.html">06. 조건부 분기 add_conditional_edges</a><a class="" href="07_노드-실패-처리와-상태-검증.html">07. 노드 실패 처리와 상태 검증</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">자유로운 게 항상 좋은 건 아니다</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>지금까지의 <code>create_agent</code>는 LLM이 <strong>무엇을 언제 할지 스스로 결정</strong>하는 자유로운 에이전트였습니다. 탐색적 작업엔 강력하지만, "반드시 분류 후 배정" 같은 <strong>정해진 업무</strong>에는 오히려 <strong>고정 워크플로우</strong>가 맞습니다. 예측 가능하고 검증·감사가 쉽거든요.</p>
+<hr/>
+<h2 id="1">1. 자유 에이전트의 그림자</h2>
+<p>8강부터 써 온 <code>create_agent</code>는 LLM이 자유롭게 도구를 골라 일했습니다. 강력하지만, 업무 자동화에는 단점이 있습니다.</p>
+<pre><code class="language-text">자유 에이전트의 단점:
+  - 예측 불가: 매 실행마다 도구 호출 순서·횟수가 달라질 수 있음
+  - 검증 어려움: "반드시 분류 후 배정"이라는 규칙을 강제하기 어려움
+  - 비용 변동: LLM이 루프를 몇 번 돌지 모름
+</code></pre>
+<p>탐색적 질문("이 고객에게 뭘 추천할까?")엔 이 자유로움이 강점입니다. 하지만 <strong>정형화된 반복 업무</strong>엔 오히려 독이 될 수 있죠.</p>
+<hr/>
+<h2 id="2">2. 정해진 순서가 중요한 일</h2>
+<p>CS 티켓 처리를 생각해 봅시다.</p>
+<pre><code class="language-text">티켓 처리 업무:
+  1. 분류 (무슨 문의인가?)
+  2. 우선순위 판단 (얼마나 급한가?)
+  3. 담당팀 배정 (누가 처리하나?)
+  → 이 순서는 반드시 지켜져야 함!
+</code></pre>
+<p>이건 <strong>순서가 정해진 업무</strong>입니다. "분류 안 하고 배정"하거나 "우선순위 건너뛰기"는 안 됩니다. 회사 규칙이니까요. 그런데 자유 에이전트는 이 순서를 보장하지 못합니다 — LLM이 가끔 순서를 건너뛰거나 바꿀 수 있죠.</p>
+<hr/>
+<h2 id="3">3. 워크플로우 — 정해진 파이프라인</h2>
+<p>이런 업무엔 <strong>워크플로우(고정된 파이프라인)</strong> 가 맞습니다.</p>
+<pre><code class="language-text">자유 에이전트: LLM이 "다음에 뭐 할까?" 매번 결정 (자유, 예측불가)
+워크플로우:    개발자가 "분류 → 우선순위 → 배정" 순서를 고정 (정해짐, 예측가능)
+</code></pre>
+<p>워크플로우는 우리가 <strong>흐름을 미리 정합니다.</strong> "분류 다음엔 우선순위, 그 다음엔 배정"이라고 코드로 고정하죠. 그러면 항상 같은 순서로 처리되고, 검증·감사가 쉽습니다.</p>
+<blockquote>
+<p>비유: 자유 에이전트는 <strong>재량껏 일하는 베테랑</strong>(상황 따라 융통성), 워크플로우는 <strong>체크리스트대로 일하는 신입</strong>(정해진 절차)입니다. 응급 상황엔 베테랑이 낫지만, "서류는 반드시 이 순서로 처리"하는 정형 업무엔 체크리스트가 안전하죠. 빠뜨림이 없으니까요.</p>
+</blockquote>
+<hr/>
+<h2 id="4">4. 백엔드의 상태 머신</h2>
+<p>백엔드 개발자에게 워크플로우는 익숙한 개념입니다 — <strong>상태 머신/처리 파이프라인</strong>입니다.</p>
+<pre><code class="language-text">입력 → [단계 1] → [단계 2] → [단계 3] → 출력
+       각 단계가 상태를 받아 일부를 채우고 다음으로 넘김
+</code></pre>
+<p>주문 처리(접수 → 결제 → 배송 → 완료), 회원가입(입력 → 검증 → 저장 → 메일) 같은 게 다 이런 파이프라인이죠. LangGraph의 <code>StateGraph</code>로 이걸 만듭니다.</p>
+<hr/>
+<h2 id="5">5. 이 강에서 만들 것</h2>
+<p>CS 티켓을 <strong>분류 → 우선순위 → 배정</strong> 순서로 처리하는 워크플로우를 만듭니다.</p>
+<pre><code class="language-text">티켓 "결제가 안 돼요"
+  → 분류: 결제 (LLM)
+  → 우선순위: 긴급 (규칙)
+  → 배정: 결제지원팀 (규칙)
+</code></pre>
+<p>흥미로운 점: <strong>분류만 LLM</strong>으로 하고, 우선순위·배정은 <strong>규칙(코드)</strong> 으로 합니다. "LLM이 잘하는 건 LLM에게, 규칙으로 충분한 건 코드에게"라는 분업이죠(10강 "계산은 코드"의 연장).</p>
+<table>
+<thead>
+<tr>
+<th>목차</th>
+<th>내용</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>02</td>
+<td>에이전트 vs 워크플로우</td>
+</tr>
+<tr>
+<td>03</td>
+<td>StateGraph의 3요소</td>
+</tr>
+<tr>
+<td>04~05</td>
+<td>상태·노드 정의 → 그래프 조립</td>
+</tr>
+<tr>
+<td>06</td>
+<td>조건부 분기 (신규)</td>
+</tr>
+<tr>
+<td>07</td>
+<td>노드 실패 처리 (신규)</td>
+</tr>
+</tbody>
+</table>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>자유 에이전트는 <strong>예측 불가·검증 어려움·비용 변동</strong>의 단점.</li>
+<li><strong>정해진 순서</strong>가 중요한 업무엔 <strong>고정 워크플로우</strong>가 맞다.</li>
+<li>워크플로우 = 흐름을 미리 정한 <strong>상태 머신/파이프라인</strong>.</li>
+<li><strong>일부 노드만 LLM</strong>, 나머지는 규칙(분업).</li>
+<li>4부는 자유와 고정, 협업을 다룬다.</li>
+<li>다음 절에서 둘을 자세히 비교합니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><span class="prv off"><span class="lbl"> </span> </span><a class="nxt" href="02_에이전트-vs-워크플로우.html"><span class="lbl">다음 절 →</span>02. 에이전트 vs 워크플로우</a></div>
+</div>
+</body></html>

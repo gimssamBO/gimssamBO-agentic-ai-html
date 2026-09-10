@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제29강 — 정리 &amp; 체크리스트</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제29강 · deployment</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제29강 · deployment — 세부 목차</b><a class="" href="01_내-PC에선-됐는데요.html">01. 내 PC에선 됐는데요</a><a class="" href="02_설정-분리-env와-config.html">02. 설정 분리 env와 config</a><a class="" href="03_구조적-로깅.html">03. 구조적 로깅</a><a class="" href="04_예외처리와-재시도-지수백오프.html">04. 예외처리와 재시도 지수백오프</a><a class="" href="05_비용-지연-관리.html">05. 비용 지연 관리</a><a class="" href="06_따라하기-견고한-운영-래퍼.html">06. 따라하기 견고한 운영 래퍼</a><a class="" href="07_따라하기-FastAPI-엔드포인트로-감싸기.html">07. 따라하기 FastAPI 엔드포인트로 감싸기</a><a class="" href="08_응답-캐싱으로-비용-줄이기.html">08. 응답 캐싱으로 비용 줄이기</a><a class="cur" href="09_정리-체크리스트.html">09. 정리 체크리스트</a><a class="" href="10_실습문제와-해답.html">10. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">정리 &amp; 체크리스트</h1>
+<h2 id="_2">이번 강에서 배운 것</h2>
+<p>29강은 데모 코드를 <strong>운영 가능한 서비스</strong>로 끌어올렸습니다. "내 PC에선 됐는데요"를 막는 4대 요소가 핵심입니다.</p>
+<ul>
+<li><strong>운영 4대 요소 (01번)</strong> — ① 설정 분리 ② 로깅 ③ 예외/재시도 ④ 비용 관리. 모델만 좋다고 서비스가 되는 게 아니다.</li>
+<li><strong>설정 분리 (02번)</strong> — 비밀(키)은 <strong><code>.env</code></strong>, 설정(모델·온도)은 <strong><code>config.yaml</code></strong>. 하드코딩 제거 → 코드 수정 없이 환경 전환.</li>
+<li><strong>구조적 로깅 (03번)</strong> — <code>print</code> 대신 <code>logging</code>. 시각·레벨 + <strong>콘솔·파일 동시</strong>. <code>handlers.clear()</code>로 중복 방지.</li>
+<li><strong>예외/재시도 (04번)</strong> — <strong>지수 백오프</strong>(1→2→4초) 재시도 + <strong>폴백 메시지</strong>. 끝내 실패해도 서비스는 안 죽는다.</li>
+<li><strong>비용·지연 (05번)</strong> — 모델 선택·프롬프트 길이·top_k·캐싱으로 토큰=비용 관리.</li>
+<li><strong>견고한 래퍼 (06번)</strong> — <code>load_config</code>·<code>setup_logging</code>·<code>robust_invoke</code>를 묶은 운영 자산.</li>
+<li><strong>FastAPI (07번)</strong> — <code>POST /chat</code>으로 HTTP 노출. <strong>비즈니스 로직과 전송 계층 분리</strong>.</li>
+<li><strong>응답 캐싱 (08번)</strong> — 반복 질문은 저장된 답으로(0원·즉시). 메모리+파일 영속, 정규화 key.</li>
+</ul>
+<hr/>
+<h2 id="_3">핵심 코드 한눈에</h2>
+<pre><code class="language-python"># 1) 설정 분리
+def load_config():
+    with open(DATA / "config.yaml", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+# 2) 구조적 로깅 (콘솔+파일)
+logger.handlers.clear()
+logger.addHandler(StreamHandler()); logger.addHandler(FileHandler(path))
+
+# 3) 재시도 + 폴백
+for attempt in range(1, max_retries + 1):
+    try: return llm.invoke(message).content
+    except Exception: time.sleep(2 ** (attempt - 1))   # 지수 백오프
+return "죄송합니다. 일시적인 오류로 ..."                  # 폴백
+
+# 4) FastAPI 노출
+@app.post("/chat")
+def chat(body: ChatIn):
+    return {"reply": robust_invoke(llm, body.message, logger)}
+
+# 5) 캐싱
+hit = cache.get(q)
+if hit: return hit                  # 캐시 적중 → LLM 안 부름
+ans = robust_invoke(...); cache.set(q, ans)
+</code></pre>
+<hr/>
+<h2 id="_4">설치 라이브러리</h2>
+<pre><code class="language-bash">conda activate agentic
+pip install -U pyyaml langchain-google-genai     # 06번 운영 래퍼
+pip install -U fastapi uvicorn                    # 07번 HTTP API
+# 08번 캐싱은 표준 라이브러리(json, hashlib)만 사용 — 추가 설치 없음
+</code></pre>
+<ul>
+<li><code>pyyaml</code>: config.yaml 로드.</li>
+<li><code>fastapi</code>·<code>uvicorn</code>: HTTP 엔드포인트와 서버 구동.</li>
+<li>데이터·설정: <code>data/config.yaml</code>, <code>.env</code>(GOOGLE_API_KEY).</li>
+</ul>
+<hr/>
+<h2 id="_5">운영 체크리스트</h2>
+<ul>
+<li>[ ] 키가 코드/Git에 없는가? (<code>.env</code> + <code>.gitignore</code>)</li>
+<li>[ ] 설정이 <code>config.yaml</code>로 외부화됐는가?</li>
+<li>[ ] 로그가 파일에도 남는가? 레벨 조절 가능한가?</li>
+<li>[ ] LLM 호출에 <strong>재시도·폴백</strong>이 있는가?</li>
+<li>[ ] 실패 시 서비스가 죽지 않고 안내를 주는가?</li>
+<li>[ ] 비용 상한/모델 선택을 의식하고 있는가?</li>
+<li>[ ] 반복 질문에 <strong>캐싱</strong>을 적용했는가? (변하는 질문은 제외)</li>
+<li>[ ] 에이전트를 FastAPI로 감싸 <strong>본체와 전송 계층을 분리</strong>했는가?</li>
+</ul>
+<hr/>
+<h2 id="_6">한 줄 핵심</h2>
+<blockquote>
+<p><strong>"모델이 좋아도 서비스가 되진 않는다."</strong> — 설정 분리·로깅·재시도/폴백·비용 관리, 이 운영 품질이 데모와 제품을 가른다.</p>
+</blockquote>
+<hr/>
+<h2 id="30">다음 강 예고 — 30강 (마지막)</h2>
+<p>드디어 마지막입니다. 28강의 <strong>설계</strong>와 29강의 <strong>운영</strong>을 토대로, 지금까지 배운 <strong>모든 조각</strong>(도구·RAG·메모리)을 하나로 합칩니다. <strong>"진짜로 일하는 승승장구몰 통합 CS 에이전트"</strong> 를 완성하죠. 1강에서 LLM이 "답 못 했던" 질문 — "내 주문 O000123 어디까지 왔어?" — 을 30강의 에이전트는 <strong>실제 데이터를 조회해</strong> 답합니다. 30강에서 이 래퍼·캐싱 같은 운영 자산이 완성형 에이전트를 감쌉니다.</p>
+</div>
+</div>
+<div class="pager"><a class="prv" href="08_응답-캐싱으로-비용-줄이기.html"><span class="lbl">← 이전 절</span>08. 응답 캐싱으로 비용 줄이기</a><a class="nxt" href="10_실습문제와-해답.html"><span class="lbl">다음 절 →</span>10. 실습문제와 해답</a></div>
+</div>
+</body></html>

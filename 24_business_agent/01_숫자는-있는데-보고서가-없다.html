@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제24강 — 숫자는 있는데 보고서가 없다</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제24강 · business agent</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제24강 · business agent — 세부 목차</b><a class="cur" href="01_숫자는-있는데-보고서가-없다.html">01. 숫자는 있는데 보고서가 없다</a><a class="" href="02_계산은-코드-서술은-LLM.html">02. 계산은 코드 서술은 LLM</a><a class="" href="03_따라하기-핵심수치-집계.html">03. 따라하기 핵심수치 집계</a><a class="" href="04_따라하기-LLM에게-서술-맡기기.html">04. 따라하기 LLM에게 서술 맡기기</a><a class="" href="05_따라하기-리포트-저장.html">05. 따라하기 리포트 저장</a><a class="" href="06_예외처리-데이터-누락-대응.html">06. 예외처리 데이터 누락 대응</a><a class="" href="07_차트로-시각화-더하기.html">07. 차트로 시각화 더하기</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="_1">숫자는 있는데 보고서가 없다</h1>
+<h2 id="_2">한 줄 요약</h2>
+<p>승승장구몰 경영진은 매달 "지난달 매출 어땠어?"를 묻습니다. 데이터는 <code>monthly_sales.csv</code>에 다 있지만, 표 그대로는 읽기 불편하죠. 누군가 매달 <strong>숫자를 뽑고 → 추세를 해석하고 → 문장으로 정리</strong>해야 합니다. 이번 강에서는 이 반복 작업을 자동화하는 <strong>비즈니스 리포트 에이전트</strong>를 만듭니다.</p>
+<hr/>
+<h2 id="1">1. 표는 데이터지 보고서가 아니다</h2>
+<p><code>monthly_sales.csv</code>를 열면 이렇게 생겼습니다.</p>
+<pre><code class="language-text">month     전자기기    가전      식품     ...   total
+2026-03   3,210,000  2,800,000  1,500,000      9,760,000
+2026-04   3,500,000  2,900,000  1,600,000      9,760,000
+2026-05   4,449,850  3,418,050  1,800,000     12,404,300
+</code></pre>
+<p>데이터는 다 있습니다. 하지만 경영진이 원하는 건 <strong>표가 아니라 "그래서 어땠는데?"</strong> 입니다.</p>
+<pre><code class="language-text">경영진: "5월 매출 어땠어?"
+원하는 답: "5월 총매출 1,240만원으로 전월 대비 27% 증가했고,
+           전자기기가 성장을 견인했습니다. 다음 달은 ..."
+원하지 않는 답: (엑셀 표를 그대로 들이밀기)
+</code></pre>
+<p>표를 <strong>읽을 수 있는 보고서로 바꾸는 일</strong> — 이게 매달 반복되는 수작업입니다.</p>
+<hr/>
+<h2 id="2">2. 매달 반복되는 보고서 작업</h2>
+<p>담당자가 매달 하는 일을 뜯어보면:</p>
+<pre><code class="language-text">1. CSV에서 지난달 총매출 계산
+2. 전월과 비교해 증감률 계산
+3. 카테고리별로 정렬해 1·2위 파악
+4. "왜 늘었나/줄었나" 해석
+5. 경영진이 읽을 문장으로 정리
+6. 다음 달 제언 추가
+7. 문서로 저장·발송
+</code></pre>
+<p>1~3번은 <strong>계산</strong>(기계적), 4~6번은 <strong>서술</strong>(글쓰기), 7번은 <strong>저장</strong>(자동화 가능). 매달 똑같은 패턴이죠. 이 반복을 에이전트에게 맡깁니다.</p>
+<hr/>
+<h2 id="3-llm">3. 핵심 통찰 — LLM의 강점은 계산이 아니라 서술</h2>
+<p>여기서 중요한 설계 결정이 있습니다. <strong>"계산을 누가 하느냐"</strong> 입니다.</p>
+<pre><code class="language-text">[나쁜 방법] LLM에게 CSV를 통째로 주고 "총매출 계산해서 보고서 써줘"
+   → LLM이 숫자를 틀리거나 지어낼 수 있음 (산술 환각!)
+   → "총매출 1,240만원"이 "1,420만원"으로 둔갑
+
+[좋은 방법] 숫자는 코드(pandas)로 정확히 계산 → LLM은 그 숫자로 글만 씀
+   → 숫자는 항상 정확, LLM은 잘하는 '서술'에만 집중
+</code></pre>
+<p>10강에서 배웠듯 <strong>LLM은 계산기가 아닙니다.</strong> 큰 숫자의 곱셈·증감률을 머릿속으로 하면 틀립니다. 반대로 <strong>요약·해석·문장화는 LLM의 진짜 강점</strong>이죠. 그래서 둘을 나눕니다 — <strong>계산은 코드, 서술은 LLM</strong>(02번에서 자세히).</p>
+<hr/>
+<h2 id="4">4. 우리가 만들 것</h2>
+<p>이번 강의 비즈니스 에이전트는 이렇게 동작합니다.</p>
+<p><code>monthly_sales.csv</code> 를 세 단계로 처리합니다.</p>
+<ol>
+<li><strong>집계 (pandas)</strong> — 총매출·증감률·카테고리 1·2위를 코드로 정확히 계산 → <code>facts</code>(확정 수치)</li>
+<li><strong>서술 (LLM)</strong> — <code>facts</code>를 근거로 경영진 리포트 문장 작성 <em>(숫자는 못 지어내게 막음)</em></li>
+<li><strong>저장 (.md)</strong> — <code>reports/monthly_sales_2026-05.md</code> (<code>## 총평</code> / <code>## 카테고리 분석</code> / <code>## 다음 달 제언</code>)</li>
+</ol>
+<p>"숫자는 있는데 보고서가 없다"를 <strong>함수 한 번 호출</strong>로 해결합니다. 그리고 매월 1일 자동 실행되는 <strong>배치 잡</strong>으로 만들 수 있죠.</p>
+<hr/>
+<h2 id="5">5. 백엔드 관점 — 배치/엔드포인트</h2>
+<p>이 에이전트는 두 가지 형태로 운영합니다.</p>
+<pre><code class="language-text">[정기 배치]      매월 1일 새벽 → 리포트 자동 생성 → 슬랙/메일 발송
+[온디맨드 API]   GET /reports/monthly?month=2026-05 → 즉시 생성·반환
+</code></pre>
+<p>핵심은 <strong>집계 함수와 서술 함수를 분리</strong>해 두면, 배치 잡과 API가 <strong>같은 로직을 공유</strong>한다는 점입니다. 입력(어느 달)과 출력(.md/JSON)만 정하면 cron이든 웹 핸들러든 어디에나 꽂을 수 있죠. 이번 강에서 이 구조를 만듭니다.</p>
+<hr/>
+<h2 id="6">6. 이번 강에서 배울 것</h2>
+<pre><code class="language-text">1. "계산은 코드, 서술은 LLM" 원칙 (02번)
+2. pandas로 핵심 수치 집계 (03번)
+3. LLM에게 서술만 맡기기 — 환각 방지 (04번)
+4. 리포트 저장·단일 진입점 (05번)
+5. [신규] 예외 처리 — 데이터 누락·컬럼 변경 대응 (06번)
+6. [신규] 차트로 시각화 더하기 (07번)
+</code></pre>
+<p>특히 신규 항목인 <strong>예외 처리</strong>(배치가 죽지 않게)와 <strong>차트 시각화</strong>(글+그림 한 세트)가 리포트를 실무 수준으로 끌어올립니다.</p>
+<hr/>
+<h2 id="_3">핵심 정리</h2>
+<ul>
+<li>경영진이 원하는 건 <strong>표가 아니라 "읽을 수 있는 보고서"</strong>.</li>
+<li>매달 반복되는 <strong>집계 → 해석 → 서술 → 저장</strong>을 에이전트로 자동화.</li>
+<li>핵심: <strong>LLM은 계산기가 아니다</strong> — 숫자는 코드, 서술만 LLM(산술 환각 방지).</li>
+<li>목표물: CSV → 집계(pandas) → 서술(LLM) → <strong>마크다운 리포트</strong>.</li>
+<li>백엔드로는 집계·서술 분리 → <strong>배치·API가 같은 로직 공유</strong>.</li>
+<li>다음 절에서 "계산은 코드, 서술은 LLM" 원칙을 깊이 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><span class="prv off"><span class="lbl"> </span> </span><a class="nxt" href="02_계산은-코드-서술은-LLM.html"><span class="lbl">다음 절 →</span>02. 계산은 코드 서술은 LLM</a></div>
+</div>
+</body></html>

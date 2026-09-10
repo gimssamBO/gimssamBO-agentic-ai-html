@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제21강 — 에이전트 vs 워크플로우</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제21강 · agent workflow</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제21강 · agent workflow — 세부 목차</b><a class="" href="01_자유로운게-항상-좋은건-아니다.html">01. 자유로운게 항상 좋은건 아니다</a><a class="cur" href="02_에이전트-vs-워크플로우.html">02. 에이전트 vs 워크플로우</a><a class="" href="03_StateGraph의-3요소.html">03. StateGraph의 3요소</a><a class="" href="04_따라하기-상태-스키마와-노드-정의.html">04. 따라하기 상태 스키마와 노드 정의</a><a class="" href="05_따라하기-그래프-조립과-일괄처리.html">05. 따라하기 그래프 조립과 일괄처리</a><a class="" href="06_조건부-분기-add_conditional_edges.html">06. 조건부 분기 add_conditional_edges</a><a class="" href="07_노드-실패-처리와-상태-검증.html">07. 노드 실패 처리와 상태 검증</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="vs">에이전트 vs 워크플로우</h1>
+<h2 id="_1">한 줄 요약</h2>
+<p><strong>ReAct 에이전트</strong>는 LLM이 흐름을 동적으로 결정(자유·예측 불가), <strong>StateGraph 워크플로우</strong>는 개발자가 흐름을 엣지로 고정(정해짐·예측 가능)합니다. 탐색에는 에이전트, 정형 업무에는 워크플로우가 어울립니다.</p>
+<hr/>
+<h2 id="1">1. 두 방식 비교</h2>
+<table>
+<thead>
+<tr>
+<th>구분</th>
+<th>ReAct 에이전트</th>
+<th>StateGraph 워크플로우</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>흐름 제어</td>
+<td>LLM이 동적으로 결정</td>
+<td>개발자가 엣지로 고정</td>
+</tr>
+<tr>
+<td>예측성</td>
+<td>낮음(실행마다 다름)</td>
+<td>높음(항상 같은 경로)</td>
+</tr>
+<tr>
+<td>적합 작업</td>
+<td>탐색·개방형 질문</td>
+<td>정형화된 반복 업무</td>
+</tr>
+<tr>
+<td>디버깅</td>
+<td>어려움</td>
+<td>노드 단위로 쉬움</td>
+</tr>
+<tr>
+<td>LLM 사용</td>
+<td>거의 모든 단계</td>
+<td>필요한 노드에서만</td>
+</tr>
+</tbody>
+</table>
+<hr/>
+<h2 id="2">2. 흐름을 누가 정하나</h2>
+<p>가장 큰 차이는 <strong>"흐름(순서)을 누가 정하느냐"</strong> 입니다.</p>
+<pre><code class="language-text">ReAct 에이전트: LLM이 정함
+  질문 → LLM "검색하자" → LLM "또 검색하자" → LLM "이제 답하자"
+         (매번 LLM이 다음 행동 결정 → 실행마다 달라질 수 있음)
+
+StateGraph 워크플로우: 개발자가 정함
+  입력 → [분류] → [우선순위] → [배정] → 출력
+         (엣지로 순서 고정 → 항상 이 경로)
+</code></pre>
+<p>에이전트는 LLM이 매 순간 "다음에 뭐 할까?"를 정하니 자유롭지만 예측 불가입니다. 워크플로우는 우리가 엣지로 "이 다음엔 이거"라고 못 박으니 항상 같은 경로죠.</p>
+<hr/>
+<h2 id="3">3. 예측성의 가치</h2>
+<p>"예측 가능"이 왜 중요할까요? 업무 자동화에서는 결정적입니다.</p>
+<pre><code class="language-text">예측 불가(에이전트): 같은 티켓도 실행마다 다르게 처리될 수 있음
+  → "왜 이 티켓은 배정 안 됐지?" 디버깅 어려움
+  → 감사(audit): "이 처리가 규칙대로 됐나?" 확인 어려움
+
+예측 가능(워크플로우): 같은 입력 → 항상 같은 경로·결과
+  → 디버깅 쉬움 (어느 노드에서 문제인지 명확)
+  → 감사 쉬움 (규칙대로 처리됨이 보장)
+</code></pre>
+<p>금융·의료·법무처럼 <strong>"규칙대로 처리됐음을 증명"</strong> 해야 하는 분야에서는 예측 가능한 워크플로우가 필수입니다. "AI가 알아서 했어요"는 통하지 않죠.</p>
+<hr/>
+<h2 id="4">4. 디버깅 — 노드 단위</h2>
+<p>워크플로우는 <strong>노드 단위</strong>로 나뉘어 디버깅이 쉽습니다.</p>
+<pre><code class="language-text">에이전트: 한 덩어리 → "어디서 잘못됐지?" 찾기 어려움
+
+워크플로우: [분류] [우선순위] [배정] 각 단계가 분리
+  → "분류는 맞는데 우선순위가 틀렸네" → priority_node만 고치면 됨
+</code></pre>
+<p>각 단계가 작은 함수(노드)라, 어느 단계에서 문제인지 즉시 보입니다. 단계별 로깅·예외처리·재시도도 깔끔히 붙일 수 있죠(07번).</p>
+<hr/>
+<h2 id="5-llm">5. LLM은 필요한 곳에만</h2>
+<p>워크플로우의 또 다른 장점: <strong>LLM을 필요한 노드에서만</strong> 씁니다.</p>
+<pre><code class="language-text">에이전트: 거의 모든 판단에 LLM (비용 ↑)
+
+워크플로우:
+  [분류]   → LLM (자연어 이해 필요)
+  [우선순위] → 규칙 (키워드 매칭이면 충분, LLM 불필요)
+  [배정]   → 규칙 (카테고리→팀 매핑, LLM 불필요)
+</code></pre>
+<p>"분류"는 자연어 이해가 필요하니 LLM을 쓰지만, "우선순위"나 "배정"은 간단한 규칙이면 충분합니다. LLM 없이 코드로 하면 <strong>빠르고 공짜이고 정확</strong>하죠. "LLM이 잘하는 것만 LLM에게"라는 분업입니다(10·11강).</p>
+<hr/>
+<h2 id="6">6. 무엇을 언제 쓰나</h2>
+<p><strong>작업이 정형화돼 있고 순서가 정해졌나?</strong></p>
+<ul>
+<li><strong>예</strong> → <strong>StateGraph 워크플로우</strong> (예측·검증·디버깅 쉬움)</li>
+<li>
+<p><strong>아니오</strong>(탐색적·개방형) → <strong>ReAct 에이전트</strong> (자유·유연)</p>
+</li>
+<li>
+<p>"티켓 분류 → 배정" 같은 정형 업무 → <strong>워크플로우</strong></p>
+</li>
+<li>"이 고객 문제를 어떻게 해결할까?" 탐색 → <strong>에이전트</strong></li>
+</ul>
+<p>그리고 실무에서는 <strong>섞기도</strong> 합니다 — 워크플로우의 한 노드 안에서 에이전트를 부르는 식이죠. 둘은 대립이 아니라 상황에 맞는 도구입니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li><strong>에이전트</strong>: LLM이 흐름 결정(자유·예측 불가·탐색에 강함).</li>
+<li><strong>워크플로우</strong>: 개발자가 엣지로 흐름 고정(예측·검증·디버깅 쉬움).</li>
+<li>예측 가능성은 <strong>디버깅·감사</strong>에 결정적(정형 업무 필수).</li>
+<li>워크플로우는 <strong>LLM을 필요한 노드에만</strong>(분업, 비용↓).</li>
+<li>정형 업무는 워크플로우, 탐색은 에이전트(섞어 쓰기도).</li>
+<li>다음 절에서 StateGraph의 3요소를 배웁니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="01_자유로운게-항상-좋은건-아니다.html"><span class="lbl">← 이전 절</span>01. 자유로운게 항상 좋은건 아니다</a><a class="nxt" href="03_StateGraph의-3요소.html"><span class="lbl">다음 절 →</span>03. StateGraph의 3요소</a></div>
+</div>
+</body></html>

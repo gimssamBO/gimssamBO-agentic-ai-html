@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>제27강 — Researcher → Analyst → Writer 파이프라인</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&amp;display=swap" rel="stylesheet"/>
+<link href="../assets/style.css" rel="stylesheet"/>
+</head><body>
+<div class="topbar">
+<a class="home" href="../index.html">👍 Agentic AI 강의 </a>
+<span class="ch">제27강 · ai team</span>
+<span class="meta">(주)KD 아카데미 | 훈련교사 김명철 · AI 특화 인재양성 과정</span>
+</div>
+<div class="wrap">
+<div class="content">
+<div class="chip-nav"><b>제27강 · ai team — 세부 목차</b><a class="" href="01_if문-대신-그래프로-흐름-선언.html">01. if문 대신 그래프로 흐름 선언</a><a class="cur" href="02_Researcher-Analyst-Writer-파이프라인.html">02. Researcher Analyst Writer 파이프라인</a><a class="" href="03_공유상태와-그래프-구성요소.html">03. 공유상태와 그래프 구성요소</a><a class="" href="04_따라하기-3개-노드-에이전트.html">04. 따라하기 3개 노드 에이전트</a><a class="" href="05_따라하기-StateGraph로-연결.html">05. 따라하기 StateGraph로 연결</a><a class="" href="06_조건부-분기로-품질-재검토.html">06. 조건부 분기로 품질 재검토</a><a class="" href="07_중간-산출물-저장.html">07. 중간 산출물 저장</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
+<div class="md">
+<h1 id="researcher-analyst-writer">Researcher → Analyst → Writer 파이프라인</h1>
+<h2 id="_1">한 줄 요약</h2>
+<p>AI 팀은 <strong>역할이 다른 세 에이전트</strong>가 <strong>공유 문서(State)</strong> 를 차례로 채워 가는 파이프라인입니다. <strong>Researcher</strong>가 사실을 정리하면, <strong>Analyst</strong>가 그것으로 분석하고, <strong>Writer</strong>가 보고서로 다듬습니다. 각 역할은 <strong>앞 단계 산출물만</strong> 입력으로 받습니다.</p>
+<hr/>
+<h2 id="1">1. 세 역할</h2>
+<p>승승장구몰 경쟁사 분석을 예로, 세 명이 분업합니다.</p>
+<blockquote>
+<p><code>competitor_data.csv</code>(원천 데이터) → <strong>Researcher</strong>(사실만 정리, 해석 금지) → <strong>Analyst</strong>(강점·약점·기회 분석) → <strong>Writer</strong>(보고서로 변환) → 마크다운 리포트(최종)</p>
+</blockquote>
+<ul>
+<li><strong>Researcher(리서처)</strong> — 원천 데이터를 읽어 <strong>사실만</strong> 항목별로 정리합니다. 해석은 하지 않습니다.</li>
+<li><strong>Analyst(분석가)</strong> — 정리된 사실로 경쟁사별 <strong>강점·약점</strong>과 승승장구몰의 <strong>기회</strong>를 분석합니다.</li>
+<li><strong>Writer(작성자)</strong> — 분석 결과를 임원 보고용 <strong>마크다운 리포트</strong>(제목·요약·정리·결론)로 변환합니다.</li>
+</ul>
+<hr/>
+<h2 id="2-2526">2. 왜 역할을 나누나 — 25·26강의 연장선</h2>
+<p>"경쟁사 분석 리포트 만들어줘"를 <strong>한 번의 LLM 호출</strong>로 시키면 어떨까요?</p>
+<pre><code class="language-text">[한 번에 다]
+   → 사실·분석·서술이 뒤섞여, 근거가 약하거나 형식이 들쭉날쭉
+   → "분석이 부실한데 글만 그럴듯한" 보고서가 나오기 쉬움
+
+[역할 분리]
+   → Researcher가 사실을 탄탄히 → Analyst가 그 위에서 깊이 분석
+   → Writer는 잘 정리된 분석만 글로 → 각 단계 품질이 안정적
+</code></pre>
+<p>각 역할이 <strong>자기 일에만 집중</strong>하니 품질이 고릅니다. 25강(전문가 팀), 26강(Planner/Worker)에서 배운 <strong>"나눠서 각자 잘하는 일에 집중"</strong> 원칙을 파이프라인으로 적용한 것입니다.</p>
+<hr/>
+<h2 id="3">3. 핵심 — "앞 단계 산출물만" 입력으로</h2>
+<p>이 파이프라인의 중요한 성질은 <strong>각 역할이 앞 단계의 결과만 본다</strong>는 것입니다.</p>
+<pre><code class="language-text">Researcher:  원천 데이터        → 정리된 사실
+Analyst:     정리된 사실         → 분석   (원천 데이터는 안 봄)
+Writer:      분석               → 리포트 (정리된 사실·원천은 안 봄)
+</code></pre>
+<p>이렇게 <strong>단계가 분리(느슨한 결합)</strong> 되어 있어 좋은 점:</p>
+<ul>
+<li><strong>품질 안정</strong> — 각 단계 입력이 명확해, 앞 단계가 잘하면 뒤 단계도 잘합니다.</li>
+<li><strong>교체 용이</strong> — Analyst만 더 똑똑한 모델로 바꿔도, 인터페이스(사실 입력 → 분석 출력)가 같으면 됩니다.</li>
+<li><strong>디버깅 용이</strong> — 결과가 이상하면 어느 단계에서 틀렸는지 추적하기 쉽습니다.</li>
+</ul>
+<hr/>
+<h2 id="4-vs-26">4. 파이프라인 vs 26강 오케스트레이터</h2>
+<p>26강과 비슷하지만 결정적 차이가 있습니다.</p>
+<pre><code class="language-text">[26강 Planner/Worker]
+   Planner가 작업을 '여러 개로 쪼개고' → Worker가 각각 '독립' 수행 → 취합
+   (작업끼리 서로 무관, 병렬 가능)
+
+[27강 파이프라인]
+   Researcher → Analyst → Writer 가 '한 줄로 이어짐'
+   (앞 결과가 뒤 입력 = 순서가 중요, 직렬)
+</code></pre>
+<p>26강 Worker들은 <strong>서로 독립</strong>이라 순서가 상관없었지만(병렬 가능), 27강 세 역할은 <strong>앞 결과를 뒤가 받으므로</strong> 순서가 핵심입니다. 이런 <strong>직렬 의존 흐름</strong>을 깔끔히 표현하는 도구가 바로 다음 절의 StateGraph입니다.</p>
+<hr/>
+<h2 id="5">5. 도구를 안 쓰는 이유</h2>
+<p>이번 세 역할은 <strong>외부 도구(검색·DB조회)를 쓰지 않고</strong> 입력 텍스트를 가공만 합니다. 그래서 <code>create_agent</code>(도구 쓰는 에이전트) 대신, 노드 안에서 <strong><code>llm.invoke(...)</code></strong> 만 하면 됩니다.</p>
+<pre><code class="language-text">- 도구가 필요 없음 → 단순 LLM 호출로 충분
+- 핵심은 '흐름을 StateGraph로 선언'하는 것
+- (도구가 필요하면 노드 안에서 create_agent를 불러도 됨)
+</code></pre>
+<p>즉 이번 강의 초점은 <strong>에이전트의 똑똑함</strong>이 아니라 <strong>여러 에이전트를 어떻게 잇는가(오케스트레이션)</strong> 입니다.</p>
+<hr/>
+<h2 id="_2">핵심 정리</h2>
+<ul>
+<li>AI 팀 = <strong>Researcher(사실) → Analyst(분석) → Writer(보고서)</strong> 직렬 파이프라인.</li>
+<li>각 역할은 <strong>앞 단계 산출물만</strong> 입력으로 받음 → 느슨한 결합·품질 안정·교체 용이.</li>
+<li>26강 Worker는 독립(병렬 가능), 27강 세 역할은 <strong>직렬 의존</strong>(순서가 핵심).</li>
+<li>도구를 안 쓰므로 노드는 <strong>단순 <code>llm.invoke</code></strong> — 초점은 "어떻게 잇는가".</li>
+<li>다음 절에서 이 흐름을 담는 <strong>공유 상태(State)와 그래프 구성요소</strong>를 봅니다.</li>
+</ul>
+</div>
+</div>
+<div class="pager"><a class="prv" href="01_if문-대신-그래프로-흐름-선언.html"><span class="lbl">← 이전 절</span>01. if문 대신 그래프로 흐름 선언</a><a class="nxt" href="03_공유상태와-그래프-구성요소.html"><span class="lbl">다음 절 →</span>03. 공유상태와 그래프 구성요소</a></div>
+</div>
+</body></html>
