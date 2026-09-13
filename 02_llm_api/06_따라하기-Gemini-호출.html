@@ -16,7 +16,7 @@
 <div class="content">
 <div class="chip-nav"><b>제2강 · llm api — 세부 목차</b><a class="" href="01_왜-LLM-API를-알아야-하는가.html">01. 왜 LLM API를 알아야 하는가</a><a class="" href="02_요청-응답-구조.html">02. 요청 응답 구조</a><a class="" href="03_시스템-지시로-역할-부여.html">03. 시스템 지시로 역할 부여</a><a class="" href="04_토큰과-비용-감각.html">04. 토큰과 비용 감각</a><a class="" href="05_temperature와-생성-제어.html">05. temperature와 생성 제어</a><a class="cur" href="06_따라하기-Gemini-호출.html">06. 따라하기 Gemini 호출</a><a class="" href="07_따라하기-OpenAI-호환-호출.html">07. 따라하기 OpenAI 호환 호출</a><a class="" href="08_정리-체크리스트.html">08. 정리 체크리스트</a><a class="" href="09_실습문제와-해답.html">09. 실습문제와 해답</a></div>
 <div class="md">
-<h1 id="gemini">따라하기 — Gemini 호출의 모든 것</h1>
+<h1 id="gemini">따라하기 — OpenAI, Gemini 호출의 모든 것</h1>
 <h2 id="_1">목표</h2>
 <p>지금까지 배운 <strong>요청-응답 구조·시스템 지시·토큰·temperature</strong>를 하나의 실습 파일로 합칩니다. 실제 파일은 <code>code/ch02_llm_api.py</code> 입니다.</p>
 <hr/>
@@ -24,12 +24,24 @@
 <pre><code class="language-bash">conda activate agentic
 
 # 2강 실습에 필요한 라이브러리
+#  - openai : OpenAI 공식 Python SDK (1강에서 설치했다면 생략 가능)
+pip install openai python-dotenv
 #  - google-genai : Gemini 공식 Python SDK (1강에서 설치했다면 생략 가능)
 pip install google-genai python-dotenv
 </code></pre>
-<p><code>.env</code>에 <code>GOOGLE_API_KEY</code>가 설정돼 있어야 합니다. (<code>python code/common.py</code>로 확인)</p>
+<p><code>.env</code>에 <code>OPENAI_API_KEY, GOOGLE_API_KEY</code>가 설정돼 있어야 합니다. (<code>python code/common.py</code>로 확인)</p>
 <hr/>
 <h2 id="1">1. 공통 시작부</h2>
+<h3>OpenAI</h3>
+<pre><code class="language-python"># 실행: python code/ch02_llm_api.py
+import os, sys, pathlib
+# [왜] 실행 위치와 무관하게 같은 폴더(code/)의 common.py 를 import 하려고 경로를 추가.
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_openai_client, OPENAI_MODEL
+
+client = get_openai_client()
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python"># 실행: python code/ch02_llm_api.py
 import os, sys, pathlib
 # [왜] 실행 위치와 무관하게 같은 폴더(code/)의 common.py 를 import 하려고 경로를 추가.
@@ -43,6 +55,25 @@ client = get_genai_client()
 <hr/>
 <h2 id="2-chat">2. 재사용할 chat() 함수</h2>
 <p>시스템 지시와 사용자 입력을 받아 답을 돌려주는 함수입니다. 03번에서 본 그 함수입니다.</p>
+<h3>OpenAI</h3>
+<pre><code class="language-python">def chat(system: str, user: str, temperature: float = 0.3) -> str:
+    """시스템 지시(system)와 사용자 입력(user)을 받아 답변 텍스트를 돌려준다.
+
+    핵심은 messages와 파라미터 두 가지다.
+      - role 'system': 모델의 '역할·말투'를 지정.
+      - temperature: 생성의 무작위성(0=일관, 높을수록 다양).
+    """
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        temperature=temperature,
+    )
+    return resp.choices[0].message.content
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python">def chat(system: str, user: str, temperature: float = 0.3) -&gt; str:
     """시스템 지시(system)와 사용자 입력(user)을 받아 답변 텍스트를 돌려준다.
 
@@ -60,6 +91,18 @@ client = get_genai_client()
 </code></pre>
 <hr/>
 <h2 id="3-4-1">3. (4-1) 기본 호출 + 토큰 확인</h2>
+<h3>OpenAI</h3>
+<pre><code class="language-python"># 시스템 지시 없이 가장 단순하게 호출. temperature=0.7 로 다양한 홍보 문구를 유도.
+resp = client.chat.completions.create(
+    model=OPENAI_MODEL,
+    messages=[{"role": "user", "content": "승승장구몰을 한 문장으로 홍보해줘."}],
+    temperature=0.7,
+)
+print("답변:", resp.choices[0].message.content)
+# usage = 이번 호출에 쓴 토큰 수(prompt/응답/합계). 토큰이 곧 과금 기준이다.
+print("토큰:", resp.usage)
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python"># 시스템 지시 없이 가장 단순하게 호출. temperature=0.7 로 다양한 홍보 문구를 유도.
 resp = client.models.generate_content(
     model=GEMINI_MODEL,
@@ -72,6 +115,17 @@ print("토큰:", resp.usage_metadata)
 </code></pre>
 <hr/>
 <h2 id="4-4-2">4. (4-2) 시스템 지시로 역할 부여</h2>
+<h3>OpenAI</h3>
+<pre><code class="language-python"># 같은 질문(q)이라도 system 역할 지시만 바꾸면 말투·페르소나가 통째로 바뀐다.
+q = "환불 얼마나 걸려요?"
+
+print("\n[친절한 상담원]")
+print(chat("너는 승승장구몰의 친절한 CS 상담원이다. 존댓말로 간결히 답하라.", q))
+
+print("\n[무뚝뚝한 엔지니어]")
+print(chat("너는 무뚝뚝한 엔지니어다. 핵심만 한 줄로 답하라.", q))
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python"># 같은 질문(q)이라도 system_instruction 만 바꾸면 말투·페르소나가 통째로 바뀐다.
 q = "환불 얼마나 걸려요?"
 
@@ -87,7 +141,8 @@ print(chat("너는 무뚝뚝한 엔지니어다. 핵심만 한 줄로 답하라.
 </code></pre>
 <p><strong>예상 출력</strong></p>
 <pre><code class="language-text">답변: 일상에 필요한 모든 것을 합리적인 가격에! 승승장구몰에서 만나보세요.
-토큰: prompt_token_count=11 candidates_token_count=24 total_token_count=35 ...
+토큰(OpenAI): CompletionUsage(completion_tokens=31, prompt_tokens=22, ... )
+토큰(Gemini): prompt_token_count=11 candidates_token_count=24 total_token_count=35 ...
 
 [친절한 상담원]
 안녕하세요 고객님! 환불은 영업일 기준 평균 3~5일 정도 소요됩니다 ...
@@ -98,16 +153,18 @@ print(chat("너는 무뚝뚝한 엔지니어다. 핵심만 한 줄로 답하라.
 <hr/>
 <h2 id="6">6. 무엇을 확인했나</h2>
 <ul>
-<li>한 번의 호출에 <strong>model·contents·config</strong>를 어떻게 채우는지</li>
+<li>OpenAI 한 번의 호출에 <strong>model·messages·roll·content·temperature·max_tokens</strong>를 어떻게 채우는지</li>
+<li>Gemini 한 번의 호출에 <strong>model·contents·config</strong>를 어떻게 채우는지</li>
 <li><strong>시스템 지시</strong>로 말투가 어떻게 바뀌는지</li>
-<li><strong>usage_metadata</strong>로 토큰(=비용)을 어떻게 확인하는지</li>
+<li><strong>useage(OpenAI), usage_metadata(Gemini)</strong>로 토큰(=비용)을 어떻게 확인하는지</li>
 </ul>
 <p>이 세 가지가 모든 LLM 호출의 기본기입니다. 다음 절에서는 똑같은 구조를 <strong>OpenAI(GPT)</strong> 로도 호출해, "구조는 같다"는 것을 직접 봅니다.</p>
 <hr/>
 <h2 id="_2">핵심 정리</h2>
 <ul>
 <li><code>chat(system, user, temperature)</code> 한 함수로 대부분의 호출을 재사용할 수 있다.</li>
-<li><code>config</code>에 시스템 지시·온도를, 응답에서 <code>text</code>·<code>usage_metadata</code>를 꺼낸다.</li>
+<li>OpenAI <code>messages</code>의 system 역할에 시스템 지시를, 매개변수로 온도를 전달하며, 응답에서  <code>choices[0].message.content</code>·<code>usage</code>를 꺼낸다.</li>
+<li>Gemini <code>config</code>에 시스템 지시·온도를, 응답에서 <code>text</code>·<code>usage_metadata</code>를 꺼낸다.</li>
 <li>다음 절: 같은 일을 OpenAI SDK로 해 보며 모델 교체를 연습합니다.</li>
 </ul>
 </div>

@@ -53,6 +53,27 @@ FEWSHOT = """다음 고객 문의를 아래 7개 중 정확히 하나로 분류�
 <p>이 프롬프트에는 4요소가 다 들어 있습니다 — 지시("분류하라"), 맥락("카테고리 7개"), 형식("한 단어만"), 그리고 <strong>예시 4개(few-shot)</strong>.</p>
 <hr/>
 <h2 id="3">3. 분류 함수</h2>
+<h3>OpenAI</h3>
+<pre><code class="language-python">from common import get_openai_client, OPENAI_MODEL
+
+client = get_openai_client()
+
+def classify(content: str) -> str:
+    """문의 한 건을 7개 카테고리 중 하나로 분류한다(few-shot 사용)."""
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "user", "content": f"{FEWSHOT}\n[분류할 문의]\n문의: {content} →"}
+        ],
+        temperature=0,  # 분류는 일관성이 중요 → 0
+    )
+    out = resp.choices[0].message.content.strip()
+    for c in CATEGORIES:  # 군더더기가 붙어도 7개 중 포함된 단어를 골라낸다
+        if c in out:
+            return c
+    return "기타"
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
 from google.genai import types
 

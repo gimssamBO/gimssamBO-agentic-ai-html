@@ -28,6 +28,7 @@
 <p>시작 전에 세 가지만 준비하면 됩니다.</p>
 <ol>
 <li><strong>구글 계정</strong> — Gemini API 키를 무료로 발급받는 데 씁니다(아래 4단계).</li>
+<li><strong>OPEN_AI_API 계정</strong> — 이 계정으로 변형해서 사용해도 됨(여기서는 이걸로 수정해서 사용함).</li>
 <li><strong>이 과정의 실습 코드 폴더</strong> — <code>code/</code>, <code>data/</code>, <code>.env.example</code>, <code>requirements.txt</code>가 들어 있는 프로젝트 폴더입니다. 이미 내려받으셨다면 그 폴더 안에서 진행합니다.<br/>
    - <strong>폴더 이름은 자유롭게</strong> 지어도 됩니다(<code>ai-agent</code>, <code>agentic-study</code> 등). 코드가 경로를 <em>폴더 위치 기준으로 자동 계산</em>하기 때문에, 이름이 무엇이든 상관없습니다. <strong>윈도우 <code>문서(Documents)</code> 폴더 안</strong>에 두는 걸 권합니다. 예: <code>C:\Users\사용자명\Documents\agentic-study\</code>.<br/>
    - 단, <strong>폴더 안의 구조</strong>(<code>code/</code>·<code>data/</code>·<code>.env</code>·<code>requirements.txt</code>)는 그대로 유지하고, 폴더 <em>이름</em>에는 <strong>공백·한글을 피해</strong> 영문·하이픈(<code>-</code>)으로 짓는 걸 권합니다(일부 도구가 공백 경로에서 말썽을 일으킬 수 있음).</li>
@@ -167,25 +168,30 @@ pip install -r requirements.txt
 </tbody>
 </table>
 <hr/>
-<h2 id="4-gemini-api-env">4. Gemini API 키 발급 &amp; <code>.env</code> 설정</h2>
-<p>이 과정의 두뇌는 구글 <strong>Gemini</strong>입니다(무료 티어로 충분합니다). 키를 발급받아 <code>.env</code> 파일에 넣습니다.</p>
-<h3 id="4-1">4-1. 키 발급</h3>
+<h2 id="4-gemini-api-env">4. Gemini API 키 발급 | OPENAI_API_KEY 키 발급 &amp; <code>.env</code> 설정</h2>
+<p>
+   이 과정의 두뇌는 구글 <strong>Gemini</strong>입니다(무료 티어로 충분합니다). 키를 발급받아 <code>.env</code> 파일에 넣습니다. <br>
+   하지만, 현재는 Gemini의 무료 티어가 부족하여, OPENAI_API_KEY 사용합니다.
+</p>
+<h3 id="4-1">4-1. 구글 | OPENAI_API_KEY API키 발급</h3>
 <ol>
 <li><a href="https://aistudio.google.com/apikey">https://aistudio.google.com/apikey</a> 접속 → 구글 계정 로그인.</li>
 <li><strong>Create API key</strong> 클릭 → 생성된 키(<code>AIza...</code> 형태)를 복사합니다.</li>
+<li><a href="https://platform.openai.com/api-keys">https://platform.openai.com/api-keys</a> 접속 → OPEN AI 로그인.</li>
+<li><strong>Create new secret key</strong> 클릭 → 생성된 키(<code>ai_agentic...</code> 형태)를 복사합니다.</li>
 </ol>
 <h3 id="4-2-env">4-2. <code>.env</code> 파일 만들기</h3>
 <p>프로젝트에는 양식 파일 <code>.env.example</code>이 들어 있습니다. 이걸 복사해 <code>.env</code>를 만든 뒤 키를 채웁니다.</p>
 <pre><code class="language-bash"># 프로젝트 폴더 안에서
 cp .env.example .env
 </code></pre>
-<p>그다음 <code>.env</code> 파일을 편집기로 열어, <code>GOOGLE_API_KEY</code> 값을 방금 복사한 키로 바꿉니다.</p>
+<p>그다음 <code>.env</code> 파일을 편집기로 열어, <code>OPENAI_API_KEY=여기에_본인의_OPENAI_API_키</code> 값을 방금 복사한 키로 바꿉니다.</p>
 <pre><code class="language-bash"># .env 파일 내용 (이렇게 바꿉니다)
-GOOGLE_API_KEY=AIza...여기에_본인_키...
+OPENAI_API_KEY=여기에_본인의_OPENAI_API_키...
 
 # 아래 둘은 선택 — OpenAI는 일부 보조 실습에서만 씁니다. 비워둬도 대부분 진행됩니다.
 OPENAI_API_KEY=여기에_본인의_OPENAI_API_키
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.6-flash
 </code></pre>
 <hr/>
 <h2 id="5">5. 설치가 잘 됐는지 확인</h2>
@@ -196,7 +202,7 @@ python code/common.py
 <p><strong>이렇게 나오면 성공입니다.</strong></p>
 <pre><code class="language-text">ROOT : C:\Users\사용자명\Documents\agentic-study
 DATA : C:\Users\사용자명\Documents\agentic-study\data (존재: True )
-GEMINI_MODEL : gemini-2.5-flash
+GEMINI_MODEL : gemini-3.6-flash
 키 로드 상태 — GOOGLE_API_KEY: True / OPENAI_API_KEY: False
 </code></pre>
 <blockquote>
@@ -255,8 +261,8 @@ GEMINI_MODEL : gemini-2.5-flash
 <h2 id="_4">핵심 정리</h2>
 <ul>
 <li>모든 실습은 <strong><code>agentic</code> 가상환경</strong>에서 돌아갑니다. 이 절에서 <strong>딱 한 번</strong> 만들어 둡니다.</li>
-<li>순서: <strong>미니콘다 설치 → <code>conda create -n agentic python=3.10</code> → <code>conda activate agentic</code> → <code>pip install -r requirements.txt</code> → <code>.env</code>에 <code>GOOGLE_API_KEY</code> 등록</strong>.</li>
-<li>점검: <code>python code/common.py</code> 실행 시 <strong><code>GOOGLE_API_KEY: True</code></strong> 가 보이면 준비 완료.</li>
+<li>순서: <strong>미니콘다 설치 → <code>conda create -n agentic python=3.10</code> → <code>conda activate agentic</code> → <code>pip install -r requirements.txt</code> → <code>.env</code>에 <code>OPENAI_API_KEY</code> 등록</strong>.</li>
+<li>점검: <code>python code/common.py</code> 실행 시 <strong><code>OPENAI_API_KEY: True</code></strong> 가 보이면 준비 완료.</li>
 <li>앞으로 터미널을 새로 열 때마다 <strong><code>conda activate agentic</code></strong> 한 줄이면 바로 실습을 시작할 수 있습니다.</li>
 <li>이제 다음 절 「01 왜 에이전트가 필요한가」부터 본격적으로 시작합니다.</li>
 </ul>

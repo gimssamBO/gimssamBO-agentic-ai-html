@@ -18,7 +18,8 @@
 <div class="md">
 <h1 id="_1">토큰과 비용 감각</h1>
 <h2 id="_2">한 줄 요약</h2>
-<p>LLM은 글자가 아니라 <strong>토큰(token)</strong> 단위로 글을 읽고 씁니다. 그리고 <strong>요금은 토큰 수로 매겨집니다.</strong> 토큰을 이해하면 "이 서비스 월 얼마 나올까?"를 숫자로 예측하고, 비용을 줄일 수 있습니다.</p>
+<p>LLM은 글자가 아니라 <strong>토큰(token)</strong> 단위로 글을 읽고 씁니다. 그리고 <strong>요금은 토큰 수로 매겨집니다.</strong> 
+    <br>토큰을 이해하면 "이 서비스 월 얼마 나올까?"를 숫자로 예측하고, 비용을 줄일 수 있습니다.</p>
 <hr/>
 <h2 id="1">1. 토큰이란? — 글을 자르는 단위</h2>
 <p>LLM은 문장을 통째로 보지 않고, <strong>토큰</strong>이라는 작은 조각으로 잘라서 처리합니다. 토큰은 대략 "단어 또는 단어의 일부"입니다.</p>
@@ -38,6 +39,13 @@
 <li><strong>출력(candidates) 토큰</strong>: 모델이 생성한 답변</li>
 </ul>
 <p>보통 <strong>출력 토큰이 입력보다 비쌉니다.</strong> 그래서 "답을 짧게" 시키는 것도 비용 절감의 한 방법입니다.</p>
+<h3>Openai</h3>
+<pre><code class="language-python">u = resp.usage
+print(u.prompt_tokens)      # 입력 토큰 (내가 보낸 것)
+print(u.completion_tokens)  # 출력 토큰 (모델이 만든 것)
+print(u.total_tokens)       # 합계
+</code></pre>
+<h3>제미나이</h3>
 <pre><code class="language-python">u = resp.usage_metadata
 print(u.prompt_token_count)      # 입력 토큰 (내가 보낸 것)
 print(u.candidates_token_count)  # 출력 토큰 (모델이 만든 것)
@@ -45,7 +53,34 @@ print(u.total_token_count)       # 합계
 </code></pre>
 <hr/>
 <h2 id="3-vs">3. 직접 토큰을 세어 보자 (한국어 vs 영어)</h2>
-<p>같은 의미의 문장을 한국어와 영어로 각각 보내, 토큰 수를 비교해 보겠습니다. (실습 파일: <code>sections/02_llm_api/04_토큰과-비용-감각.py</code>)</p>
+<p>같은 의미의 문장을 한국어와 영어로 각각 보내, 토큰 수를 비교해 보겠습니다. (실습 파일: 
+    <br><code>code/02_llm_api_token.py</code>)</p>
+<h3>Openai</h3>
+<pre><code class="language-python">from common import get_openai_client, OPENAI_MODEL
+
+client = get_openai_client()
+
+def count_tokens(text: str):
+    """문장 하나를 보내 입력/출력/합계 토큰을 돌려준다."""
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[{"role": "user", "content": text}],
+        temperature=0,
+    )
+    u = resp.usage
+    return u.prompt_tokens, u.completion_tokens, u.total_tokens
+
+pairs = {
+    "한국어": "승승장구몰의 무선 블루투스 이어버드를 한 문장으로 친절하게 홍보해줘.",
+    "영어":   "Write one friendly sentence promoting SeungSeung Mall's wireless earbuds.",
+}
+
+for lang, text in pairs.items():
+    in_tok, out_tok, total = count_tokens(text)
+    print(f"[{lang}] 입력={in_tok} / 출력={out_tok} / 합계={total}")
+</code></pre>
+
+<h3>제미나이</h3>
 <pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
 from google.genai import types
 
@@ -76,7 +111,7 @@ for lang, text in pairs.items():
 </code></pre>
 <p>같은 뜻인데도 <strong>한국어 입력 토큰이 더 많죠?</strong> 이게 "한국어가 더 비싸다"의 실체입니다.</p>
 <hr/>
-<h2 id="4">4. 비용을 숫자로 추정하기</h2>
+<h2 id="4">4. 비용을 숫자로 추정하기 = 제미나이 테스트로 참고용</h2>
 <p>토큰 수에 <strong>단가</strong>를 곱하면 비용이 나옵니다. 단가는 보통 "토큰 100만 개당 몇 달러" 형식입니다.</p>
 <pre><code class="language-python"># [경고] 아래는 '예시 단가'입니다. 실제 요금은 모델·시점별 공식 단가표를 확인하세요.
 PRICE_IN_PER_1M = 0.075   # 입력 100만 토큰당 $0.075 (예시)
@@ -111,7 +146,8 @@ print(f"월 10,000건 ≈ ${monthly:.2f}  (약 {monthly * 1385:,.0f}원, 환율 
 <li>LLM은 <strong>토큰</strong> 단위로 처리하고, <strong>요금도 토큰으로</strong> 매긴다.</li>
 <li><strong>입력/출력 토큰</strong>이 따로 있고, 보통 <strong>출력이 더 비싸다.</strong></li>
 <li>같은 뜻이라도 <strong>한국어가 토큰을 더 많이</strong> 쓴다.</li>
-<li><code>usage_metadata</code>로 토큰을 확인하고, 단가를 곱해 <strong>월 비용을 예측</strong>할 수 있다.</li>
+<li><code>usage</code>(Openai)로 토큰을 확인하고, 단가를 곱해 <strong>월 비용을 예측</strong>할 수 있다.</li>
+<li><code>usage_metadata</code>(제미나이)로 토큰을 확인하고, 단가를 곱해 <strong>월 비용을 예측</strong>할 수 있다.</li>
 <li>다음 절에서는 답변의 일관성을 조절하는 <strong>temperature</strong>를 배웁니다.</li>
 </ul>
 </div>

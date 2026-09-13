@@ -18,10 +18,47 @@
 <div class="md">
 <h1 id="-">요청-응답 구조</h1>
 <h2 id="_1">한 줄 요약</h2>
+<p>LLM 호출은 <strong>요청(Request)</strong> 을 보내면 <strong>응답(Response)</strong> 이 오는 단순한 왕복입니다. 요청에는 
+    <code>model</code>·<code>messages</code>·<code>temperature</code> 세 가지를, 응답에서는 <code>content</code>·<code>usage</code> 두 가지를 꺼냅니다. 이 구조를 외우면 나머지는 응용입니다.</p>
 <p>LLM 호출은 <strong>요청(Request)</strong> 을 보내면 <strong>응답(Response)</strong> 이 오는 단순한 왕복입니다. 요청에는 <code>model</code>·<code>contents</code>·<code>config</code> 세 가지를, 응답에서는 <code>text</code>·<code>usage_metadata</code> 두 가지를 꺼냅니다. 이 구조를 외우면 나머지는 응용입니다.</p>
 <hr/>
 <h2 id="1">1. 그림으로 보는 한 번의 호출</h2>
 <p>우리가 채우는 <strong>요청(Request)</strong> 과 모델이 채워 주는 <strong>응답(Response)</strong> 은 각각 이렇게 구성됩니다.</p>
+<table>
+    <thead>
+        <tr>
+            <th>요청(Request) — 우리가 채움</th>
+            <th>응답(Response) — 모델이 채움</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+                <code>model</code>: "gpt-4o-mini"</td>
+            <td>
+                <code>choices[0].message.content</code>: "평균 3~5일 소요됩니다…"</td>
+        </tr>
+        <tr>
+            <td>
+                <code>messages</code>: role, content, system, user "환불 얼마나 걸려요?"</td>
+            <td>
+                <code>usage.prompt_tokens = 12</td>
+        </tr>
+        <tr>
+            <td>
+                <code>config:</code>: temperature, max_tokens, tools</td>
+            <td>
+                <code>resp.usage.completion_tokens</code>
+                = 30</td>
+        </tr>
+        <tr>
+            <td></td>
+            <td>
+                <code>resp.usage.total_tokens</code>
+                = 42</td>
+        </tr>
+    </tbody>
+</table>
 <table>
 <thead>
 <tr>
@@ -31,7 +68,7 @@
 </thead>
 <tbody>
 <tr>
-<td><code>model</code>: "gemini-2.5-flash"</td>
+<td><code>model</code>: "gemini-3.6-flash"</td>
 <td><code>text</code>: "평균 3~5일 소요됩니다…"</td>
 </tr>
 <tr>
@@ -52,15 +89,32 @@
 <hr/>
 <h2 id="2-3">2. 요청 3종 세트</h2>
 <h3 id="1-model">① model — 어떤 두뇌를 쓸까</h3>
-<p>사용할 모델 이름입니다. 이 과정에서는 <code>common.py</code>에 정해 둔 <code>GEMINI_MODEL</code>(기본값 <code>"gemini-2.5-flash"</code>)을 씁니다. <code>flash</code>는 <strong>빠르고 저렴한</strong> 모델이라 실습과 대부분의 실무에 적합합니다.</p>
+<p>사용할 모델 이름입니다. 이 과정에서는 <code>common.py</code>에 정해 둔 <code>OPENAI_MODE</code>(기본값 <code>"gpt-4o-mini"</code>)을 씁니다. </p>
+<pre><code class="language-python">from common import OPENAI_MODEL
+print(OPENAI_MODEL)  # 기본값: "gpt-4o-mini"
+</code></pre>
+<p>사용할 모델 이름입니다. 이 과정에서는 <code>common.py</code>에 정해 둔 <code>GEMINI_MODEL</code>(기본값 <code>"gemini-3.6-flash"</code>)을 씁니다. <code>flash</code>는 <strong>빠르고 저렴한</strong> 모델이라 실습과 대부분의 실무에 적합합니다.</p>
 <pre><code class="language-python">from common import GEMINI_MODEL
-print(GEMINI_MODEL)   # gemini-2.5-flash
+print(GEMINI_MODEL)   # gemini-3.6-flash
 </code></pre>
 <h3 id="2-contents">② contents — 모델에게 보낼 말</h3>
 <p>사용자의 질문이나 지시입니다. 가장 단순하게는 그냥 문자열을 넣습니다.</p>
+<pre><code class="language-python">messages = [
+    {"role": "user", "content": "환불 얼마나 걸려요?"}
+]
+</code></pre>
 <pre><code class="language-python">contents = "환불 얼마나 걸려요?"
 </code></pre>
 <h3 id="3-config">③ config — 생성 방식 설정</h3>
+<p>답변의 <strong>역할·말투·무작위성</strong>을 조절하는 설정 묶음입니다.</p>
+<pre><code class="language-python">
+from common import OPENAI_MODEL, get_openai_client
+client = get_openai_client()
+messages = [
+    {"role": "system", "content": "너는 승승장구몰의 친절한 CS 상담원이다."}
+]
+temperature = 0.3
+</code></pre>
 <p>답변의 <strong>역할·말투·무작위성</strong>을 조절하는 설정 묶음입니다. <code>types.GenerateContentConfig</code>로 만듭니다.</p>
 <pre><code class="language-python">from google.genai import types
 
@@ -71,6 +125,18 @@ config = types.GenerateContentConfig(
 </code></pre>
 <hr/>
 <h2 id="3">3. 세 가지를 합친 한 번의 호출</h2>
+<pre><code class="language-python">from common import get_openai_client, OPENAI_MODEL
+client = get_openai_client()
+
+resp = client.chat.completions.create(
+    model=OPENAI_MODEL,                      # ① 모델
+    messages=[                               # ② 입력 및 시스템 역할
+        {"role": "system", "content": "너는 친절한 CS 상담원이다."},
+        {"role": "user", "content": "환불 얼마나 걸려요?"},
+    ],
+    temperature=0.3,                         # ③ 설정
+)
+</code></pre>
 <pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
 from google.genai import types
 
@@ -89,10 +155,17 @@ resp = client.models.generate_content(
 <h2 id="4-2">4. 응답 2종 세트</h2>
 <h3 id="1-resptext">① resp.text — 생성된 답변</h3>
 <p>모델이 만든 텍스트입니다. 우리가 실제로 사용자에게 보여 줄 내용입니다.</p>
+<pre><code class="language-python">print(resp.choices[0].message.content)   # "환불은 영업일 기준 평균 3~5일 정도 소요됩니다 ..."
+</code></pre>
 <pre><code class="language-python">print(resp.text)   # "환불은 영업일 기준 평균 3~5일 정도 소요됩니다 ..."
 </code></pre>
 <h3 id="2-respusage_metadata">② resp.usage_metadata — 토큰 사용량</h3>
 <p>이번 호출에 <strong>토큰이 몇 개</strong> 쓰였는지 알려 줍니다. <strong>토큰은 곧 요금</strong>이므로 비용을 가늠하는 핵심 정보입니다.</p>
+<pre><code class="language-python">u = resp.usage
+print(u.prompt_tokens)      # 입력(질문+시스템지시)에 쓴 토큰
+print(u.completion_tokens)  # 출력(답변)에 쓴 토큰
+print(u.total_tokens)       # 합계
+</code></pre>
 <pre><code class="language-python">u = resp.usage_metadata
 print(u.prompt_token_count)      # 입력(질문+시스템지시)에 쓴 토큰
 print(u.candidates_token_count)  # 출력(답변)에 쓴 토큰
@@ -103,6 +176,14 @@ print(u.total_token_count)       # 합계
 </blockquote>
 <hr/>
 <h2 id="5">5. 직접 확인해 보기</h2>
+<pre><code class="language-python">resp = client.chat.completions.create(
+    model=OPENAI_MODEL,
+    messages=[{"role": "user", "content": "승승장구몰을 한 문장으로 홍보해줘."}],
+    temperature=0.7,
+)
+print("답변:", resp.choices[0].message.content)
+print("토큰:", resp.usage)
+</code></pre>
 <pre><code class="language-python">resp = client.models.generate_content(
     model=GEMINI_MODEL,
     contents="승승장구몰을 한 문장으로 홍보해줘.",
@@ -118,6 +199,11 @@ print("토큰:", resp.usage_metadata)
 <hr/>
 <h2 id="_2">핵심 정리</h2>
 <ul>
+<li>요청 = model(모델) · messages(입력 및 역할) · temperature 등의 매개변수(설정).</li>
+<li>응답 = choices[0].message.content(답변) · usage(토큰).</li>
+<li>역할 = messages의 system 딕셔너리로 넣음.</li>
+<li>온도 = temperature 파라미터로 직접 담는다.</li>
+---------------------------------------------------------------------------------
 <li>요청 = <strong>model(모델) · contents(입력) · config(설정)</strong>.</li>
 <li>응답 = <strong>text(답변) · usage_metadata(토큰)</strong>.</li>
 <li><code>config</code>는 <code>types.GenerateContentConfig(...)</code>로 만들며, 역할과 온도를 담는다.</li>

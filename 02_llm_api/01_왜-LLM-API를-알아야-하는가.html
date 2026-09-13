@@ -22,7 +22,13 @@
 <hr/>
 <h2 id="1">1. "그냥 질문하고 답 받으면 되는 거 아닌가요?"</h2>
 <p>처음엔 그렇게 느껴집니다. 1강에서 우리가 한 일은 이게 전부였으니까요.</p>
-<pre><code class="language-python">resp = client.models.generate_content(model="gemini-2.5-flash", contents="안녕")
+<pre><code class="language-python">resp = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": "안녕"}]
+)
+print(resp.choices[0].message.content)
+</code></pre>
+<pre><code class="language-python">resp = client.models.generate_content(model="gemini-3.6-flash", contents="안녕")
 print(resp.text)
 </code></pre>
 <p>그런데 이걸 <strong>회사 서비스</strong>로 만들려는 순간, 질문이 쏟아집니다.</p>
@@ -43,9 +49,19 @@ print(resp.text)
 <li><strong>요청(Request)</strong> 에는 세 가지를 담습니다: <strong>어떤 모델</strong>(model), <strong>무슨 말</strong>(contents), <strong>어떤 설정</strong>(config — 역할·온도 등).</li>
 <li><strong>응답(Response)</strong> 에는 두 가지가 옵니다: <strong>생성된 텍스트</strong>(text), 그리고 <strong>사용량 정보</strong>(usage_metadata — 토큰 수).</li>
 </ul>
+<pre><code class="language-python"># [요청] model(어떤 모델) + messages(무슨 말) + 파라미터(어떤 설정)
+resp = client.chat.completions.create(
+    model="gpt-4o-mini",                               # 모델
+    messages=[{"role": "user", "content": "환불 얼마나 걸려요?"}],  # 입력
+    temperature=0.7,                                  # 설정(온도, 시스템 역할 등)
+)
+# [응답] resp.choices[0].message.content(생성된 답) + resp.usage(토큰 사용량)
+print(resp.choices[0].message.content)
+print(resp.usage)  # prompt_tokens, completion_tokens, total_tokens 확인 가능
+</code></pre>
 <pre><code class="language-python"># [요청] model(어떤 모델) + contents(무슨 말) + config(어떤 설정)
 resp = client.models.generate_content(
-    model="gemini-2.5-flash",       # 모델
+    model="gemini-3.6-flash",       # 모델
     contents="환불 얼마나 걸려요?",   # 입력
     config=...,                      # 설정(역할·온도 등)
 )

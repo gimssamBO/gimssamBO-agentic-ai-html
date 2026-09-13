@@ -18,7 +18,8 @@
 <div class="md">
 <h1 id="_1">시스템 지시로 역할 부여</h1>
 <h2 id="_2">한 줄 요약</h2>
-<p><strong>시스템 지시(system instruction)</strong> 는 모델에게 미리 주는 "너는 누구이고, 어떻게 답해야 한다"는 규칙입니다. 같은 질문이라도 시스템 지시만 바꾸면 <strong>말투·성격·답변 형식이 통째로</strong> 바뀝니다.</p>
+<p><strong>시스템 지시(system instruction)</strong> 는 모델에게 미리 주는 "너는 누구이고, 어떻게 답해야 한다"는 규칙입니다. 
+    <br>같은 질문이라도 시스템 지시만 바꾸면 <strong>말투·성격·답변 형식이 통째로</strong> 바뀝니다.</p>
 <hr/>
 <h2 id="1">1. 시스템 지시란?</h2>
 <p>대화에는 두 종류의 말이 있습니다.</p>
@@ -29,6 +30,24 @@
 <p>비유하자면, 시스템 지시는 <strong>배우에게 주는 배역 설명서</strong>입니다. "당신은 무뚝뚝한 형사입니다"라고 정해 두면, 어떤 대사를 쳐도 그 캐릭터를 유지하죠. 사용자 질문이 바뀌어도 역할은 그대로 유지됩니다.</p>
 <hr/>
 <h2 id="2">2. 코드로 역할 입히기</h2>
+<h3>실습 코드 : code/ch02_llm_api.py</h3>
+<p><code>messages</code>의 <code>role</code>에 역할을 적습니다.</p>
+<pre><code class="language-python">from common import get_openai_client, OPENAI_MODEL
+
+client = get_openai_client()
+
+def chat(system: str, user: str, temperature: float = 0.3) -> str:
+    """시스템 지시(system)와 사용자 입력(user)을 받아 답변 텍스트를 돌려준다."""
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "system", "content": system},        # ← 역할/규칙
+            {"role": "user", "content": user},            # 사용자 질문
+        ],
+        temperature=temperature,
+    )
+    return resp.choices[0].message.content
+</code></pre>
 <p><code>config</code>의 <code>system_instruction</code>에 역할을 적습니다.</p>
 <pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
 from google.genai import types
@@ -89,6 +108,15 @@ print(chat("너는 무뚝뚝한 엔지니어다. 핵심만 한 줄로 답하라.
 </tr>
 </tbody>
 </table>
+<pre><code class="language-python">ROLE = {
+    "role": "system",
+    "content": (
+        "너는 승승장구몰의 친절한 CS 상담원이다. "          # 역할
+        "고객 문의에 존댓말로 공감하며 간결하게 답하라. "    # 태도
+        "확실하지 않은 정보는 '확인 후 안내드리겠습니다'라고 답하라."  # 안전장치
+    ),
+}
+</code></pre>
 <pre><code class="language-python">ROLE = (
     "너는 승승장구몰의 친절한 CS 상담원이다. "          # 역할
     "고객 문의에 존댓말로 공감하며 간결하게 답하라. "    # 태도
@@ -102,7 +130,8 @@ print(chat("너는 무뚝뚝한 엔지니어다. 핵심만 한 줄로 답하라.
 <hr/>
 <h2 id="_3">핵심 정리</h2>
 <ul>
-<li>시스템 지시 = 대화 전체에 깔리는 <strong>역할·규칙</strong>. <code>system_instruction</code>에 적는다.</li>
+<li>시스템 지시(Openai) = 대화 전체에 깔리는 역할·규칙. messages 리스트의 {"role": "system", "content": "..."}에 적는다.</li>
+<li>시스템 지시(제미나이) = 대화 전체에 깔리는 <strong>역할·규칙</strong>. <code>system_instruction</code>에 적는다.</li>
 <li>같은 질문도 시스템 지시에 따라 <strong>말투·형식이 통째로</strong> 바뀐다.</li>
 <li>좋은 지시는 <strong>역할 + 태도 + 안전장치(모르면 모른다)</strong> 를 담는다.</li>
 <li>다음 절에서는 비용의 단위인 <strong>토큰</strong>을 배웁니다.</li>

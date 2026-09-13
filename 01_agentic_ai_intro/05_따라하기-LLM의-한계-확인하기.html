@@ -18,15 +18,18 @@
 <div class="md">
 <h1 id="llm">따라하기 — "LLM의 한계"를 눈으로 확인하기</h1>
 <h2 id="_1">목표</h2>
-<p>같은 챗봇에게 <strong>답할 수 있는 질문</strong>과 <strong>답할 수 없는 질문</strong>을 던져, "왜 도구가 필요한가"를 직접 체감합니다. 실제 실습 파일은 <code>code/ch01_intro.py</code> 입니다.</p>
+<p>같은 챗봇에게 <strong>답할 수 있는 질문</strong>과 <strong>답할 수 없는 질문</strong>을 던져, "왜 도구가 필요한가"를 직접 체감합니다. 실제 실습 파일은 
+    <br><code>code/ch01_intro.py</code> 입니다.</p>
 <hr/>
 <h2 id="0">0. 실습 준비</h2>
 <p>먼저 환경을 켜고, 이 과정에서 처음 쓰는 라이브러리를 설치합니다.</p>
 <pre><code class="language-bash">conda activate agentic
 
 # 1강에서 처음 쓰는 라이브러리
+#  - openai : Openai 공식 Python SDK (import get_openai_client)
 #  - google-genai : Gemini 공식 Python SDK (from google import genai)
 #  - python-dotenv: .env 파일에서 API 키를 읽어오는 도구
+pip install openai
 pip install google-genai python-dotenv
 </code></pre>
 <p>설치 후 키가 잘 잡혔는지 확인합니다.</p>
@@ -45,8 +48,26 @@ import sys, pathlib
 sys.path.append(str(pathlib.Path(__file__).resolve().parent))
 
 # common.py 의 도우미를 가져온다(모든 강이 공통 사용).
+#  - get_openai_client: .env 의 API 키로 OpenAI 클라이언트를 만들어 주는 함수
+#  - OPENAI_MODEL: 사용할 모델 이름
+from common import get_openai_client, OPENAI_MODEL
+
+# 클라이언트 생성. 이 객체로 모델에 요청을 보낸다.
+client = get_openai_client()
+</code></pre>
+<p>여기서 <code>get_openai_client()</code>가 <code>.env</code>의 키를 읽어 <code>get_openai_client(api_key=...)</code>를 대신 만들어 줍니다. 덕분에 우리는 매번 키를 신경 쓸 필요가 없습니다.</p>
+<pre><code class="language-python">
+# 실행: python code/ch01_intro.py => 제미나이용
+import sys, pathlib
+
+# [왜 필요한가] 이 스크립트는 같은 폴더(code/)의 common.py 를 import 한다.
+#   파이썬은 '실행 위치'에 따라 import 가 실패할 수 있으므로,
+#   이 파일이 있는 폴더(code/)를 모듈 검색 경로에 강제로 추가한다.
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+
+# common.py 의 도우미를 가져온다(모든 강이 공통 사용).
 #  - get_genai_client: .env 의 API 키로 Gemini 클라이언트를 만들어 주는 함수
-#  - GEMINI_MODEL: 사용할 모델 이름(기본 "gemini-2.5-flash")
+#  - GEMINI_MODEL: 사용할 모델 이름(기본 "gemini-2.5-flash = 지금은 무료에선 지원안해서 3.5 써야함")
 from common import get_genai_client, GEMINI_MODEL
 
 # 클라이언트 생성. 이 객체로 모델에 요청을 보낸다.
@@ -55,8 +76,24 @@ client = get_genai_client()
 <p>여기서 <code>get_genai_client()</code>가 <code>.env</code>의 키를 읽어 <code>genai.Client(api_key=...)</code>를 대신 만들어 줍니다. 덕분에 우리는 매번 키를 신경 쓸 필요가 없습니다.</p>
 <hr/>
 <h2 id="2">2. 가장 단순한 질문 함수</h2>
+<pre><code class="language-python">
+# 질문 문자열을 받아 LLM의 답변 텍스트를 돌려주는 가장 단순한 함수 = Openai.
+def ask(question: str) -> str:
+    """
+    create: '한 번 요청 → 한 번 응답'의 가장 기본적인 LLM 호출.
+      - model:    어떤 모델을 쓸지
+      - messages: 보낼 내용(여기선 질문)
+    resp.choices[0].message.content: 모델이 생성한 답변(문자열).
+    """
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[{"role": "user", "content": question}]
+    )
+    return resp.choices[0].message.content
+</code></pre>
+<p><code>client.chat.completions.create(model=..., messages=...)</code> — 이 한 줄이 LLM 호출의 핵심입니다. 결과는 <code>resp.choices[0].message.content</code>에 문자열로 담깁니다.</p>
 <pre><code class="language-python">def ask(question: str) -&gt; str:
-    """질문 문자열을 받아 LLM의 답변 텍스트를 돌려주는 가장 단순한 함수.
+    """질문 문자열을 받아 LLM의 답변 텍스트를 돌려주는 가장 단순한 함수 = 제미나이.
 
     generate_content: '한 번 요청 → 한 번 응답'의 가장 기본적인 LLM 호출.
       - model:    어떤 모델을 쓸지
@@ -117,6 +154,7 @@ A: 죄송하지만 실시간 주문 정보는 확인할 수 없습니다 ...   �
 <h2 id="_2">핵심 정리</h2>
 <ul>
 <li>LLM 호출의 최소 단위는 <code>client.models.generate_content(model=, contents=)</code> 입니다.</li>
+<li>LLM 호출의 최소 단위는 <code>client.chat.completions.create(model=, messages=)</code> 입니다.</li>
 <li>직접 실험해 보니 LLM은 <strong>일반 지식엔 강하고 실시간·사내 정보엔 약하다</strong>는 것을 확인했습니다.</li>
 <li>다음 절에서 1강 전체를 정리하고 체크리스트로 점검합니다.</li>
 </ul>

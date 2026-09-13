@@ -36,6 +36,22 @@
 <hr/>
 <h2 id="2-1">2. 방법 ① — 프롬프트로 유도 (가장 단순)</h2>
 <p>그냥 "JSON으로만 답하라"고 시키고 <code>json.loads</code>로 파싱하는 방법입니다.</p>
+<h3>OpenAI</h3>
+<pre><code class="language-python">import json
+messages = [
+    {
+        "role": "user",
+        "content": (
+            "다음 고객 문의를 분석해 JSON으로만 답하라.\n"
+            "key: category, urgent, summary\n"
+            "문의: 어제 받은 제품이 박살나서 왔어요."
+        ),
+    }
+]
+resp = client.chat.completions.create(model=OPENAI_MODEL, messages=messages)
+data = json.loads(resp.choices[0].message.content)  # 운이 나쁘면 모델이 설명을 덧붙여 실패할 수 있음
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python">import json
 contents = (
     "다음 고객 문의를 분석해 JSON으로만 답하라.\n"
@@ -49,6 +65,37 @@ data = json.loads(resp.text)   # 운이 나쁘면 모델이 설명을 덧붙여 
 <hr/>
 <h2 id="3-2-response_mime_type">3. 방법 ② — response_mime_type으로 강제 (더 안전)</h2>
 <p><code>config</code>에 <code>response_mime_type="application/json"</code>을 주면, 모델이 <strong>JSON만</strong> 내도록 강제됩니다. 군더더기가 사라져 <code>json.loads</code>가 항상 성공합니다.</p>
+<h3>OpenAI</h3>
+<pre><code class="language-python">import json
+from common import get_openai_client, OPENAI_MODEL
+
+client = get_openai_client()
+
+def triage(content: str) -> dict:
+    """문의를 분석해 category/urgent/summary 를 담은 dict로 돌려준다."""
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    "다음 고객 문의를 분석해 JSON으로만 답하라.\n"
+                    "키: category(배송/환불/교환/결제/상품문의/칭찬/불만 중 하나), "
+                    "urgent(true/false), summary(20자 이내 한국어)\n"
+                    f"문의: {content}"
+                ),
+            }
+        ],
+        temperature=0,
+        response_format={"type": "json_object"},  # ← JSON만 출력하도록 강제
+    )
+    return json.loads(resp.choices[0].message.content)  # JSON 문자열 → 파이썬 dict
+
+r = triage("어제 받은 제품이 박살나서 왔어요. 당장 환불해주세요!")
+print(r)
+print("긴급?", r["urgent"], "/ 분류:", r["category"])
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python">import json
 from common import get_genai_client, GEMINI_MODEL
 from google.genai import types
@@ -84,6 +131,27 @@ print("긴급?", r["urgent"], "/ 분류:", r["category"])
 <hr/>
 <h2 id="4-3">4. 방법 ③ — 스키마로 구조까지 못 박기 (한 단계 더)</h2>
 <p><code>response_schema</code>에 <strong>Pydantic 모델</strong>이나 스키마를 주면, JSON의 <strong>키 이름과 타입까지</strong> 강제할 수 있습니다. (이 방식은 8강에서 LangChain의 <code>with_structured_output</code>으로 본격적으로 씁니다.)</p>
+<h3>OpenAI</h3>
+<pre><code class="language-python">from pydantic import BaseModel
+
+class Triage(BaseModel):
+    category: str
+    urgent: bool
+    summary: str
+
+resp = client.beta.chat.completions.parse(
+    model=OPENAI_MODEL,
+    messages=[
+        {"role": "user", "content": "어제 받은 제품이 박살나서 왔어요. 당장 환불해주세요!"}
+    ],
+    response_format=Triage,        # ← 키·타입까지 Pydantic 스키마로 강제 (Structured Outputs)
+)
+
+print(resp.choices[0].message.content)       # JSON 문자열 출력
+# parsed 객체로 바로 접근도 가능:
+# parsed_result: Triage = resp.choices[0].message.parsed
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python">from pydantic import BaseModel
 
 class Triage(BaseModel):

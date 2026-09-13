@@ -66,7 +66,7 @@ client = genai.Client(api_key="...")
 
 # 사람이 질문 → LLM이 답 → 끝. 다음 행동은 사람이 또 정해야 함.
 resp = client.models.generate_content(
-    model="gemini-2.5-flash",
+    model="gemini-3.6-flash",
     contents="이 문장을 영어로 번역해줘: 안녕하세요",
 )
 print(resp.text)   # "Hello" → 여기서 종료

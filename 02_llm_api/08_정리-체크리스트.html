@@ -22,12 +22,30 @@
 <ul>
 <li><strong>요청-응답 구조</strong>: 요청은 <code>model·contents·config</code>, 응답은 <code>text·usage_metadata</code>.</li>
 <li><strong>시스템 지시</strong>: 모델에게 역할·말투·안전장치를 부여 → 같은 질문도 답이 통째로 바뀜.</li>
-<li><strong>토큰과 비용</strong>: 요금은 토큰으로 매겨지고, 한국어가 더 많이 쓴다. <code>usage_metadata</code>로 확인·예측.</li>
+<li><strong>토큰과 비용</strong>: 요금은 토큰으로 매겨지고, 한국어가 더 많이 쓴다. <code>OpenAI는 usage</code>로 확인·예측.</li>
+<li><strong>토큰과 비용</strong>: 요금은 토큰으로 매겨지고, 한국어가 더 많이 쓴다. <code>Gemini는 usage_metadata</code>로 확인·예측.</li>
 <li><strong>temperature</strong>: 무작위성 손잡이. 분류=0, 상담=0.3, 창작=0.7.</li>
 <li><strong>OpenAI 호출</strong>: 회사가 달라도 요청-응답 구조는 같다 → 모델 교체가 쉽다.</li>
 </ul>
 <hr/>
 <h2 id="_2">한눈에 보는 핵심 코드</h2>
+<h3>OpenAI</h3>
+<pre><code class="language-python">from common import get_openai_client, OPENAI_MODEL
+
+client = get_openai_client()
+
+resp = client.chat.completions.create(
+    model=OPENAI_MODEL,                                  # 어떤 모델
+    messages=[                                           # 무슨 말 + 역할
+        {"role": "system", "content": "너는 친절한 상담원이다."},  #   역할
+        {"role": "user", "content": "환불 얼마나 걸려요?"},      #   사용자 질문
+    ],
+    temperature=0.3,                                     # 어떤 설정 (무작위성)
+)
+print(resp.choices[0].message.content)  # 답변
+print(resp.usage)                       # 토큰(=비용)
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
 from google.genai import types
 
@@ -54,7 +72,7 @@ pip install openai                        # OpenAI (보조, 키 있을 때만)
 <ul>
 <li>[ ] 요청 3종 세트(model/contents/config)와 응답 2종 세트(text/usage)를 설명할 수 있다.</li>
 <li>[ ] 시스템 지시로 말투를 바꿀 수 있다.</li>
-<li>[ ] <code>usage_metadata</code>로 토큰을 확인하고, 한국어가 더 많이 쓴다는 걸 안다.</li>
+<li>[ ] <code>usage, usage_metadata</code>로 토큰을 확인하고, 한국어가 더 많이 쓴다는 걸 안다.</li>
 <li>[ ] temperature를 작업에 맞게(분류 0, 창작 0.7) 고를 수 있다.</li>
 <li>[ ] OpenAI 호출도 "요청-응답 구조는 같다"는 걸 확인했다.</li>
 </ul>

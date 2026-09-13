@@ -18,7 +18,8 @@
 <div class="md">
 <h1 id="temperature">temperature와 생성 제어</h1>
 <h2 id="_1">한 줄 요약</h2>
-<p><code>temperature</code>(온도)는 답변의 <strong>무작위성</strong>을 조절하는 손잡이입니다. <strong>0에 가까우면 일관되고 안정적</strong>, <strong>높으면 다양하고 창의적</strong>입니다. 분류·계산 같은 일은 0, 홍보 문구·아이디어 같은 일은 0.7처럼 씁니다.</p>
+<p><code>temperature</code>(온도)는 답변의 <strong>무작위성</strong>을 조절하는 손잡이입니다. 
+    <br><strong>0에 가까우면 일관되고 안정적</strong>, <strong>높으면 다양하고 창의적</strong>입니다. 분류·계산 같은 일은 0, 홍보 문구·아이디어 같은 일은 0.7처럼 씁니다.</p>
 <hr/>
 <h2 id="1-temperature">1. temperature란</h2>
 <p>1강에서 LLM은 "다음에 올 가장 그럴듯한 단어"를 고른다고 했습니다. 이때 <strong>얼마나 모험적으로 고를지</strong>를 정하는 게 temperature입니다.</p>
@@ -61,6 +62,31 @@
 <hr/>
 <h2 id="3">3. 코드로 온도의 효과 보기</h2>
 <p>같은 질문을 <strong>온도만 바꿔</strong> 여러 번 호출해, 답이 얼마나 다양해지는지 봅니다.</p>
+<h3>code/ch02_temperature.py</h3>
+<h3>Openai</h3>
+<pre><code class="language-python">from common import get_openai_client, OPENAI_MODEL
+
+client = get_openai_client()
+
+def promote(temperature: float) -> str:
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[{"role": "user", "content": "승승장구몰을 한 문장으로 홍보해줘."}],
+        temperature=temperature,
+    )
+    return resp.choices[0].message.content
+
+# 온도 0: 여러 번 불러도 거의 같은 답
+print("[temperature=0]")
+for _ in range(3):
+    print("-", promote(0.0))
+
+# 온도 1.0: 부를 때마다 색다른 답
+print("\n[temperature=1.0]")
+for _ in range(3):
+    print("-", promote(1.0))
+</code></pre>
+<h3>제미나이</h3>
 <pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
 from google.genai import types
 
@@ -99,8 +125,24 @@ for _ in range(3):
 <hr/>
 <h2 id="4">4. 다른 생성 파라미터(맛보기)</h2>
 <p><code>temperature</code> 외에도 답변을 통제하는 설정이 있습니다. 지금은 이름만 알아두면 됩니다.</p>
+<h3>OpenAI</h3>
 <ul>
-<li><strong>max_output_tokens</strong>: 답변 최대 길이(토큰). 길이를 강제로 잘라 비용을 통제.</li>
+<li><strong>max_tokens(또는 max_completion_tokens)</strong>: 답변 최대 길이(토큰). 길이를 강제로 잘라 비용을 통제.</li>
+<li><strong>top_p / top_k</strong>: OpenAI는 미지원. 보통 temperature만으로 충분.</li>
+</ul>
+<pre><code class="language-python">resp = client.chat.completions.create(
+    model=OPENAI_MODEL,
+    messages=[
+        {"role": "system", "content": "너는 친절한 상담원이다."},
+        {"role": "user", "content": "환불 얼마나 걸려요?"},
+    ],
+    temperature=0.3,
+    max_tokens=200,  # 답변을 200토큰 이내로 제한 (최신 SDK는 max_completion_tokens도 지원)
+)
+</code></pre>
+<h3>Gemini</h3>
+<ul>
+<li><strong>max_output_tokens(Gemini)</strong>: 답변 최대 길이(토큰). 길이를 강제로 잘라 비용을 통제.</li>
 <li><strong>top_p / top_k</strong>: temperature와 비슷하게 "후보 단어 범위"를 좁히는 방법. 보통 temperature만으로 충분.</li>
 </ul>
 <pre><code class="language-python">config = types.GenerateContentConfig(
@@ -114,7 +156,7 @@ for _ in range(3):
 <ul>
 <li><code>temperature</code>는 답변의 <strong>무작위성</strong>을 조절한다. 낮으면 일관, 높으면 다양.</li>
 <li><strong>분류·도구 선택·계산 = 0</strong>, <strong>상담 = 0.3</strong>, <strong>창작 = 0.7~1.0</strong>.</li>
-<li><code>max_output_tokens</code>로 답변 길이(=비용)도 제한할 수 있다.</li>
+<li><code>max_tokens(OpenAI),max_output_tokens(Gemini)</code>로 답변 길이(=비용)도 제한할 수 있다.</li>
 <li>다음 절에서 지금까지 배운 걸 합쳐 <strong>Gemini 호출 실습</strong>을 합니다.</li>
 </ul>
 </div>
