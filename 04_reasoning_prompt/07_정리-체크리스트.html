@@ -27,6 +27,34 @@
 </ul>
 <hr/>
 <h2 id="_2">한눈에 보는 핵심 코드</h2>
+<h3>OpenAI</h3>
+<pre><code class="language-python">from common import get_openai_client, OPENAI_MODEL
+
+client = get_openai_client()
+
+# 직접 답변 — 빠르지만 다단계 계산에 약함
+def ask_direct(q):
+    r = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "user", "content": f"{q}\n설명 없이 숫자만 답하라."}
+        ],
+        temperature=0,
+    )
+    return r.choices[0].message.content
+
+# CoT — 단계적으로 풀게 해서 정답률↑
+def ask_cot(q):
+    r = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "user", "content": f"{q}\n단계적으로 풀어라. 마지막 줄에 '정답: <숫자>'."}
+        ],
+        temperature=0,
+    )
+    return r.choices[0].message.content
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
 from google.genai import types
 client = get_genai_client()
@@ -54,7 +82,7 @@ def ask_cot(q):
 </ul>
 <hr/>
 <h2 id="_3">이 강에서 설치한 라이브러리</h2>
-<pre><code class="language-bash">pip install google-genai python-dotenv pandas   # (앞 강에서 설치했다면 생략 가능)
+<pre><code class="language-bash">pip install openai google-genai python-dotenv pandas   # (앞 강에서 설치했다면 생략 가능)
 </code></pre>
 <p>새로 설치할 라이브러리는 없습니다. <code>re</code>(정규식)는 파이썬 표준 라이브러리입니다.</p>
 <hr/>

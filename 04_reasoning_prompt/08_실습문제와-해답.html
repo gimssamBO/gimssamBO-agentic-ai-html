@@ -25,6 +25,69 @@
 <li>사용 파일: <code>data/math_word_problems.csv</code></li>
 <li>기대 결과: <code>CoT 정답률: x/8 | 단계제거 정답률: y/8</code> 형태로 두 수치가 나와 "단계적으로" 한 줄의 효과를 비교할 수 있으면 성공.</li>
 </ul>
+<h3>OpanAI</h3>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib, re
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_openai_client, OPENAI_MODEL, DATA
+import pandas as pd
+
+client = get_openai_client()
+df = pd.read_csv(DATA / "math_word_problems.csv")
+
+def extract_number(text):
+    nums = re.findall(r"-?\d[\d,]*", text.replace(" ", ""))
+    return int(nums[-1].replace(",", "")) if nums else None
+
+def ask_cot(q):
+    r = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": f"{q}\n단계적으로 풀어라. 각 계산을 한 줄씩 쓰고, 맨 마지막 줄에 '정답: <숫자>'."
+            }
+        ],
+        temperature=0,
+    )
+    return r.choices[0].message.content
+
+def ask_nostep(q):   # "단계적으로 풀어라" 문구만 제거 (형식은 동일)
+    r = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": f"{q}\n각 계산을 한 줄씩 쓰고, 맨 마지막 줄에 '정답: <숫자>'."
+            }
+        ],
+        temperature=0,
+    )
+    return r.choices[0].message.content
+
+cot_ok = nostep_ok = 0
+for _, row in df.iterrows():
+    ans = int(row["answer"])
+    cot_ok    += (extract_number(ask_cot(row["question"]))    == ans)
+    nostep_ok += (extract_number(ask_nostep(row["question"])) == ans)
+
+n = len(df)
+print(f"CoT 정답률: {cot_ok}/{n} | 단계제거 정답률: {nostep_ok}/{n}")
+</code></pre>
+
+
+**예상 출력**
+
+
+<pre><code class="language-text">CoT 정답률: 8/8 | 단계제거 정답률: 6/8
+</code></pre>
+
+
+**해설**: 형식("한 줄씩, 마지막에 정답")은 똑같이 두고 **"단계적으로 풀어라"** 라는 지시어만 뺐는데 정답률이 떨어집니다. 이 한 문구가 모델에게 "차근차근 추론하라"는 신호를 준다는 걸 보여 줍니다. (이런 식으로 프롬프트의 한 요소만 바꿔 효과를 재는 것을 A/B 테스트라고 합니다.)
+
+</details>
+<h3>Gemini</h3>
 <details>
 <summary>해답 보기</summary>
 <pre><code class="language-python">import sys, pathlib, re
@@ -83,6 +146,64 @@ print(f"CoT 정답률: {cot_ok}/{n} | 단계제거 정답률: {nostep_ok}/{n}")
 <li>사용 파일: <code>data/math_word_problems.csv</code></li>
 <li>기대 결과: 3개의 개별 답과 최종 다수결 답이 출력되고, 정답과 일치하면 성공.</li>
 </ul>
+<h3>OpenAI</h3>
+<details>
+<summary>해답 보기</summary>
+<pre><code class="language-python">import sys, pathlib, re
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_openai_client, OPENAI_MODEL, DATA
+import pandas as pd
+
+client = get_openai_client()
+df = pd.read_csv(DATA / "math_word_problems.csv")
+
+def extract_number(text):
+    nums = re.findall(r"-?\d[\d,]*", text.replace(" ", ""))
+    return int(nums[-1].replace(",", "")) if nums else None
+
+def ask_cot(q):
+    r = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": f"{q}\n단계적으로 풀어라. 각 계산을 한 줄씩 쓰고, 맨 마지막 줄에 '정답: <숫자>'."
+            }
+        ],
+        temperature=0,
+    )
+    return r.choices[0].message.content
+
+def ask_nostep(q):   # "단계적으로 풀어라" 문구만 제거 (형식은 동일)
+    r = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": f"{q}\n각 계산을 한 줄씩 쓰고, 맨 마지막 줄에 '정답: <숫자>'."
+            }
+        ],
+        temperature=0,
+    )
+    return r.choices[0].message.content
+
+cot_ok = nostep_ok = 0
+for _, row in df.iterrows():
+    ans = int(row["answer"])
+    cot_ok    += (extract_number(ask_cot(row["question"]))    == ans)
+    nostep_ok += (extract_number(ask_nostep(row["question"])) == ans)
+
+n = len(df)
+print(f"CoT 정답률: {cot_ok}/{n} | 단계제거 정답률: {nostep_ok}/{n}")
+</code></pre>
+**예상 출력**
+<pre><code class="language-text">개별 답: [213300, 213300, 213000]
+다수결 답: 213300
+실제 정답: 213300 → 맞음
+</code></pre>
+**해설**: 세 번 풀어 `[213300, 213300, 213000]`이 나왔는데, 다수결로 `213300`을 채택해 정답을 맞혔습니다. 한 번의 풀이가 우연히 틀려도, **여러 번 풀어 가장 많이 나온 답**을 고르면 더 안정적입니다. 이게 self-consistency의 핵심입니다. (대신 호출을 n배 하므로 비용도 n배입니다.)
+</details>
+<h3>Gemini</h3>
 <details>
 <summary>해답 보기</summary>
 <pre><code class="language-python">import sys, pathlib, re
@@ -119,19 +240,12 @@ if __name__ == "__main__":
     result = self_consistency(row["question"], n=3)
     print("실제 정답:", int(row["answer"]), "→", "맞음" if result == int(row["answer"]) else "틀림")
 </code></pre>
-
-
 **예상 출력**
-
-
 <pre><code class="language-text">개별 답: [213300, 213300, 213000]
 다수결 답: 213300
 실제 정답: 213300 → 맞음
 </code></pre>
-
-
 **해설**: 세 번 풀어 `[213300, 213300, 213000]`이 나왔는데, 다수결로 `213300`을 채택해 정답을 맞혔습니다. 한 번의 풀이가 우연히 틀려도, **여러 번 풀어 가장 많이 나온 답**을 고르면 더 안정적입니다. 이게 self-consistency의 핵심입니다. (대신 호출을 n배 하므로 비용도 n배입니다.)
-
 </details>
 <hr/>
 <h2 id="_2">정리</h2>

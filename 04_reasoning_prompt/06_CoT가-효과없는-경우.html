@@ -26,9 +26,41 @@
 <li><strong>(a) 단순 질문</strong>: "대한민국 수도는?" 같은 건 직접 답변도 맞습니다. CoT는 <strong>토큰(비용)만 더 씁니다.</strong></li>
 <li><strong>(b) 함정 문제</strong>: 직관적인 중간 계산이 함정인 문제에서는, CoT가 <strong>그 함정에 빠져</strong> 오답을 낼 수 있습니다.</li>
 </ul>
-<p>(실습 파일: <code>sections/04_reasoning_prompt/06_CoT가-효과없는-경우.py</code>)</p>
+<p>(실습 파일: <code>code/ch04_cot_nouse.py</code>)</p>
 <hr/>
 <h2 id="2-a">2. (a) 단순 질문 — 토큰 낭비</h2>
+<h3>OpenAI</h3>
+<p><code>usage</code>로 토큰을 비교하면 낭비가 보입니다.</p>
+<pre><code class="language-python">from common import get_openai_client, OPENAI_MODEL
+
+client = get_openai_client()
+
+def ask_direct(question: str):
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "user", "content": f"{question}\n설명 없이 정답만 한 단어로 답하라."}
+        ],
+        temperature=0,
+    )
+    return resp.choices[0].message.content.strip(), resp.usage.total_tokens
+
+def ask_cot(question: str):
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "user", "content": f"{question}\n단계적으로 풀어라. 마지막 줄에 '정답: <값>'."}
+        ],
+        temperature=0,
+    )
+    return resp.choices[0].message.content.strip(), resp.usage.total_tokens
+
+d_txt, d_tok = ask_direct("대한민국의 수도는 어디인가?")
+c_txt, c_tok = ask_cot("대한민국의 수도는 어디인가?")
+print(f"직접: {d_txt} (토큰 {d_tok})")
+print(f"CoT : 토큰 {c_tok}  ← 같은 정답인데 토큰만 더 씀")
+</code></pre>
+<h3>Gemini</h3>
 <p><code>usage_metadata</code>로 토큰을 비교하면 낭비가 보입니다.</p>
 <pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
 from google.genai import types

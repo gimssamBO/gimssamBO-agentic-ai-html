@@ -56,6 +56,23 @@
 <hr/>
 <h2 id="2">2. 직접 답변 함수</h2>
 <p>중간 과정을 막고 <strong>최종 숫자만</strong> 시킵니다.</p>
+<h3>OpenAI</h3>
+<pre><code class="language-python">from common import get_openai_client, OPENAI_MODEL
+
+client = get_openai_client()
+
+def ask_direct(question: str) -> str:
+    """직접 답변: 중간 과정 없이 최종 숫자만 시킨다 → 다단계 계산에서 자주 틀림."""
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "user", "content": f"{question}\n설명 없이 최종 숫자(원)만 답하라."}
+        ],
+        temperature=0,
+    )
+    return resp.choices[0].message.content
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
 from google.genai import types
 
@@ -74,6 +91,30 @@ def ask_direct(question: str) -&gt; str:
 <hr/>
 <h2 id="3-cot">3. CoT 함수</h2>
 <p>반대로 <strong>한 줄씩 풀이를 쓰게</strong> 하고, 마지막 줄에 정답 형식을 정해 줍니다.</p>
+<h3>OpenAI</h3>
+<pre><code class="language-python">def ask_cot(question: str) -> str:
+    """CoT: 한 줄씩 풀이를 쓰게 한다.
+
+    [왜] 모델은 앞서 쓴 자기 출력을 다시 입력으로 참고한다. 풀이를 글로 쓰게 하면
+    그 풀이가 다음 토큰 생성의 '작업 공간(근거)'이 되어 마지막 답이 정확해진다.
+    """
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f"{question}\n"
+                    "단계적으로 풀어라. 각 계산을 한 줄씩 쓰고, "
+                    "맨 마지막 줄에 '정답: <숫자>' 형식으로 답하라."
+                ),
+            }
+        ],
+        temperature=0,
+    )
+    return resp.choices[0].message.content
+</code></pre>
+<h3>Geimini</h3>
 <pre><code class="language-python">def ask_cot(question: str) -&gt; str:
     """CoT: 한 줄씩 풀이를 쓰게 한다.
 
