@@ -21,6 +21,23 @@
 <p>04번에서 만든 도구 두 개를 LLM에 연결합니다. <code>tools=[함수들]</code> 한 줄이면, SDK가 "결정 → 실행 → 결과 전달 → 최종 답"의 5단계를 <strong>자동으로</strong> 돌립니다.</p>
 <hr/>
 <h2 id="1">1. 도구를 한 줄로 연결</h2>
+<h3>OpenAI</h3>
+<pre><code class="language-python">from common import get_openai_client, OPENAI_MODEL
+
+client = get_openai_client()
+# (get_stock, get_exchange_rate 는 04번에서 만든 함수)
+
+question = "이어버드 재고 있어? 그리고 가격을 달러로 환산하려면 환율이 얼마야?"
+
+resp = client.chat.completions.create(
+    model=OPENAI_MODEL,
+    messages=[{"role": "user", "content": question}],
+    tools=tools,
+    temperature=0,
+)
+print(resp.choices[0].message.content)
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
 from google.genai import types
 
@@ -59,6 +76,18 @@ print(resp.text)
 <hr/>
 <h2 id="3">3. 도구가 하나만 필요한 질문은?</h2>
 <p>질문에 따라 모델은 <strong>필요한 도구만</strong> 고릅니다.</p>
+<h3>OpenAI</h3>
+<pre><code class="language-python"># 재고만 물으면 → get_stock 만 호출
+resp = client.chat.completions.create(
+    model=OPENAI_MODEL,
+    messages=[{"role": "user", "content": "로봇청소기 재고 얼마나 있어?"}],
+    tools=tools,
+    temperature=0,
+)
+print(resp.choices[0].message.content)
+# → "로봇청소기 재고는 ...개 입니다." (환율 도구는 안 씀)
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python"># 재고만 물으면 → get_stock 만 호출
 resp = client.models.generate_content(
     model=GEMINI_MODEL,
@@ -72,6 +101,15 @@ print(resp.text)
 <hr/>
 <h2 id="4">4. 도구가 없으면?</h2>
 <p>비교를 위해, 도구 없이 같은 질문을 던져 봅니다.</p>
+<h3>OpenAI</h3>
+<pre><code class="language-python"># 도구 없이 — 1강의 그 한계로 돌아감
+resp = client.chat.completions.create(
+    model=OPENAI_MODEL,
+    messages=[{"role": "user", "content": "이어버드 재고 있어?"}],
+)
+print(resp.choices[0].message.content)
+# → "실시간 재고는 확인할 수 없습니다 ..." (또는 환각)</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python"># 도구 없이 — 1강의 그 한계로 돌아감
 resp = client.models.generate_content(model=GEMINI_MODEL, contents="이어버드 재고 있어?")
 print(resp.text)

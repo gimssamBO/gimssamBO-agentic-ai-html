@@ -46,6 +46,20 @@
 <hr/>
 <h2 id="2">2. 자동 실행 — 한 줄로 끝</h2>
 <p><code>config</code>에 <code>tools=[함수들]</code>만 넘기면, SDK가 5단계를 <strong>자동으로</strong> 돌립니다.</p>
+<h3>OpenAI</h3>
+<pre><code class="language-python">from common import get_openai_client, OPENAI_MODEL
+
+client = get_openai_client()
+
+resp = client.chat.completions.create(
+    model=OPENAI_MODEL,
+    messages=[{"role": "user", "content": "이어버드 재고 있어?"}],
+    tools=tools,
+    temperature=0,
+)
+print(resp.choices[0].message.content)
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
 from google.genai import types
 
@@ -65,6 +79,22 @@ print(resp.text)   # 이미 도구 실행까지 끝난 최종 답변
 <hr/>
 <h2 id="3">3. 수동 루프 — 원리를 눈으로</h2>
 <p>자동 실행을 <strong>끄면</strong>(<code>disable=True</code>), 모델은 "무엇을 호출할지" <strong>결정만</strong> 하고 멈춥니다. 그 결정을 우리가 직접 받아 실행합니다.</p>
+<h3>OpenAI</h3>
+<pre><code class="language-python">resp = client.chat.completions.create(
+    model=OPENAI_MODEL,
+    messages=[{"role": "user", "content": "이어버드 재고 알려줘."}],
+    tools=tools,
+    temperature=0,
+)
+
+# 모델은 '결정'만 했다 → tool_calls 에 담김
+msg = resp.choices[0].message
+if msg.tool_calls:
+    for tc in msg.tool_calls:
+        print("모델의 결정:", tc.function.name, tc.function.arguments)  # 무엇을 부르려는지
+        # ↑ 아직 실행 안 됨! 실행은 우리가 한다 (다음 절)
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python">resp = client.models.generate_content(
     model=GEMINI_MODEL,
     contents="이어버드 재고 알려줘.",

@@ -22,11 +22,46 @@
 <ul>
 <li><strong>Function Calling</strong>: LLM이 파이썬 함수를 도구로 써서 실제 데이터를 조회한다.</li>
 <li><strong>핵심 개념</strong>: LLM은 함수를 <strong>직접 실행하지 못한다</strong> — "무엇을 부를지" 결정만 하고, 실행은 우리가 한다.</li>
-<li><strong>자동 vs 수동</strong>: 자동(<code>tools=[...]</code>)은 편하고, 수동(<code>disable=True</code> + <code>function_calls</code>)은 원리를 보여 준다.</li>
-<li><strong>오류 처리</strong>: 도구 실패를 <code>try/except</code>로 잡아 친절한 메시지로 바꾸면 에이전트가 멈추지 않는다.</li>
+<li><strong>(OpenAI)자동 vs 수동</strong>: 자동(프레임워크/런너 연동)은 편하고, 수동(<code>tools=[...]</code> 전달 후 기본 반환되는 <code>tool_calls</code> 파싱 및 직접 실행)은 원리를 보여 준다.</li>
+<li><strong>(Gemini)자동 vs 수동</strong>: 자동(<code>tools=[...]</code>)은 편하고, 수동(<code>disable=True</code> + <code>function_calls</code>)은 원리를 보여 준다.</li>
+<li><strong>(OpenAI)오류 처리</strong>: 도구 실패를 <code>try/except</code>로 잡아 에러 내용이나 안내 문구를 <code>role="tool"</code>의 <code>content</code>에 담아 모델에 돌려주면 에이전트가 예외로 멈추지 않고 후속 답변을 완성한다.</li>
+<li><strong>(Gemini)오류 처리</strong>: 도구 실패를 <code>try/except</code>로 잡아 친절한 메시지로 바꾸면 에이전트가 멈추지 않는다.</li>
 </ul>
 <hr/>
 <h2 id="_2">한눈에 보는 핵심 코드</h2>
+<h3>OpenAI</h3>
+<pre><code class="language-python">from common import get_openai_client, OPENAI_MODEL
+from openai import pydantic_function_tool
+import json
+
+client = get_openai_client()
+
+# 도구 = 독스트링 + 타입힌트를 갖춘 파이썬 함수
+def get_stock(product_name: str) -> str:
+    """상품명을 받아 현재 재고 수량을 반환한다."""
+    try:
+        ...  # 조회
+        return "재고 225개"
+    except Exception as e:
+        return f"조회 오류: {e}"          # 예외를 친절한 문자열로
+
+# (자동) OpenAI 최신 SDK(Agents/Runner 계열) 기준: 함수 자체를 래핑해 실행 위임 가능
+# 순수 Chat Completions API는 기본적으로 '결정'만 반환하므로 수동 제어가 기본 규격입니다.
+
+# (수동) tools를 넘기면 '결정(tool_calls)'만 반환 → 우리가 실행
+resp = client.chat.completions.create(
+    model=OPENAI_MODEL,
+    messages=[{"role": "user", "content": "이어버드 재고?"}],
+    tools=[pydantic_function_tool(get_stock)],
+    temperature=0,
+)
+
+msg = resp.choices[0].message
+if msg.tool_calls:
+    for tc in msg.tool_calls:
+        result = {"get_stock": get_stock}[tc.function.name](**json.loads(tc.function.arguments))   # 우리가 실행
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
 from google.genai import types
 client = get_genai_client()
@@ -58,7 +93,7 @@ for fc in resp.function_calls:
 </code></pre>
 <hr/>
 <h2 id="_3">이 강에서 설치한 라이브러리</h2>
-<pre><code class="language-bash">pip install google-genai python-dotenv pandas   # (앞 강에서 설치했다면 생략 가능)
+<pre><code class="language-bash">pip install openai google-genai python-dotenv pandas   # (앞 강에서 설치했다면 생략 가능)
 </code></pre>
 <p>새로 설치할 라이브러리는 없습니다.</p>
 <hr/>
@@ -66,9 +101,11 @@ for fc in resp.function_calls:
 <ul>
 <li>[ ] LLM은 함수를 실행하지 못하고 "무엇을 호출할지"만 정한다는 것을 설명할 수 있다.</li>
 <li>[ ] 자동 function calling으로 도구를 한 줄(<code>tools=[...]</code>)로 연결해 봤다.</li>
-<li>[ ] 수동 루프에서 <code>response.function_calls</code>를 직접 실행해 봤다.</li>
+<li>[ ] <strong>(OpenAI)</strong>수동 루프에서 <code>response.choices[0].message.tool_calls</code>를 직접 실행해 봤다.</li>
+<li>[ ] <strong>(Gemini)</strong>수동 루프에서 <code>response.function_calls</code>를 직접 실행해 봤다.</li>
 <li>[ ] 함수 독스트링이 모델의 도구 선택 근거임을 이해했다.</li>
-<li>[ ] 도구 오류를 <code>try/except</code>로 잡아 친절한 메시지로 변환했다.</li>
+<li>[ ] <strong>(OpenAI)</strong>도구 오류를 <code>try/except</code>로 잡아 친절한메시지 문자열로 변환해 role="tool"의 content로 전달했다.</li>
+<li>[ ] <strong>(Gemini)</strong>도구 오류를 <code>try/except</code>로 잡아 친절한 메시지로 변환했다.</li>
 </ul>
 <hr/>
 <h2 id="_5">한 줄 핵심</h2>

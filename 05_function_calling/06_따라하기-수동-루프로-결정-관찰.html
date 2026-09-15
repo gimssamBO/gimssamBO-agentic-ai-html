@@ -21,7 +21,59 @@
 <p>자동 실행을 <strong>끄고</strong>, 모델이 "무엇을 호출하려 했는지"를 직접 들여다봅니다. 그리고 그 결정을 우리가 실행하고, 결과를 모델에 되돌려 최종 답을 만듭니다. 이게 7강 Agent Loop의 토대입니다.</p>
 <hr/>
 <h2 id="1">1. 자동 실행 끄기</h2>
-<p><code>automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)</code>로 자동 실행을 끕니다. 그러면 모델은 <strong>결정만</strong> 하고 멈춥니다.</p>
+<p><code>automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)</code>로 자동 실행을 끕니다. 그러면 모델은 
+    <strong>결정만</strong> 하고 멈춥니다.</p>
+<h3>OpenAI</h3>
+<p>OpenAI 코드에서는 별도의 disable 옵션 없이 tools=tools만 넘겨주는 것이 Gemini의 disable=True와 완전히 동일하게 동작</p>
+<pre><code class="language-python">from common import get_openai_client, OPENAI_MODEL
+
+client = get_openai_client()
+# 2. OpenAI API용 Tool 스키마 정의
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_exchange_rate",
+            "description": "특정 외화(USD, EUR, JPY 등)의 환율을 조회하거나 가격 환산 시 호출. '달러'는 'USD' 등 표준 통화 코드로 변환 필요.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "currency": {
+                        "type": "string",
+                        "description": "환율을 조회할 3자리 통화 코드 (예: 'USD', 'EUR', 'JPY')",
+                    }
+                },
+                "required": ["currency"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_stock",
+            "description": "상품명(일부 키워드 가능)을 받아 현재 재고 수량과 보관 창고를 반환한다.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product_name": {
+                        "type": "string",
+                        "description": "조회할 상품명 키워드 (예: '이어버드')",
+                    }
+                },
+                "required": ["product_name"],
+            },
+        },
+    },
+]
+
+resp = client.chat.completions.create(
+    model=OPENAI_MODEL,
+    messages=[{"role": "user", "content": "이어버드 재고 알려줘."}],
+    tools=tools,
+    temperature=0,
+)
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
 from google.genai import types
 
@@ -39,7 +91,23 @@ resp = client.models.generate_content(
 </code></pre>
 <hr/>
 <h2 id="2">2. 모델의 '결정' 들여다보기</h2>
-<p>이제 <code>resp.function_calls</code>에 모델이 부르려는 함수 목록이 담겨 있습니다. <strong>아직 실행은 안 됐습니다.</strong> 우리가 직접 실행합니다.</p>
+<p>이제 <code>resp.function_calls</code>에 모델이 부르려는 함수 목록이 담겨 있습니다. <strong>아직 실행은 안 됐습니다.</strong> 
+    우리가 직접 실행합니다.</p>
+<h3>OpenAI</h3>
+<pre><code class="language-python">import json
+
+# 이름 → 함수 매핑 (모델이 고른 함수 이름으로 실제 함수를 찾기 위함)
+TOOLS = {"get_stock": get_stock, "get_exchange_rate": get_exchange_rate}
+
+msg = resp.choices[0].message
+if msg.tool_calls:
+    for tc in msg.tool_calls:
+        args = json.loads(tc.function.arguments)
+        print("모델의 결정 → 함수:", tc.function.name, "| 인자:", args)
+        result = TOOLS[tc.function.name](**args)     # ← 우리가 직접 실행!
+        print("우리가 실행한 결과:", result)
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python"># 이름 → 함수 매핑 (모델이 고른 함수 이름으로 실제 함수를 찾기 위함)
 TOOLS = {"get_stock": get_stock, "get_exchange_rate": get_exchange_rate}
 
@@ -53,6 +121,13 @@ for fc in resp.function_calls:
 우리가 실행한 결과: 승승 무선 블루투스 이어버드 SE 재고 225개 (서울물류)
 </code></pre>
 <p>여기서 <strong>세 가지</strong>를 확인하세요.</p>
+<h3>OpenAI</h3>
+<ul>
+    <li><code>tc.function.name</code>: 모델이 고른 함수 이름(<code>"get_stock"</code>)</li>
+    <li><code>json.loads(tc.function.arguments)</code>: 모델이 채운 인자 (<code>{'product_name': '이어버드'}</code>)</li>
+    <li><code>TOOLS[tc.function.name](**json.loads(tc.function.arguments))</code>: 이름으로 진짜 함수를 찾아 <strong>우리가 실행</strong></li>
+</ul>
+<h3>Gemini</h3>
 <ul>
 <li><code>fc.name</code>: 모델이 고른 함수 이름 (<code>"get_stock"</code>)</li>
 <li><code>fc.args</code>: 모델이 채운 인자 (<code>{'product_name': '이어버드'}</code>)</li>
@@ -63,7 +138,8 @@ for fc in resp.function_calls:
 </blockquote>
 <hr/>
 <h2 id="3-tools">3. <code>TOOLS</code> 딕셔너리가 왜 필요한가</h2>
-<p>모델은 함수 <strong>이름(문자열)</strong> <code>"get_stock"</code>을 줍니다. 그런데 문자열로는 함수를 호출할 수 없죠. 그래서 <strong>이름 → 함수</strong> 매핑이 필요합니다.</p>
+<p>모델은 함수 <strong>이름(문자열)</strong> <code>"get_stock"</code>을 줍니다. 그런데 문자열로는 함수를 호출할 수 없죠. 
+    그래서 <strong>이름 → 함수</strong> 매핑이 필요합니다.</p>
 <pre><code class="language-python">TOOLS = {"get_stock": get_stock, "get_exchange_rate": get_exchange_rate}
 
 name = "get_stock"             # 모델이 준 이름
@@ -73,7 +149,29 @@ result = func(product_name="이어버드")   # 호출
 <p>이 패턴은 7강 Agent Loop에서 계속 씁니다. 모델이 고른 도구를 이름으로 찾아 실행하는 거죠.</p>
 <hr/>
 <h2 id="4">4. 결과를 모델에 되돌려 최종 답 만들기</h2>
-<p>수동에서 <strong>최종 답</strong>까지 만들려면, 실행 결과를 <code>function_response</code>로 다시 모델에 넣어야 합니다. 대화 기록을 순서대로 쌓습니다.</p>
+<p>수동에서 <strong>최종 답</strong>까지 만들려면, 실행 결과를 <code>function_response</code>로 다시 모델에 넣어야 합니다. 
+    대화 기록을 순서대로 쌓습니다.</p>
+<h3>OpenAI</h3>
+<pre><code class="language-python">tc = resp.choices[0].message.tool_calls[0]
+result = TOOLS[tc.function.name](**json.loads(tc.function.arguments))
+
+followup = client.chat.completions.create(
+    model=OPENAI_MODEL,
+    # 대화 기록: [사용자 질문] → [모델의 함수호출] → [우리의 실행 결과] 순으로 쌓는다
+    messages=[
+        {"role": "user", "content": "이어버드 재고 알려줘."},
+        resp.choices[0].message,
+        {
+            "role": "tool",
+            "tool_call_id": tc.id,
+            "name": tc.function.name,
+            "content": json.dumps({"result": result}),
+        },
+    ],
+)
+print(followup.choices[0].message.content)
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python">fc = resp.function_calls[0]
 result = TOOLS[fc.name](**dict(fc.args))
 
@@ -96,6 +194,13 @@ print(followup.text)
 <pre><code class="language-text">승승 무선 블루투스 이어버드 SE는 현재 225개 재고가 있습니다(서울물류 보관).
 </code></pre>
 <p>세 개의 <code>Content</code>를 순서대로 쌓은 게 보이시나요?</p>
+<h3>OpenAI</h3>
+<ol>
+<li><strong>사용자 질문</strong> (<code>role="user", content="..."</code>)</li>
+<li><strong>모델의 함수 호출 결정</strong> (<code>role="assistant"</code>, <code>tool_calls=[...]</code>)</li>
+<li><strong>우리의 실행 결과</strong> (<code>role="tool"</code>, <code>tool_call_id=..., content=...</code>)</li>
+</ol>
+<h3>Gemini</h3>
 <ol>
 <li><strong>사용자 질문</strong> (<code>role="user"</code>)</li>
 <li><strong>모델의 함수 호출 결정</strong> (<code>role="model"</code>, <code>function_call=fc</code>)</li>
@@ -104,6 +209,12 @@ print(followup.text)
 <p>이렇게 "관찰 결과"를 모델이 <strong>봐야</strong> 최종 답을 만들 수 있습니다. 이 "대화 기록을 쌓아 가며 반복"하는 것이 바로 7강 Agent Loop의 핵심입니다.</p>
 <hr/>
 <h2 id="5-vs">5. 자동 vs 수동, 무엇을 봤나</h2>
+<h3>OpenAI</h3>
+<ul>
+<li><strong>자동</strong>(05번): <code>tools=[...] </code>전달 후 SDK 내부 자동 실행 기능을 쓰면 끝(Responses API나 에이전트 프레임워크 사용 시). 편하지만 흐름 제어가 불가능함.</li>
+<li><strong>수동</strong>(06번): tools=[...]를 주면 모델이 <code>tool_calls</code>만 생성하고 멈춤. 반환된 호출 결정을 직접 꺼내 실행하고, 중간 검증이나 제어 로직을 끼워 넣은 뒤 role="tool" 메시지로 재전송함.</li>
+</ul>
+<h3>Gemini</h3>
 <ul>
 <li><strong>자동</strong>(05번): <code>tools=[...]</code>만 주면 끝. 편하지만 안이 안 보임.</li>
 <li><strong>수동</strong>(06번): 자동을 끄고 <code>function_calls</code>를 직접 실행. 모델의 "결정"이 보이고, 중간에 제어를 끼울 수 있음.</li>
@@ -111,6 +222,15 @@ print(followup.text)
 <p>7강에서는 이 수동 루프를 <code>while</code>로 감싸, 모델이 "재고 확인 → 부족하면 재주문 기준 조회 → 판단"처럼 <strong>여러 단계를 스스로</strong> 처리하는 에이전트를 만듭니다.</p>
 <hr/>
 <h2 id="_3">핵심 정리</h2>
+<h3>OpenAI</h3>
+<ul>
+<li><code>tools=[...]</code>를 주면 모델은 기본적으로 <strong>결정만</strong>(<code>tool_calls</code>) 하고 멈춘다.</li>
+<li><code>TOOLS[tc.function.name](**json.loads(tc.function.arguments))</code>로 이름→함수를 찾아 <strong>우리가 실행</strong>한다.</li>
+<li>최종 답은 결과를 <code>role="tool"(tool_call_id=tc.id)</code>메시지로 <strong>되돌려</strong> 만든다.</li>
+<li>이 "결정→실행→결과 전달" 루프가 <strong>7강 Agent Loop의 토대</strong>다.</li>
+<li>다음 절에서 도구가 <strong>실패할 때</strong> 우아하게 처리하는 법을 배웁니다.</li>
+</ul>
+<h3>Gemini</h3>
 <ul>
 <li><code>disable=True</code>로 자동을 끄면 모델은 <strong>결정만</strong>(<code>function_calls</code>) 하고 멈춘다.</li>
 <li><code>TOOLS[fc.name](**dict(fc.args))</code>로 이름→함수를 찾아 <strong>우리가 실행</strong>한다.</li>
