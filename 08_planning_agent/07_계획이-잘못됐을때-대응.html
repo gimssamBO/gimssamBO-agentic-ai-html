@@ -18,8 +18,113 @@
 <div class="md">
 <h1 id="_1">계획이 잘못됐을 때 대응 (검증 → 재계획)</h1>
 <h2 id="_2">한 줄 요약</h2>
-<p><code>make_plan</code>이 만든 계획이 <strong>항상 좋은 건 아닙니다.</strong> 단계가 비었거나 1개뿐이면 분해 실패, 너무 많으면(&gt;8) 과분해입니다. <strong>검증(validate)</strong> 으로 적합성을 판정하고, 부적합하면 <strong>무엇이 문제인지 피드백을 붙여 재계획(replan)</strong> 을 요청합니다.</p>
+<p><code>make_plan</code>이 만든 계획이 <strong>항상 좋은 건 아닙니다.</strong> 
+    단계가 비었거나 1개뿐이면 분해 실패, 너무 많으면(&gt;8) 과분해입니다. <strong>검증(validate)</strong> 
+    으로 적합성을 판정하고, 부적합하면 <strong>무엇이 문제인지 피드백을 붙여 재계획(replan)</strong> 을 요청합니다.</p>
 <hr/>
+<h3>적용 코드 <code>code/ch08_plan_validate.py</code></h3>
+<pre><code># 실행: python code/ch08_plan_validate.py
+from typing import List
+from pydantic import BaseModel
+from common import get_chat
+
+# 1. LLM 모델 초기화 (OpenAI 사용)
+llm = get_chat(provider="openai")
+
+# 2. 계획의 적합 범위 (하위 작업 개수 기준)
+MIN_STEPS, MAX_STEPS = 2, 8
+
+# 3. 계획의 구조를 정의하는 스키마
+class Plan(BaseModel):
+    goal: str
+    steps: List[str]
+
+def make_plan(goal: str) -> Plan:
+    """목표를 받아 실행 순서대로 하위 작업 목록으로 분해한 계획을 만든다."""
+    planner = llm.with_structured_output(Plan)
+    prompt = (
+        "너는 승승장구몰의 프로젝트 매니저다. 아래 목표를 실행 순서대로 "
+        f"{MIN_STEPS}~{MAX_STEPS}개의 구체적 하위 작업으로 분해하라.\n"
+        f"목표: {goal}"
+    )
+    return planner.invoke(prompt)
+
+def validate_plan(plan: Plan):
+    """계획의 적합성을 판정한다. (적합여부 bool, 사유 str)를 돌려준다."""
+    n = len(plan.steps)
+    if n < MIN_STEPS:
+        return False, f"단계가 {n}개뿐입니다 — 목표 분해가 부족합니다(최소 {MIN_STEPS}개)."
+    if n > MAX_STEPS:
+        return False, f"단계가 {n}개로 너무 많습니다 — 과분해입니다(최대 {MAX_STEPS}개)."
+    if any(not s.strip() for s in plan.steps):
+        return False, "빈 단계가 포함되어 있습니다 — 실행 불가능한 단계입니다."
+    return True, "적합한 계획입니다."
+
+def replan(goal: str, reason: str) -> Plan:
+    """검증 실패 이유(reason)를 피드백으로 붙여 계획을 다시 세운다."""
+    planner = llm.with_structured_output(Plan)
+    prompt = (
+        "너는 승승장구몰의 프로젝트 매니저다. 이전 계획이 다음 이유로 부적합 판정을 받았다.\n"
+        f"부적합 사유: {reason}\n"
+        f"이 점을 반드시 고쳐, 목표를 실행 순서대로 {MIN_STEPS}~{MAX_STEPS}개의 "
+        f"구체적 하위 작업으로 다시 분해하라.\n목표: {goal}"
+    )
+    return planner.invoke(prompt)
+
+def plan_with_validation(goal: str, max_replan: int = 2) -> Plan:
+    """계획 → 검증 → (부적합 시) 재계획을 최대 max_replan회 반복한다."""
+    plan = make_plan(goal)
+    for attempt in range(1, max_replan + 1):
+        ok, reason = validate_plan(plan)
+        print(f"[STEP {attempt}] 검증: {'적합' if ok else '부적합'} — {reason}")
+        if ok:
+            return plan                       # 통과 → 채택
+        print(f"        → 재계획 요청(피드백: {reason})")
+        plan = replan(goal, reason)           # 부적합 → 다시 짜기
+    return plan
+
+if __name__ == "__main__":
+    goal = "승승장구몰 신상품 '가을 패딩' 출시"
+
+    # --- 데모 1: 일부러 단계가 1개뿐인 나쁜 계획을 만들어 검증기가 잡는지 확인 ---
+    bad_plan = Plan(goal=goal, steps=["그냥 출시한다"])
+    ok, reason = validate_plan(bad_plan)
+    print(f"검증: {'적합' if ok else '부적합'} — {reason}")
+    # → 부적합 — 단계가 1개뿐입니다...
+
+    if not ok:
+        fixed = replan(goal, reason)   # 피드백 주고 재계획
+        for i, s in enumerate(fixed.steps, 1):
+            print(f"  {i}. {s}")
+
+    # --- 데모 2: 계획→검증→재계획 전체 파이프라인 실행 ---
+    print("\n--- 전체 파이프라인 실행 ---")
+    final_plan = plan_with_validation(goal)
+    for i, s in enumerate(final_plan.steps, 1):
+        print(f"  {i}. {s}")
+</code></pre>
+<p><strong>예상 출력</strong></p>
+<pre><code class="language-text">검증: 부적합 — 단계가 1개뿐입니다 — 목표 분해가 부족합니다(최소 2개).
+  1. 시장 조사 및 트렌드 분석
+  2. 디자인 컨셉 개발 및 확정
+  3. 원단 및 재료 공급업체 선정
+  4. 샘플 제작 및 품질 검사
+  5. 최종 디자인 및 제품 사양 확정
+  6. 마케팅 전략 수립 및 광고 캠페인 준비
+  7. 온라인 및 오프라인 판매 채널 설정
+  8. 출시일 설정 및 고객 알림
+
+--- 전체 파이프라인 실행 ---
+[STEP 1] 검증: 적합 — 적합한 계획입니다.
+  1. 시장 조사 및 트렌드 분석을 통해 가을 패딩의 디자인 및 기능성 결정
+  2. 디자인 팀과 협력하여 가을 패딩의 초기 디자인 시안 제작
+  3. 제작업체와 협의하여 원단 및 부자재 선정 및 샘플 제작 요청
+  4. 샘플 검토 후 수정 사항 반영하여 최종 디자인 확정
+  5. 생산 일정 수립 및 대량 생산 시작
+  6. 마케팅 팀과 협력하여 출시 전 홍보 전략 및 캠페인 계획 수립
+  7. 온라인 및 오프라인 판매 채널 준비 및 재고 관리
+  8. 출시일에 맞춰 제품 등록 및 판매 시작
+</code></pre>
 <h2 id="1">1. 계획도 틀릴 수 있다</h2>
 <p>Plan-and-Execute의 약점은 03번에서 봤듯 <strong>"초기 계획이 틀리면 비효율적"</strong> 이라는 점입니다. LLM이 만든 계획이 이상할 수 있습니다.</p>
 <pre><code class="language-python"># 나쁜 계획 예시들
@@ -30,15 +135,16 @@ Plan(goal="...", steps=[1번, 2번, ..., 15번])               # 너무 많음 �
 <p>이런 계획을 그대로 실행하면 낭패입니다. 그래서 <strong>계획을 실행하기 전에 검증</strong>하고, 이상하면 다시 짜게 합니다. 사람도 일정표를 짠 뒤 "이거 너무 대충인데?" 하고 다시 짜잖아요.</p>
 <hr/>
 <h2 id="2-validate_plan">2. validate_plan — 계획 검증</h2>
-<p>좋은 계획의 조건을 <strong>규칙으로 못 박습니다</strong>. (실습 파일: <code>sections/08_planning_agent/07_계획이-잘못됐을때-대응.py</code>)</p>
+<p>좋은 계획의 조건을 <strong>규칙으로 못 박습니다</strong>. 
+    (<code>코드리뷰만</code>)</p>
 <pre><code class="language-python">MIN_STEPS, MAX_STEPS = 2, 8
 
 def validate_plan(plan: Plan):
     """계획의 적합성을 판정한다. (적합여부 bool, 사유 str)를 돌려준다."""
     n = len(plan.steps)
-    if n &lt; MIN_STEPS:
+    if n < MIN_STEPS:
         return False, f"단계가 {n}개뿐입니다 — 목표 분해가 부족합니다(최소 {MIN_STEPS}개)."
-    if n &gt; MAX_STEPS:
+    if n > MAX_STEPS:
         return False, f"단계가 {n}개로 너무 많습니다 — 과분해입니다(최대 {MAX_STEPS}개)."
     if any(not s.strip() for s in plan.steps):
         return False, "빈 단계가 포함되어 있습니다 — 실행 불가능한 단계입니다."

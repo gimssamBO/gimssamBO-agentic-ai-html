@@ -32,7 +32,7 @@ from langchain_core.tools import tool
 from langchain.agents import create_agent
 from common import get_chat, DATA
 
-llm = get_chat(provider="gemini")
+llm = get_chat(provider="openai")
 
 # (1) Planner — 구조화 출력으로 목표 분해
 class Plan(BaseModel):
@@ -54,7 +54,7 @@ print(result["messages"][-1].content)
 </code></pre>
 <hr/>
 <h2 id="_3">이 강에서 설치한 라이브러리</h2>
-<pre><code class="language-bash">pip install langchain langchain-google-genai langgraph pydantic
+<pre><code class="language-bash">pip install langchain langchain-openai langchain-google-genai langgraph pydantic
 </code></pre>
 <p>8강부터 LangChain 세계로 들어왔습니다. 이후 강의는 대부분 이 라이브러리들을 씁니다.</p>
 <hr/>
@@ -72,7 +72,7 @@ print(result["messages"][-1].content)
 <tr>
 <td>모델 가져오기</td>
 <td><code>get_genai_client()</code></td>
-<td><code>get_chat(provider="gemini")</code></td>
+<td><code>get_chat(provider="openai")</code></td>
 </tr>
 <tr>
 <td>도구 만들기</td>

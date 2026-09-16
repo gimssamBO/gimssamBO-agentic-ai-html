@@ -22,6 +22,17 @@
 <hr/>
 <h2 id="1-3-json">1. 3강 복습 — JSON 강제 출력</h2>
 <p>3강에서 우리는 답을 JSON으로 받는 법을 배웠습니다.</p>
+<h3>OpenAI</h3>
+<pre><code class="language-python"># OpenAI 방식 (raw SDK) — JSON Object 모드로 문자열을 받아 직접 파싱
+resp = client.chat.completions.create(
+    model=OPENAI_MODEL,
+    messages=[...],
+    response_format={"type": "json_object"},
+)
+data = json.loads(resp.choices[0].message.content)   # 문자열 → dict, 직접 파싱
+print(data["category"])
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python"># 3강 방식 (raw SDK) — JSON 문자열을 받아 직접 파싱
 resp = client.models.generate_content(
     ..., config=types.GenerateContentConfig(response_mime_type="application/json"))
@@ -50,6 +61,20 @@ class Plan(BaseModel):
 <hr/>
 <h2 id="3-with_structured_output">3. with_structured_output으로 강제하기</h2>
 <p>선언한 스키마를 <code>with_structured_output</code>에 넘기면, LLM 답이 <strong>그 클래스 객체로 바로</strong> 옵니다.</p>
+<h3>OpenAI</h3>
+<pre><code class="language-python">from common import get_chat
+
+llm = get_chat(provider="openai")
+
+# LLM 응답을 Plan 스키마에 맞춰 강제로 받아낸다
+planner = llm.with_structured_output(Plan)
+result = planner.invoke("가을 패딩 출시를 4~7단계로 분해하라")
+
+print(type(result))      # &lt;class 'Plan'&gt;  ← dict가 아니라 Plan 객체!
+print(result.goal)       # "가을 패딩 출시"
+print(result.steps)      # ["시장조사", "콘셉트확정", ...]
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python">from common import get_chat
 
 llm = get_chat(provider="gemini")
