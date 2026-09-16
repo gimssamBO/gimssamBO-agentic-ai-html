@@ -36,7 +36,7 @@ def search_product(query: str) -&gt; str:
 </blockquote>
 <hr/>
 <h2 id="2-before">2. BEFORE — 모호한 설명으로 헷갈리는 모습</h2>
-<p>(실습 파일: <code>sections/06_tool_system/06_비슷한-도구-구분하기.py</code>)</p>
+<p>(실습 파일: <code>코드분석만</code>)</p>
 <pre><code class="language-python">def get_product_info(query: str) -&gt; str:
     """상품을 조회한다."""        # [경고] 모호
     row = products[products["product_id"] == query]
@@ -51,7 +51,7 @@ def search_product(query: str) -&gt; str:
 which_tool("상품ID P0001 상세정보 알려줘.", [get_product_info, search_product])
 which_tool("이어버드 들어간 상품들 다 찾아줘.", [get_product_info, search_product])
 </code></pre>
-<p><strong>예상 출력 (BEFORE)</strong></p>
+<p><strong>예상 출력 (BEFORE) 단, 요즘 모델은 구별해서 옳바른 결과를 출력해 줄수 있음</strong></p>
 <pre><code class="language-text">  '상품ID P0001 상세정보 알려줘.' → search_product({'query': 'P0001'})   ← 틀린 선택!
   '이어버드 들어간 상품들 다 찾아줘.' → get_product_info({'query': '이어버드'})  ← 틀린 선택!
 </code></pre>

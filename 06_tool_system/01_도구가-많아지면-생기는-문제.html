@@ -51,7 +51,7 @@ elif "주문" in question:
 <h2 id="3">3. 진짜 해법 — 설명을 잘 쓰면 모델이 고른다</h2>
 <p>좋은 소식이 있습니다. 우리가 도구 선택을 하드코딩할 필요가 <strong>전혀 없습니다.</strong> 도구의 <strong>독스트링(설명)</strong> 을 잘 써 두면, 모델이 질문과 설명을 비교해 <strong>알아서</strong> 고릅니다.</p>
 <pre><code class="language-python">def get_price(product_name: str) -&gt; str:
-    """상품명을 받아 판매가(원)를 반환한다. 가격/얼마 질문에 사용."""
+    """상품명을 받아 판매가(원)를 반환한다. 가격/얼마 질문에 사용."""  # <- 이게 독스트링
     ...
 
 # 4개 도구를 그냥 다 등록만 하면...

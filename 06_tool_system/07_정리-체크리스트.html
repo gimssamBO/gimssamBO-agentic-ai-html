@@ -27,7 +27,96 @@
 <li><strong>비슷한 도구 구분</strong>: 입력 형태·결과 건수·부정 조건을 명시해 경계를 못 박는다.</li>
 </ul>
 <hr/>
-<h2 id="_2">한눈에 보는 핵심 코드</h2>
+<h2 id="_2">한눈에 보는 핵심 코드 = 참고만 함</h2>
+<h3>OpenAI</h3>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_openai_client, OPENAI_MODEL
+import json
+
+client = get_openai_client()
+
+# 설계 원칙을 지킨 도구 — "무엇을 + 언제"를 description에 명시
+TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_price",
+            "description": "상품명을 받아 판매가(원)를 반환한다. 가격/얼마 질문에 사용.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product_name": {"type": "string", "description": "가격을 조회할 상품명"},
+                },
+                "required": ["product_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_stock",
+            "description": "상품명을 받아 현재 재고 수량과 창고를 반환한다. 재고/품절 질문에 사용.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product_name": {"type": "string", "description": "재고를 조회할 상품명"},
+                },
+                "required": ["product_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_order_status",
+            "description": "주문번호를 받아 배송 상태를 반환한다. 주문/배송 추적에 사용.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "order_id": {"type": "string", "description": "조회할 주문번호 (예: O000106)"},
+                },
+                "required": ["order_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_product",
+            "description": "카테고리나 키워드로 상품을 검색해 이름 목록을 반환한다. '어떤 상품 있어?' 류에 사용.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "keyword": {"type": "string", "description": "검색할 카테고리명 또는 상품 키워드"},
+                },
+                "required": ["keyword"],
+            },
+        },
+    },
+]
+
+# 1. 모델 호출 (OpenAI 기본 동작: 어떤 도구를 호출할지 판단)
+resp = client.chat.completions.create(
+    model=OPENAI_MODEL,
+    messages=[{"role": "user", "content": "청바지 얼마야?"}],
+    tools=TOOLS,
+    temperature=0,
+)
+
+# 2. 선택 관찰: tool_calls 확인 (Gemini의 function_calls 확인과 동일)
+def which_tool(q: str):
+    r = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[{"role": "user", "content": q}],
+        tools=TOOLS,
+        temperature=0,
+    )
+    calls = r.choices[0].message.tool_calls or []
+    for fc in calls:
+        print(fc.function.name, json.loads(fc.function.arguments))
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python">from common import get_genai_client, GEMINI_MODEL
 from google.genai import types
 client = get_genai_client()
@@ -57,7 +146,7 @@ def which_tool(q):
 </code></pre>
 <hr/>
 <h2 id="_3">이 강에서 설치한 라이브러리</h2>
-<pre><code class="language-bash">pip install google-genai python-dotenv pandas   # (앞 강에서 설치했다면 생략 가능)
+<pre><code class="language-bash">pip install openai google-genai python-dotenv pandas   # (앞 강에서 설치했다면 생략 가능)
 </code></pre>
 <p>새로 설치할 라이브러리는 없습니다.</p>
 <hr/>
