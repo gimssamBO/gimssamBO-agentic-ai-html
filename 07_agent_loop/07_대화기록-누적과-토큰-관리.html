@@ -33,7 +33,28 @@ STEP 3: history = [질문, 호출1, 결과1, 호출2, 결과2] → 더 늘어남
 </blockquote>
 <hr/>
 <h2 id="2">2. 토큰 증가를 눈으로 보기</h2>
-<p><code>usage_metadata</code>로 매 스텝의 토큰을 출력하면 증가가 보입니다. (실습 파일: <code>sections/07_agent_loop/07_대화기록-누적과-토큰-관리.py</code>)</p>
+<h3>OpenAI</h3>
+<p><code>usage</code>로 매 스텝의 토큰을 출력하면 증가가 보입니다. (<code>코드분석만</code>)</p>
+<pre><code class="language-python">for step in range(1, max_steps + 1):
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=history,
+        tools=TOOL_SCHEMAS,
+        temperature=0,
+    )
+
+    u = resp.usage
+    print(f"[STEP {step}] history {len(history)}개 | "
+          f"입력 {u.prompt_tokens} + 출력 {u.completion_tokens} "
+          f"= 누적 {u.total_tokens} 토큰")
+
+    msg = resp.choices[0].message
+    if not msg.tool_calls:
+        break
+    # ... history.append(...) 로 기록 추가 ...
+</code></pre>
+<h3>Gemini</h3>
+<p><code>usage_metadata</code>로 매 스텝의 토큰을 출력하면 증가가 보입니다. (<code>코드분석만</code>)</p>
 <pre><code class="language-python">for step in range(1, max_steps + 1):
     resp = client.models.generate_content(model=GEMINI_MODEL, contents=history, config=config)
 
@@ -51,13 +72,32 @@ STEP 3: history = [질문, 호출1, 결과1, 호출2, 결과2] → 더 늘어남
 [STEP 2] history 3개 | 입력 185 + 출력 20 = 누적 205 토큰   ← 입력 토큰 늘어남
 [STEP 3] history 5개 | 입력 250 + 출력 45 = 누적 295 토큰   ← 더 늘어남
 </code></pre>
-<p><code>history</code> 개수가 늘면서 <strong>입력 토큰(<code>prompt_token_count</code>)이 계속 증가</strong>하는 게 보입니다.</p>
+<p><code>(OpenAI)history</code> 개수가 늘면서 <strong>입력 토큰(<code>prompt_tokens</code>)이 계속 증가</strong>하는 게 보입니다.</p>
+<p><code>(Gemini)history</code> 개수가 늘면서 <strong>입력 토큰(<code>prompt_token_count</code>)이 계속 증가</strong>하는 게 보입니다.</p>
 <hr/>
 <h2 id="3-trimming">3. 해결책 — 트리밍(trimming)</h2>
 <p>오래된 중간 기록은 대개 최종 판단에 덜 중요합니다. 그래서 <strong>최근 몇 개만 남기고 잘라냅니다.</strong> 단, 한 가지 절대 규칙이 있습니다.</p>
 <blockquote>
 <p><strong>첫 질문(원래 목표)은 반드시 보존한다.</strong> 이게 사라지면 모델이 "내가 무슨 일을 하던 중이었지?"를 잊어버립니다.</p>
 </blockquote>
+<h3>OpenAI</h3>
+<pre><code class="language-python">def trim_history(history, keep: int = 4):
+    """시스템/첫 사용자 메시지는 보존하고 '최근 keep개'만 유지한다."""
+    prefix_len = 2 if history and history[0].get("role") == "system" else 1
+
+    if len(history) <= keep + prefix_len:
+        return history
+
+    head = history[:prefix_len]
+    tail = history[-keep:]
+
+    # OpenAI 필수 규칙: tool 단독 메시지로 시작하면 400 에러 발생하므로 제거
+    while tail and tail[0].get("role") == "tool":
+        tail = tail[1:]
+
+    return head + tail
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python">def trim_history(history, keep: int = 4):
     """시스템/첫 사용자 메시지는 보존하고 '최근 keep개'만 유지한다."""
     if len(history) &lt;= keep + 1:
@@ -100,7 +140,7 @@ print(f"트리밍 후: {len(trimmed)}개 (첫 질문 + 최근 2개 보존)")
 <h2 id="_3">핵심 정리</h2>
 <ul>
 <li>ReAct 루프는 history가 쌓여 <strong>입력 토큰이 선형 증가</strong>한다(비용·지연↑).</li>
-<li><code>usage_metadata</code>로 토큰 증가를 직접 확인할 수 있다.</li>
+<li><code>useage, usage_metadata</code>로 토큰 증가를 직접 확인할 수 있다.</li>
 <li><strong>트리밍</strong>(<code>trim_history</code>)으로 오래된 기록을 잘라 토큰을 줄인다.</li>
 <li>단, <strong>첫 질문(목표)은 반드시 보존</strong>한다.</li>
 <li>더 정교하게는 <strong>요약 압축</strong>(19강)을 쓴다.</li>

@@ -28,6 +28,42 @@
 </ul>
 <hr/>
 <h2 id="_2">한눈에 보는 핵심 코드</h2>
+<h3>OpenAI</h3>
+<pre><code class="language-python">def run_agent(question, max_steps=6):
+    history = [
+        {"role": "system", "content": "너는 재고 관리 에이전트다 ..."},
+        {"role": "user", "content": question},
+    ]
+    seen = set()                                     # 반복 방지
+
+    for step in range(1, max_steps + 1):
+        resp = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=history,
+            tools=TOOL_SCHEMAS,
+            temperature=0,
+        )
+        msg = resp.choices[0].message
+        if not msg.tool_calls:                       # 종료①: 최종 답
+            return msg.content
+        history.append(msg)
+        for tc in msg.tool_calls:
+            func_name = tc.function.name
+            args = json.loads(tc.function.arguments)
+            sig = (func_name, tuple(sorted(args.items())))
+            if sig in seen:                          # 반복 호출 차단
+                return None
+            seen.add(sig)
+            result = TOOLS[func_name](**args)        # 우리가 실행 (Observation)
+            history.append({
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "name": func_name,
+                "content": json.dumps({"result": result}),
+            })
+    return None                                      # 종료②: max_steps 초과                                      # 종료②: max_steps 초과
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python">def run_agent(question, max_steps=6):
     config = types.GenerateContentConfig(
         tools=list(TOOLS.values()),
@@ -53,7 +89,7 @@
 </code></pre>
 <hr/>
 <h2 id="_3">이 강에서 설치한 라이브러리</h2>
-<pre><code class="language-bash">pip install google-genai python-dotenv pandas   # (앞 강에서 설치했다면 생략 가능)
+<pre><code class="language-bash">pip install openai google-genai python-dotenv pandas   # (앞 강에서 설치했다면 생략 가능)
 </code></pre>
 <p>새로 설치할 라이브러리는 없습니다.</p>
 <hr/>
