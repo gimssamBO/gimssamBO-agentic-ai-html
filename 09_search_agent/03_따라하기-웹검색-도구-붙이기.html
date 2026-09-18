@@ -43,7 +43,7 @@ from langchain.agents import create_agent
 from langchain_community.tools import DuckDuckGoSearchResults
 from common import get_chat
 
-llm = get_chat(provider="gemini")
+llm = get_chat(provider="openai")
 # DuckDuckGoSearchResults 는 그 자체로 LangChain 도구라 @tool 작성 없이 바로 쓴다
 search = DuckDuckGoSearchResults()
 </code></pre>

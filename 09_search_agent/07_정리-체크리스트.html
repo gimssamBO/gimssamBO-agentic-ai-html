@@ -28,6 +28,26 @@
 </ul>
 <hr/>
 <h2 id="_2">한눈에 보는 핵심 코드</h2>
+<h3>OpenAI</h3>
+<pre><code class="language-python">from langchain.agents import create_agent
+from langchain_community.tools import DuckDuckGoSearchResults
+from common import get_chat
+
+llm = get_chat(provider="openai")
+search = DuckDuckGoSearchResults()              # 그 자체로 도구
+
+agent = create_agent(llm, tools=[search],
+                     system_prompt="너는 시장조사 담당자다. 필요하면 검색해 한국어로 요약하라.")
+
+# 과정 관찰 + 오류 대비
+try:
+    for step in agent.stream({"messages": [{"role": "user", "content": q}]},
+                             stream_mode="values"):
+        step["messages"][-1].pretty_print()
+except Exception as e:
+    print("검색 오류:", e)
+</code></pre>
+<h3>Gemini</h3>
 <pre><code class="language-python">from langchain.agents import create_agent
 from langchain_community.tools import DuckDuckGoSearchResults
 from common import get_chat
