@@ -20,29 +20,36 @@
 <h2 id="_2">목표</h2>
 <p><code>run_pandas</code> 도구를 에이전트에 붙여, "총 매출은?", "일평균은?" 같은 자연어 질문에 <strong>정확한 계산</strong>으로 답하게 합니다.</p>
 <hr/>
+<pre>실습파일: <code>code/ch10_code_exec_basic2.py</code></pre>
 <h2 id="1">1. 에이전트 구성 — "계산은 반드시 도구로"</h2>
 <p><code>create_agent</code>에 <code>run_pandas</code>를 연결합니다. 시스템 프롬프트가 중요합니다.</p>
-<pre><code class="language-python">agent = create_agent(
+<pre><code class="language-python"># 자연어 위한 에이전트 구성
+agent = create_agent(
     llm,
     tools=[run_pandas],
     system_prompt="너는 승승장구몰의 데이터 분석가다. 계산은 반드시 run_pandas 도구로 하고, "
-                  "결과 숫자는 천단위 콤마를 붙여 한국어로 설명하라.",
+                  "결과 숫자는 천단위 콤마를 붙여 한국어로 설명하라."
+                  "사용자가 질문한 항목에 대해서만 답한다. "
+                "질문하지 않은 추가 통계, 분석, 설명은 절대 덧붙이지 않는다. "
+                "결과 숫자는 천단위 콤마를 붙여 한국어로 간단히 설명한다."
 )
 </code></pre>
 <p>시스템 프롬프트에 <strong>"계산은 반드시 run_pandas 도구로"</strong> 라고 못 박은 게 핵심입니다. 이게 없으면 LLM이 도구를 안 쓰고 <strong>암산으로 때우려</strong> 할 수 있습니다(그래서 틀리죠). "직접 계산하지 말고 도구를 써라"라고 강제하는 겁니다.</p>
 <hr/>
 <h2 id="2">2. 자연어 질문 던지기</h2>
-<pre><code class="language-python">questions = [
-    "전체 기간 총 매출은 얼마야?",
-    "일평균 매출은?",
-    "매출이 가장 높았던 날짜와 그날의 매출을 알려줘.",
+<pre><code class="language-python"># 자연어 질문 던지기
+questions = [
+    # "전체 기간 총 매출은 얼마야?",
+    # "일평균 매출은?",
+    # "매출이 가장 높았던 날짜와 그날의 매출을 알려줘.",
+    # "2024년 11월 매출 합계는?",
+    "매출 상위 3일은?"
 ]
 
 for q in questions:
     print("Q:", q)
-    result = agent.invoke({"messages": [{"role": "user", "content": q}]})
+    result = agent.invoke({"messages": [{"role":"user","content":q}]})
     print("A:", result["messages"][-1].content)
-    print()
 </code></pre>
 <p><strong>예상 출력</strong></p>
 <pre><code class="language-text">Q: 전체 기간 총 매출은 얼마야?

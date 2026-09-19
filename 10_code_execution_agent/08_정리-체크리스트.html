@@ -37,7 +37,7 @@ llm = get_chat(provider="gemini")
 df = pd.read_csv(DATA / "sales_daily.csv")
 
 @tool
-def run_pandas(expr: str) -&gt; str:
+def run_pandas(expr: str) -> str:
     """일별 매출 df(컬럼: date, sales)에 pandas 식을 실행한다. df, pd 만 사용 가능."""
     try:
         result = eval(expr, {"__builtins__": {}}, {"df": df, "pd": pd})  # 안전장치
@@ -51,7 +51,7 @@ result = agent.invoke({"messages": [{"role": "user", "content": "총 매출은?"
 </code></pre>
 <hr/>
 <h2 id="_3">이 강에서 설치한 라이브러리</h2>
-<pre><code class="language-bash">pip install langchain langchain-google-genai langgraph pandas
+<pre><code class="language-bash">pip install langchain langchain-openai langchain-google-genai langgraph pandas
 </code></pre>
 <p>새로 설치할 라이브러리는 없습니다(8강에서 설치한 것 사용).</p>
 <hr/>

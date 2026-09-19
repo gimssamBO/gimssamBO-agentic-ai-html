@@ -25,6 +25,7 @@
 <li>사용 파일: <code>data/sales_daily.csv</code> (컬럼: date, sales)</li>
 <li>기대 결과: 에이전트가 <code>run_pandas</code>에 넘긴 식(예: <code>df[df['date'].str.startswith('2024-11')]['sales'].sum()</code>)이 도구 호출 로그로 보이고, 그 합계가 천단위 콤마로 출력되면 성공.</li>
 </ul>
+<pre>실습파일: <code>code/ch10_code_exec_ex01.py</code></pre>
 <details>
 <summary>해답 보기</summary>
 <pre><code class="language-python">import sys, pathlib
@@ -34,14 +35,16 @@ from langchain_core.tools import tool
 from langchain.agents import create_agent
 from common import get_chat, DATA
 
-llm = get_chat(provider="gemini")
+llm = get_chat(provider="openai")
 df = pd.read_csv(DATA / "sales_daily.csv")
 
 @tool
-def run_pandas(expr: str) -&gt; str:
+def run_pandas(expr: str) -> str:
     """일별 매출 df(컬럼: date 'YYYY-MM-DD', sales)에 pandas 식을 실행한다. df, pd 만 사용."""
+    # OpenAI 모델 특성상 전달될 수 있는 마크다운 백틱(```) 전처리 방어
+    clean_expr = expr.replace("```python", "").replace("```", "").strip()
     try:
-        return str(eval(expr, {"__builtins__": {}}, {"df": df, "pd": pd}))
+        return str(eval(clean_expr, {"__builtins__": {}}, {"df": df, "pd": pd}))
     except Exception as e:
         return f"실행 오류: {e}"
 
@@ -80,6 +83,7 @@ Tool Calls:
 <li><code>run_pandas.invoke({"expr": "df['sales'].sum()"})</code> (정상)</li>
 <li>기대 결과: 위험한 식은 <code>실행 오류: ...</code>, 정상 식은 합계 숫자가 나오면 성공.</li>
 </ul>
+<pre>실습파일: <code>code/ch10_code_exec_ex02.py</code></pre>
 <details>
 <summary>해답 보기</summary>
 <pre><code class="language-python">import sys, pathlib
@@ -88,13 +92,17 @@ import pandas as pd
 from langchain_core.tools import tool
 from common import get_chat, DATA
 
+# OpenAI 환경으로 표준화
+llm = get_chat(provider="openai")
 df = pd.read_csv(DATA / "sales_daily.csv")
 
 @tool
-def run_pandas(expr: str) -&gt; str:
+def run_pandas(expr: str) -> str:
     """일별 매출 df에 pandas 식을 실행한다. df, pd 만 사용."""
+    # LLM이 전달할 수 있는 마크다운 코드블록 백틱(```) 전처리 방어
+    clean_expr = expr.replace("```python", "").replace("```", "").strip()
     try:
-        return str(eval(expr, {"__builtins__": {}}, {"df": df, "pd": pd}))
+        return str(eval(clean_expr, {"__builtins__": {}}, {"df": df, "pd": pd}))
     except Exception as e:
         return f"실행 오류: {e}"
 
