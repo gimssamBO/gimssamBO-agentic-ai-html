@@ -33,8 +33,13 @@ data_quality_report(orders)   # 결측·이상치·중복을 먼저 확인!
 </blockquote>
 <hr/>
 <h2 id="2">2. 품질 리포트 함수</h2>
-<p>(실습 파일: <code>sections/11_data_analysis_agent/06_분석전-데이터-품질-체크.py</code>) — LLM 없이 pandas만으로, 분석 전 점검할 6가지를 출력합니다.</p>
-<pre><code class="language-python">import pandas as pd
+<p>(실습 파일: <code>code/ch11_data_analysis_data_check.py</code>) — LLM 없이 pandas만으로, 분석 전 점검할 6가지를 출력합니다.</p>
+<pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+import pandas as pd
+from langchain_core.tools import tool
+from langchain.agents import create_agent
+from common import get_chat, DATA
 
 def data_quality_report(df: pd.DataFrame) -&gt; None:
     """주문 DataFrame을 받아 분석 전에 확인할 품질 지표를 표로 출력한다."""
@@ -107,7 +112,9 @@ def data_quality_report(df: pd.DataFrame) -&gt; None:
 </tr>
 </tbody>
 </table>
-<p>특히 ⑥(status 분포)이 유용합니다. "취소·환불이 전체의 몇 %인지" 미리 보면, 매출 집계에서 얼마나 제외해야 할지 감이 옵니다.</p>
+<p>특히 ⑥(status 분포)이 유용합니다. <br>
+  "취소·환불이 전체의 몇 %인지" 미리 보면, 매출 집계에서 얼마나 제외해야 할지 감이 옵니다.<br>
+  => status는 키워드는 아니고, 엑셀 orders.csv의 컬럼명=열데이터 입니다.</p>
 <hr/>
 <h2 id="4">4. 실행 결과</h2>
 <pre><code class="language-python">orders = pd.read_csv(DATA / "orders.csv", encoding="utf-8-sig")

@@ -27,6 +27,7 @@
 <li>사용 파일: <code>data/orders.csv</code></li>
 <li>기대 결과: 채널별 평균 금액이 출력되고, 같은 질문을 에이전트에 물었을 때와 일치하면 성공.</li>
 </ul>
+<pre>실습파일: <code>ch11_data_analysis_ex01.py</code></pre>
 <details>
 <summary>해답 보기</summary>
 <pre><code class="language-python">import sys, pathlib
@@ -74,6 +75,7 @@ if __name__ == "__main__":
 <li>사용 파일: <code>data/orders.csv</code></li>
 <li>기대 결과: 규칙을 뺀 쪽의 합계가 더 크게 나오며, 두 값의 차이(취소/환불 금액 합)를 pandas로 직접 계산해 검증하면 성공.</li>
 </ul>
+<pre>실습파일: <code>ch11_data_analysis_ex02.py</code></pre>
 <details>
 <summary>해답 보기</summary>
 <pre><code class="language-python">import sys, pathlib
@@ -87,7 +89,7 @@ llm = get_chat(provider="gemini")
 orders = pd.read_csv(DATA / "orders.csv", encoding="utf-8-sig")
 
 @tool
-def run_pandas(expr: str) -&gt; str:
+def run_pandas(expr: str) -> str:
     """주문 데이터 분석. orders(컬럼: category, amount, status...), pd 사용 가능."""
     try:
         return str(eval(expr, {"__builtins__": {}}, {"orders": orders, "pd": pd}))

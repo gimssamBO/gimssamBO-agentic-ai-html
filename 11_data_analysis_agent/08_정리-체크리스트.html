@@ -32,7 +32,7 @@ from langchain_core.tools import tool
 from langchain.agents import create_agent
 from common import get_chat, DATA
 
-llm = get_chat(provider="gemini")
+llm = get_chat(provider="openai")
 orders = pd.read_csv(DATA / "orders.csv")
 orders["month"] = pd.to_datetime(orders["order_date"]).dt.strftime("%Y-%m")  # 전처리
 
@@ -50,7 +50,7 @@ agent = create_agent(llm, tools=[run_pandas],
 </code></pre>
 <hr/>
 <h2 id="_3">이 강에서 설치한 라이브러리</h2>
-<pre><code class="language-bash">pip install langchain langchain-google-genai langgraph pandas
+<pre><code class="language-bash">pip install langchain langchain-openai langchain-google-genai langgraph pandas
 pip install matplotlib koreanize-matplotlib   # 시각화 + 한글 폰트 (07번)
 </code></pre>
 <hr/>
