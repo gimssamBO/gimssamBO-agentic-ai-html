@@ -39,7 +39,7 @@ from langchain_core.tools import tool
 from langchain.agents import create_agent
 from common import get_chat, DATA
 
-llm = get_chat(provider="gemini")
+llm = get_chat(provider="opanai")
 
 # 주문·상품 데이터 로드
 orders = pd.read_csv(DATA / "orders.csv")
