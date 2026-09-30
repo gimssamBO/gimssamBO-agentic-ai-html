@@ -37,7 +37,7 @@ from langchain_core.tools import tool
 from langchain.agents import create_agent
 from common import get_chat, DATA
 
-llm = get_chat(provider="gemini")
+llm = get_chat(provider="opanai")
 
 # 데이터는 모듈 로드 시 1회만 읽는다 (도구 호출마다 read_csv 하면 느려진다)
 orders = pd.read_csv(DATA / "orders.csv")
