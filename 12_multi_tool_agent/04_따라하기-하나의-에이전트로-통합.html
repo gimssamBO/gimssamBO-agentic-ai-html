@@ -42,12 +42,14 @@ TOOLS = [get_order_status, get_stock, run_pandas]
 <li><strong>"앞 도구 결과를 다음 도구 입력으로 이어 써라"</strong>: 연쇄 호출 유도 (핵심!)</li>
 <li><strong>"매출 집계 시 취소/환불 제외"</strong>: 분석 규칙(11강 복습)</li>
 </ul>
-<p>특히 <strong>"앞 도구 결과를 이어 써라"</strong> 가 연쇄 호출의 비결입니다. 이 한 줄이 "주문 조회 → product_id 획득 → 재고 조회"를 가능하게 합니다.</p>
+<p>특히 <strong>"앞 도구 결과를 이어 써라"</strong> 가 연쇄 호출의 비결입니다. 
+    이 한 줄이 "주문 조회 → product_id 획득 → 재고 조회"를 가능하게 합니다.</p>
 <hr/>
 <h2 id="3">3. 에이전트 생성</h2>
 <pre><code class="language-python">agent = create_agent(llm, tools=TOOLS, system_prompt=SYSTEM)
 </code></pre>
-<p>8강부터 계속 본 그 패턴입니다. 도구가 3개로 늘었을 뿐, 코드는 똑같습니다. LangChain이 라우팅·연쇄·반복을 모두 내부에서 처리합니다.</p>
+<p>8강부터 계속 본 그 패턴입니다. 도구가 3개로 늘었을 뿐, 코드는 똑같습니다. 
+    <br>LangChain이 라우팅·연쇄·반복을 모두 내부에서 처리합니다.</p>
 <hr/>
 <h2 id="4">4. 통합 에이전트의 구조</h2>
 <p>하나의 <strong>통합 에이전트</strong>(<code>create_agent</code>)가 질문을 받아 처리합니다.</p>
@@ -67,7 +69,9 @@ print(result["messages"][-1].content)
 <pre><code class="language-text">C0001 고객의 최근 주문은 '승승 현미 잡곡 10kg'이며, 2026-03-26에 주문되어
 현재 '배송완료' 상태입니다.
 </code></pre>
-<p>이 질문은 주문 도구 하나만 필요했습니다. 에이전트가 "주문 상태" 질문임을 알고 <code>get_order_status</code>만 라우팅했죠. 다음 절에서는 <strong>여러 도구가 연쇄되는</strong> 복합 질문을 봅니다.</p>
+<p>이 질문은 주문 도구 하나만 필요했습니다. <br>
+    에이전트가 "주문 상태" 질문임을 알고 <code>get_order_status</code>만 라우팅했죠. <br>
+    다음 절에서는 <strong>여러 도구가 연쇄되는</strong> 복합 질문을 봅니다.</p>
 <hr/>
 <h2 id="_3">핵심 정리</h2>
 <ul>

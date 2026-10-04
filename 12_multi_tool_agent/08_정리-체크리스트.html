@@ -32,7 +32,7 @@ from langchain.agents import create_agent
 from common import get_chat, DATA
 import pandas as pd
 
-llm = get_chat(provider="gemini")
+llm = get_chat(provider="openai")
 orders = pd.read_csv(DATA / "orders.csv")        # 모듈 로드 시 1회
 
 @tool
@@ -53,7 +53,7 @@ for step in agent.stream({"messages": [...]}, stream_mode="values"):
 </code></pre>
 <hr/>
 <h2 id="_3">이 강에서 설치한 라이브러리</h2>
-<pre><code class="language-bash">pip install langchain langchain-google-genai langgraph pandas
+<pre><code class="language-bash">pip install langchain langchain-openai langchain-google-genai langgraph pandas
 </code></pre>
 <p>새로 설치할 라이브러리는 없습니다.</p>
 <hr/>

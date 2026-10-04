@@ -27,7 +27,8 @@
     "그리고 2026-05월 전체 매출을 알려줘."
 )
 </code></pre>
-<p>이 질문에는 ① 주문 조회 ② 재고 조회 ③ 매출 분석이 들어 있습니다. 특히 ②는 ①의 결과(product_id)가 있어야 합니다 — <strong>연쇄</strong>가 필요하죠.</p>
+<p>이 질문에는 ① 주문 조회 ② 재고 조회 ③ 매출 분석이 들어 있습니다. <br>
+    특히 ②는 ①의 결과(product_id)가 있어야 합니다 — <strong>연쇄</strong>가 필요하죠.</p>
 <hr/>
 <h2 id="2-stream">2. stream으로 과정 관찰</h2>
 <pre><code class="language-python">for step in agent.stream(
@@ -66,7 +67,9 @@ Tool Calls: run_pandas(expr="orders[...month=='2026-05'...]['amount'].sum()")  �
 <li><code>get_order_status(customer_id='C0001')</code> → 결과: "…product_id=P0025…"</li>
 <li><code>get_stock(product_id='P0025')</code> — <strong>①의 <code>product_id</code>를 이어받아</strong> 재고 조회!</li>
 </ol>
-<p>에이전트는 ①의 결과에서 <code>product_id=P0025</code>를 <strong>읽어서</strong>, ②의 입력으로 넣었습니다. 우리가 "P0025"라고 알려 주지 않았는데도요. 질문에는 "그 상품의 재고"라고만 했는데, 에이전트가 "그 상품 = 방금 조회한 P0025"임을 이해하고 이어받은 거죠.</p>
+<p>에이전트는 ①의 결과에서 <code>product_id=P0025</code>를 <strong>읽어서</strong>, ②의 입력으로 넣었습니다. <br>
+    우리가 "P0025"라고 알려 주지 않았는데도요. <br>
+    질문에는 "그 상품의 재고"라고만 했는데, 에이전트가 "그 상품 = 방금 조회한 P0025"임을 이해하고 이어받은 거죠.</p>
 <blockquote>
 <p>비유: 비서에게 "김 대리 최근 보고서랑, 그 보고서에 나온 프로젝트 예산도 알려줘"라고 하면, 비서가 먼저 보고서를 찾고(① ), 거기서 프로젝트명을 읽어, 그 프로젝트 예산을 조회합니다(②). "그 프로젝트 = 방금 본 보고서의 것"임을 이해하는 거죠. 에이전트도 똑같습니다.</p>
 </blockquote>
@@ -78,7 +81,9 @@ Tool Calls: run_pandas(expr="orders[...month=='2026-05'...]['amount'].sum()")  �
 <li><strong>연쇄</strong>: 앞 결과(P0025)를 뒤 도구에 이어줌</li>
 <li><strong>종합</strong>: 세 결과를 모아 항목별로 정리</li>
 </ol>
-<p>우리는 <code>if-else</code>도, 연쇄 로직도 짜지 않았습니다. 시스템 프롬프트에 "도구를 골라 순서대로, 앞 결과를 이어 써라"라고 한 줄 지시했을 뿐이죠. 나머지는 에이전트가 알아서 했습니다.</p>
+<p>우리는 <code>if-else</code>도, 연쇄 로직도 짜지 않았습니다. <br>
+    시스템 프롬프트에 "도구를 골라 순서대로, 앞 결과를 이어 써라"라고 한 줄 지시했을 뿐이죠. <br>
+    나머지는 에이전트가 알아서 했습니다.</p>
 <hr/>
 <h2 id="5-1">5. 1부의 모든 것이 여기에</h2>
 <p>이 한 번의 실행에 1부에서 배운 게 다 들어 있습니다.</p>
@@ -86,7 +91,8 @@ Tool Calls: run_pandas(expr="orders[...month=='2026-05'...]['amount'].sum()")  �
 <li><strong>도구 호출</strong>(5강), <strong>도구 선택</strong>(6강), <strong>루프</strong>(7강)</li>
 <li><strong>LangChain 에이전트</strong>(8강), <strong>데이터 분석</strong>(10·11강)</li>
 </ul>
-<p>7강에서 <code>while</code> 루프로 손수 만들던 ReAct 루프를, 이제 <code>create_agent</code> 한 줄로 만들고 세 도구를 연쇄시킵니다. 1부를 제대로 배웠기에 이 통합이 자연스럽게 이해되는 겁니다.</p>
+<p>7강에서 <code>while</code> 루프로 손수 만들던 ReAct 루프를, 이제 <code>create_agent</code> 한 줄로 만들고 세 도구를 연쇄시킵니다. <br>
+    1부를 제대로 배웠기에 이 통합이 자연스럽게 이해되는 겁니다.</p>
 <hr/>
 <h2 id="_3">핵심 정리</h2>
 <ul>
