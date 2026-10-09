@@ -45,17 +45,18 @@
                     <pre><code class="language-bash">conda activate agentic
 
 # 14강에서 처음 쓰는 라이브러리
-#  - langchain-openai : OpenAIEmbeddings (gemini 임베딩)
+#  - langchain-openai : OpenAIEmbeddings (openai 임베딩)
 #  - numpy                  : 벡터 계산
 #  - scikit-learn           : cosine_similarity (행렬 연산)
 pip install langchain-openai numpy scikit-learn
 </code></pre>
                     <p>
                         <code>.env</code>의
-                        <code>GOOGLE_API_KEY</code>가 필요합니다(임베딩도 API 호출). 이번 강은
+                        <code>OPENAI_API_KEY</code>가 필요합니다(임베딩도 API 호출). <br>이번 강은
                         <code>data/faq.csv</code>(FAQ 10개)를 씁니다.</p>
                     <hr/>
                     <h2 id="1-embed_query">1. 단일 문장 임베딩 — embed_query</h2>
+                    <p>LangChain(랭체인) 프레임워크 제공 표준 인터페이스 메서드.</p>
                     <p>문장 하나를 벡터로 바꿉니다.</p>
                     <pre><code class="language-python">import sys, pathlib
 import pandas as pd
@@ -81,9 +82,11 @@ print("앞 5개 값:", [round(x, 4) for x in v[:5]])
 </code></pre>
                     <p>
                         <code>embed_query</code>는
-                        <strong>문장 하나</strong>를 768개 숫자로 바꿔 줍니다. 이 숫자들이 그 문장의 의미 좌표입니다.</p>
+                        <strong>문장 하나</strong>를 768개 숫자로 바꿔 줍니다. <br>
+                        이 숫자들이 그 문장의 의미 좌표입니다.</p>
                     <hr/>
                     <h2 id="2-embed_documents">2. 여러 문장 임베딩 — embed_documents (배치)</h2>
+                    <p>LangChain(랭체인) 프레임워크 제공 표준 인터페이스 메서드.</p>
                     <p>여러 문장을 한꺼번에 벡터로 바꿀 때는
                         <code>embed_documents</code>를 씁니다.</p>
                     <pre><code class="language-python"># 2. FAQ 데이터 로드
@@ -160,15 +163,29 @@ vectors = emb.embed_documents(questions)            # api 1번 호출
                     <hr/>
                     <h2 id="4">4. 벡터를 직접 들여다보기</h2>
                     <p>벡터가 정말 "의미"를 담고 있는지, 두 문장의 벡터를 비교해 봅니다.</p>
-                    <pre><code class="language-python">v1 = emb.embed_query("환불")
+                    <pre>실습파일: <code>ch14_embedding_test.py</code></pre>
+                    <pre><code class="language-python">import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+from common import get_embeddings
+
+emb = get_embeddings()  # OpenAIEmbeddings (text-embedding-3-small)
+
+v1 = emb.embed_query("환불")
 v2 = emb.embed_query("돈 돌려받기")
 v3 = emb.embed_query("로봇청소기")
 
 # (다음 절에서 코사인 유사도로 비교하지만, 미리 감만)
 # v1, v2는 비슷한 숫자 패턴, v3는 다른 패턴일 것
-print("환불 앞 3개:", v1[:3])
-print("돈돌려받기 앞 3개:", v2[:3])   # v1과 비슷
-print("로봇청소기 앞 3개:", v3[:3])   # v1과 다름
+print("환불 앞 3개     :", [round(x, 4) for x in v1[:3]])
+print("돈돌려받기 앞 3개:", [round(x, 4) for x in v2[:3]])   # v1과 비슷
+print("로봇청소기 앞 3개:", [round(x, 4) for x in v3[:3]])   # v1과 다름
+</code></pre>
+                    <p>
+                        <strong>예상 출력</strong>
+                    </p>
+                    <pre><code class="language-text">환불 앞 3개: [-0.0125, 0.0583, -0.0325]
+돈돌려받기 앞 3개: [0.0337, -0.0445, -0.0368]
+로봇청소기 앞 3개: [0.0078, 0.0112, -0.0012]
 </code></pre>
                     <p>눈으로 숫자만 봐선 정확히 알기 어렵지만, <br>
                         <strong>코사인 유사도</strong>(다음 절)로 재면 "환불"과 "돈 돌려받기"가 가깝고, <br>
