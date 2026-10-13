@@ -44,14 +44,14 @@
                     <pre><code class="language-python">def save_and_run(code: str):
     """수정 코드를 새 파일로 저장한 뒤 별도 프로세스로 실행해 (종료코드, 출력)을 반환한다.
 
-    [왜 실제 실행] '고쳤다'는 llm 말만 믿지 않고, 진짜 돌려서 종료코드 0(성공)을
+    [왜 실제 실행] '고쳤다'는 LLM 말만 믿지 않고, 진짜 돌려서 종료코드 0(성공)을
     확인한다 — 이것이 코딩 에이전트의 자체 검증(self-verification) 단계다.
     """
-    fixed.write_text(code, encoding="utf-8")       # 새 파일에 저장(원본 보존)
-    # 원본이 'data/sales_daily.csv' 상대경로를 쓰므로 root에서 실행
+    FIXED.write_text(code, encoding="utf-8")       # 새 파일에 저장(원본 보존)
+    # 원본이 'data/sales_daily.csv' 상대경로를 쓰므로 ROOT에서 실행
     proc = subprocess.run(
-        [sys.executable, str(fixed)],              # 현재 파이썬으로 수정 파일 실행
-        cwd=str(root), capture_output=true, text=true, timeout=60,  # 무한루프 방지 타임아웃
+        [sys.executable, str(FIXED)],              # 현재 파이썬으로 수정 파일 실행
+        cwd=str(ROOT), capture_output=True, text=True, timeout=60,  # 무한루프 방지 타임아웃
     )
     return proc.returncode, (proc.stdout + proc.stderr)   # 0=정상 종료, 출력은 합본
 </code></pre>
@@ -104,13 +104,13 @@
                     <h2 id="3">3. 전체 파이프라인 실행</h2>
                     <p>읽기 → 수정 → 저장·실행을 잇습니다.</p>
                     <pre><code class="language-python">if __name__ == "__main__":
-    print("[1] 원본 코드 읽기:", target.name)
-    source = read_code(target)              # 버그 있는 원본 읽기
+    print("[1] 원본 코드 읽기:", TARGET.name)
+    source = read_code(TARGET)              # 버그 있는 원본 읽기
 
-    print("[2] llm에게 버그 수정 요청 중...")
-    fixed = ask_fix(source)                 # llm이 고친 전체 코드 받기
+    print("[2] LLM에게 버그 수정 요청 중...")
+    fixed = ask_fix(source)                 # LLM이 고친 전체 코드 받기
 
-    print("[3] 새 파일로 저장 후 실행 검증:", fixed.name)
+    print("[3] 새 파일로 저장 후 실행 검증:", FIXED.name)
     code, output = save_and_run(fixed)      # 저장→실행→종료코드로 검증
 
     print("=" * 60)
@@ -118,9 +118,9 @@
     print(output)
     print("=" * 60)
     if code == 0:
-        print("성공: 버그가 수정되어 정상 동작합니다 →", fixed)
+        print("성공: 버그가 수정되어 정상 동작합니다 →", FIXED)
     else:
-        print("실패: 여전히 오류가 있습니다. 출력을 llm에 다시 피드백해 재수정하세요.")
+       print("실패: 여전히 오류가 있습니다. 출력을 LLM에 다시 피드백해 재수정하세요.")
 </code></pre>
                     <p>
                         <strong>예상 출력(성공)</strong>
