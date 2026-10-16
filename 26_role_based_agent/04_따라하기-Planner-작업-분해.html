@@ -56,24 +56,24 @@ python code/common.py            # openai_api_key: true 확인
                     <h2 id="1">1. 시작부와 데이터 로드</h2>
                     <p>
                         <code>code/ch26_role_agent.py</code>를 만듭니다.</p>
-                    <pre><code class="language-python"># -*- coding: utf-8 -*-
+                    <pre><code class="language-python"># 1. 시작부와 데이터 로드
+# -*- coding: utf-8 -*-
 # 실행: python code/ch26_role_agent.py
 import sys, pathlib
-sys.path.append(str(pathlib.path(__file__).resolve().parent))  # code/ 를 import 경로에
-from common import get_chat, data
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))  # code/ 를 import 경로에
+from common import get_chat, DATA
 
 import pandas as pd
-from pydantic import basemodel, field           # 구조화 출력(json 스키마) 정의용
-from langchain_core.messages import systemmessage, humanmessage
+from pydantic import BaseModel, Field           # 구조화 출력(JSON 스키마) 정의용
+from langchain_core.messages import SystemMessage, HumanMessage
 
-# [왜 planner/worker 분리] 한 llm에게 '계획도 세우고 실행도 하라'고 하면 둘 다 어설퍼진다.
-#   planner(계획 세우는 역할)가 작업을 잘게 쪼개고, worker(실행 역할)가 한 작업씩
+# [왜 Planner/Worker 분리] 한 LLM에게 '계획도 세우고 실행도 하라'고 하면 둘 다 어설퍼진다.
+#   Planner(계획 세우는 역할)가 작업을 잘게 쪼개고, Worker(실행 역할)가 한 작업씩
 #   집중 수행하면 각자 잘하는 일에만 몰두해 품질이 올라간다. (25강 역할 분리의 연장선)
 
-
-def load_brief_text(campaign_id: str = "cmp02") -&gt; str:
-    """캠페인 id로 브리프 1건을 읽어 llm에 넣을 한 줄 텍스트로 만든다."""
-    brief = pd.read_csv(data / "marketing_brief.csv")
+def load_brief_text(campaign_id: str = "CMP02") -> str:
+    """캠페인 ID로 브리프 1건을 읽어 LLM에 넣을 한 줄 텍스트로 만든다."""
+    brief = pd.read_csv(DATA / "marketing_brief.csv")
     campaign = brief[brief["campaign_id"] == campaign_id].iloc[0]   # 캠페인 1건 선택
     return (
         f"캠페인명: {campaign.title} / 카테고리: {campaign.category} / "
@@ -89,11 +89,12 @@ def load_brief_text(campaign_id: str = "cmp02") -&gt; str:
                     <h2 id="2">2. 구조화 출력 스키마</h2>
                     <p>Planner의 출력을
                         <strong>JSON 리스트로 강제</strong>할 스키마입니다 (02번 원칙).</p>
-                    <pre><code class="language-python">class plan(basemodel):
-    """planner가 만드는 실행 계획(구조화 출력 스키마)."""
+                    <pre><code class="language-python"># 2. 구조화 출력 스키마
+class Plan(BaseModel):
+    """Planner가 만드는 실행 계획(구조화 출력 스키마)."""
     # [왜 구조화 출력] 자유 텍스트가 아니라 list[str] 형태로 강제해, 코드가
     #   결과를 바로 반복(for)할 수 있게 한다. 파싱 실수가 사라진다.
-    subtasks: list[str] = field(description="이 캠페인을 위해 필요한 하위 작업 3~4개")
+    subtasks: list[str] = Field(description="이 캠페인을 위해 필요한 하위 작업 3~4개")
 </code></pre>
                     <p>
                         <code>subtasks: list[str]</code>
@@ -104,19 +105,19 @@ def load_brief_text(campaign_id: str = "cmp02") -&gt; str:
                     <h2 id="3-planner">3. Planner 함수</h2>
                     <p>역할 프롬프트와
                         <code>with_structured_output</code>으로 작업을 분해합니다.</p>
-                    <pre><code class="language-python">planner_system = (        # planner 역할 고정 프롬프트 — '쪼개기만, 실행은 금지'
-    "너는 마케팅 캠페인 '기획 설계자(planner)'다. "
+                    <pre><code class="language-python"># 3. Planner 함수
+PLANNER_SYSTEM = (        # Planner 역할 고정 프롬프트 — '쪼개기만, 실행은 금지'
+    "너는 마케팅 캠페인 '기획 설계자(Planner)'다. "
     "주어진 캠페인 브리프를 보고, 실행에 필요한 하위 작업을 3~4개로 쪼개라. "
     "작업은 서로 겹치지 않게, 한 문장 명령형으로 작성하라. 실행은 하지 마라."
 )
 
-
-def plan(llm, brief_text: str) -&gt; list[str]:
-    """브리프를 보고 하위 작업 리스트(json)로 분해한다."""
-    planner = llm.with_structured_output(plan)   # 출력을 plan 스키마로 강제
+def plan(llm, brief_text: str) -> list[str]:
+    """브리프를 보고 하위 작업 리스트(JSON)로 분해한다."""
+    planner = llm.with_structured_output(Plan)   # 출력을 Plan 스키마로 강제
     result = planner.invoke([
-        systemmessage(planner_system),           # 역할 지시
-        humanmessage(f"[캠페인 브리프]\n{brief_text}"),  # 입력 데이터
+        SystemMessage(PLANNER_SYSTEM),           # 역할 지시
+        HumanMessage(f"[캠페인 브리프]\n{brief_text}"),  # 입력 데이터
     ])
     return result.subtasks                       # 하위 작업 문자열 리스트
 </code></pre>
@@ -142,14 +143,15 @@ def plan(llm, brief_text: str) -&gt; list[str]:
                     </ul>
                     <hr/>
                     <h2 id="4">4. 실행해 확인</h2>
-                    <pre><code class="language-python">if __name__ == "__main__":
-    brief_text = load_brief_text("cmp02")
+                    <pre><code class="language-python"># 4. 실행해 확인
+if __name__ == "__main__":
+    brief_text = load_brief_text("CMP02")
     print("[브리프]", brief_text)
     print()
 
     llm_plan = get_chat(temperature=0)    # 계획은 재현성 → 0
     subtasks = plan(llm_plan, brief_text)
-    print("[planner 분해 결과]")
+    print("[Planner 분해 결과]")
     for i, t in enumerate(subtasks, 1):
         print(f"   {i}. {t}")
 </code></pre>

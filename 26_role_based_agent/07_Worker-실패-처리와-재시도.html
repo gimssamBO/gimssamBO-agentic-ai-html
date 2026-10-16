@@ -44,6 +44,7 @@
                         <strong>스킵·기록</strong>하고 끝까지 진행하는 견고한 오케스트레이터를 만듭니다.</p>
                     <hr/>
                     <h2 id="1">1. 한 작업의 실패가 전체를 멈춘다</h2>
+                    <p>실습파일: <code>ch26_role_agent2.py</code></p>
                     <p>06번 코드의 약점을 봅시다.</p>
                     <pre><code class="language-python">for i, t in enumerate(subtasks, 1):
     outputs.append((t, work(llm_work, brief_text, t)))   # work()가 예외 던지면?
@@ -81,20 +82,27 @@ max_retry = 2   # 최초 1회 + 재시도 2회 = 최대 3번 시도
                     <p>
                         <code>work()</code>를 감싸 최대
                         <code>MAX_RETRY</code>회 재시도하는 래퍼입니다.</p>
-                    <pre><code class="language-python">def work_with_retry(llm, brief_text: str, subtask: str, idx: int, total: int):
+                    <pre><code class="language-python"># 교안3. 재시도 래퍼 — work_with_retry
+# 5. 재시도 제어 및 방어막 함수
+def work_with_retry(llm, brief_text: str, subtask: str, idx: int, total: int, force_fail: bool = False):
     """work() 를 감싸 최대 max_retry 회 재시도. (성공여부, 결과 or 오류메시지) 반환."""
     for attempt in range(1, max_retry + 2):   # 1, 2, 3 (최초 + 재시도 2회)
         try:
             print(f"   작업 {idx}/{total} 수행 중 (시도 {attempt})...")
+            
+            # 시연용 테스트: 특정 작업 인덱스는 강제로 예외 발생
+            if force_fail:
+                raise RuntimeError("의도적인 시연용 API 연결 실패 에러")
+                
             out = work(llm, brief_text, subtask)
-            return true, out                  # 성공 → (true, 산출물)
-        except exception as e:                # 타임아웃·네트워크·파싱 등 모든 실패 흡수
+            return True, out                  # 성공 → (True, 산출물)
+        except Exception as e:                # 타임아웃·네트워크·파싱 등 모든 실패 흡수
             print(f"     [실패] {type(e).__name__}: {e}")
-            if attempt &lt;= max_retry:
+            if attempt <= max_retry:
                 print(f"     → 재시도합니다 ({attempt}/{max_retry})")
             else:
                 print(f"     → 최대 재시도 초과. 이 작업은 스킵합니다.")
-                return false, f"{type(e).__name__}: {e}"   # 실패 → (false, 오류메시지)
+                return False, f"{type(e).__name__}: {e}"   # 실패 → (False, 오류메시지)
 </code></pre>
                     <p>
                         <strong>설계 포인트</strong>
@@ -123,28 +131,36 @@ max_retry = 2   # 최초 1회 + 재시도 2회 = 최대 3번 시도
                     <h2 id="4">4. 견고한 오케스트레이터</h2>
                     <p>
                         <code>run_campaign</code>을 재시도·스킵을 지원하게 개선합니다.</p>
-                    <pre><code class="language-python">def run_campaign_robust(brief_text: str, fail_indices=none) -&gt; str:
+                    <pre><code class="language-python"># 교안4. 견고한 오케스트레이터
+# 6. 견고한 오케스트레이터
+def run_campaign_robust(brief_text: str, fail_indices=None) -> str:
     """계획 → (재시도 포함) 실행 → 취합. 실패 작업은 스킵하고 끝까지 진행한다."""
     fail_indices = set(fail_indices or [])    # 시연용: 일부러 실패시킬 작업 번호
     llm_plan = get_chat(temperature=0)
     llm_work = get_chat(temperature=0.5)
 
+    print("[1] Planner 작업 분해 중...")
     subtasks = plan(llm_plan, brief_text)
     total = len(subtasks)
+    
+    print("\n[2] Worker 실행 및 재시도 검증 중...")
     outputs = []        # (작업, 산출물) — 성공한 것만
     failed = []         # (번호, 작업, 오류) — 스킵한 것
 
     for i, t in enumerate(subtasks, 1):
-        ok, info = work_with_retry(llm_work, brief_text, t, i, total)
+        # fail_indices에 속하면 일부러 예외를 발생시키도록 전달
+        is_target_fail = i in fail_indices
+        ok, info = work_with_retry(llm_work, brief_text, t, i, total, force_fail=is_target_fail)
         if ok:
             outputs.append((t, info))
-            print(f"   작업 {i}/{total} 완료")
+            print(f"   작업 {i}/{total} 완료\n")
         else:
             failed.append((i, t, info))       # 스킵하고 다음 작업으로 진행
+            print(f"   작업 {i}/{total} 스킵됨\n")
 
     # 취합 — 성공분 + 미완료 목록
-    print(f"\n   성공 {len(outputs)}개 / 실패(스킵) {len(failed)}개 / 전체 {total}개")
-    report = [f"# 캠페인 실행안\n\n&gt; {brief_text}\n"]
+    print(f"[3] 결과 취합 (성공 {len(outputs)}개 / 실패 {len(failed)}개 / 전체 {total}개)")
+    report = [f"# 캠페인 실행안\n\n> {brief_text}\n"]
     for i, (t, out) in enumerate(outputs, 1):
         report.append(f"## {i}. {t}\n{out}\n")
     if failed:
@@ -171,10 +187,12 @@ max_retry = 2   # 최초 1회 + 재시도 2회 = 최대 3번 시도
                     <h2 id="5">5. 실행 — 일부러 실패시켜 시연</h2>
                     <p>작업 2를 일부러 매번 실패시켜
                         <strong>재시도·스킵 흐름</strong>을 보여줍니다.</p>
-                    <pre><code class="language-python">if __name__ == "__main__":
-    brief_text = load_brief_text("cmp02")
-    print("(2번 작업은 일부러 매번 실패시켜 재시도·스킵을 보여줍니다)")
+                    <pre><code class="language-python"># 교안5. 실행 — 일부러 실패시켜 시연
+if __name__ == "__main__":
+    brief_text = load_brief_text("CMP02")
+    print("(2번 작업은 일부러 매번 실패시켜 재시도·스킵을 보여줍니다)\n")
     report = run_campaign_robust(brief_text, fail_indices=[2])
+    print("=" * 60)
     print(report)
 </code></pre>
                     <p>
