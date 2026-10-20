@@ -47,15 +47,14 @@
                     <pre><code class="language-python">def main():
     tid = "user-1001"   # 한 사람의 대화 세션(같은 id로 호출해야 맥락이 이어짐)
     turns = [
-        "환불 절차 알려줘",          # 1) rag: 정책 문서 근거로 답
-        "내 주문 o000050은?",        # 2) 도구: 주문 조회
+        "환불 절차 알려줘",          # 1) RAG: 정책 문서 근거로 답
+        "내 주문 O000050은?",        # 2) 도구: 주문 조회
         "아까 그 정책 다시 알려줘",     # 3) 메모리: '아까 그 정책'=환불을 기억해 이어 답
     ]
     for i, q in enumerate(turns, 1):
         print("=" * 60)
         print(f"[턴 {i}] 고객:", q)
         print("상담원:", answer(q, thread_id=tid))   # 같은 tid → 같은 대화 세션
-
 
 if __name__ == "__main__":
     main()
@@ -145,6 +144,7 @@ if __name__ == "__main__":
                     </blockquote>
                     <hr/>
                     <h2 id="7-29-fastapi">7. (선택) 29강 FastAPI에 연결</h2>
+                    <p>실행파일: <code>code/ch30_fastapi.py</code></p>
                     <p>이 완성된 에이전트를 HTTP 서비스로 만드는 건
                         <strong>한 줄</strong>입니다.</p>
                     <pre><code class="language-python"># 29강 /chat 엔드포인트에서 robust_invoke 대신 answer 를 호출

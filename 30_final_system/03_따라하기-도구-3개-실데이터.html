@@ -66,22 +66,23 @@ python code/common.py        # openai_api_key: true 확인
                         <code>code/ch30_final.py</code>를 만듭니다. <br>
                         <strong>29강의 설정·로깅을 그대로 가져옵니다.</strong>
                     </p>
-                    <pre><code class="language-python"># -*- coding: utf-8 -*-
+                    <pre><code class="language-python"># 1. 시작부 + 29강 자산 재사용
+# -*- coding: utf-8 -*-
 # 실행: python code/ch30_final.py
 import sys, pathlib
-sys.path.append(str(pathlib.path(__file__).resolve().parent))  # code/ 를 import 경로에
-from common import get_chat, get_embeddings, data, docs
+sys.path.append(str(pathlib.Path(__file__).resolve().parent))  # code/ 를 import 경로에
+from common import get_chat, get_embeddings, DATA, DOCS
 from ch29_deploy import load_config, setup_logging              # 29강 자산(설정·로깅) 재사용
 
 import pandas as pd
 from langchain_core.tools import tool
 
-cfg = load_config()          # 29강 설정 로드(모델·온도·rag 파라미터)
+cfg = load_config()          # 29강 설정 로드(모델·온도·RAG 파라미터)
 logger = setup_logging(cfg)  # 29강 구조적 로깅
 
-orders = pd.read_csv(data / "orders.csv")        # 주문 데이터
-inventory = pd.read_csv(data / "inventory.csv")  # 재고 데이터
-faq = pd.read_csv(data / "faq.csv")              # faq 데이터
+orders = pd.read_csv(DATA / "orders.csv")        # 주문 데이터
+inventory = pd.read_csv(DATA / "inventory.csv")  # 재고 데이터
+faq = pd.read_csv(DATA / "faq.csv")              # FAQ 데이터
 </code></pre>
                     <ul>
                         <li>
@@ -95,10 +96,10 @@ faq = pd.read_csv(data / "faq.csv")              # faq 데이터
                     <hr/>
                     <h2 id="2-r2">2. 주문 조회 도구 (R2)</h2>
                     <pre><code class="language-python">@tool
-def get_order_status(order_id: str) -&gt; str:
-    """[r2] 주문번호(예: o000050)로 주문 상태/상품/금액을 조회한다.
+def get_order_status(order_id: str) -> str:
+    """[R2] 주문번호(예: O000050)로 주문 상태/상품/금액을 조회한다.
 
-    @tool docstring 은 llm이 읽는 도구 설명서다. llm은 주문 관련 질문이 오면 이 도구를 고른다.
+    @tool docstring 은 LLM이 읽는 도구 설명서다. LLM은 주문 관련 질문이 오면 이 도구를 고른다.
     """
     hit = orders[orders["order_id"] == order_id.strip().upper()]
     if hit.empty:
@@ -133,9 +134,9 @@ def get_order_status(order_id: str) -&gt; str:
                     <hr/>
                     <h2 id="3-r3">3. 재고 조회 도구 (R3)</h2>
                     <pre><code class="language-python">@tool
-def get_stock(product_name: str) -&gt; str:
-    """[r3] 상품명(일부)으로 재고 수량을 조회한다."""
-    hit = inventory[inventory["product_name"].str.contains(product_name, na=false)]
+def get_stock(product_name: str) -> str:
+    """[R3] 상품명(일부)으로 재고 수량을 조회한다."""
+    hit = inventory[inventory["product_name"].str.contains(product_name, na=False)]
     if hit.empty:
         return f"'{product_name}' 상품 재고 정보를 찾을 수 없습니다."
     return "\n".join(f"{r.product_name}: 재고 {r.stock}개({r.warehouse}창고)"
@@ -165,14 +166,14 @@ def get_stock(product_name: str) -&gt; str:
                     <hr/>
                     <h2 id="4-faq-r4">4. FAQ 검색 도구 (R4)</h2>
                     <pre><code class="language-python">@tool
-def search_faq(keyword: str) -&gt; str:
-    """[r4] 키워드로 faq에서 관련 답변을 찾는다."""
-    hit = faq[faq["question"].str.contains(keyword, na=false)]
+def search_faq(keyword: str) -> str:
+    """[R4] 키워드로 FAQ에서 관련 답변을 찾는다."""
+    hit = faq[faq["question"].str.contains(keyword, na=False)]
     if hit.empty:
-        hit = faq[faq["answer"].str.contains(keyword, na=false)]   # 질문에 없으면 답변에서도
+        hit = faq[faq["answer"].str.contains(keyword, na=False)]   # 질문에 없으면 답변에서도
     if hit.empty:
-        return "관련 faq를 찾지 못했습니다."
-    return "\n".join(f"q.{r.question}\na.{r.answer}" for r in hit.head(2).itertuples())
+        return "관련 FAQ를 찾지 못했습니다."
+    return "\n".join(f"Q.{r.question}\nA.{r.answer}" for r in hit.head(2).itertuples())
 </code></pre>
                     <p>
                         <strong>핵심</strong>

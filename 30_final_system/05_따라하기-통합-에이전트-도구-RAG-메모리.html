@@ -44,8 +44,8 @@
                     <hr/>
                     <h2 id="1">1. 시스템 프롬프트 — 에이전트의 역할 규칙</h2>
                     <p>에이전트가 어떻게 행동할지 정하는 규칙입니다.</p>
-                    <pre><code class="language-python">system_prompt = (
-    "너는 승승장구몰의 통합 cs 상담원이다. 친절한 한국어로 답하라.\n"
+                    <pre><code class="language-python">SYSTEM_PROMPT = (
+    "너는 승승장구몰의 통합 CS 상담원이다. 친절한 한국어로 답하라.\n"
     "- 주문 상태는 get_order_status, 재고는 get_stock, 자주 묻는 질문은 search_faq,\n"
     "  환불/교환/멤버십 정책은 policy_search 도구를 사용하라.\n"
     "- 정책 질문은 반드시 policy_search 결과(문서 근거)로만 답하고, 모르면 모른다고 하라.\n"
@@ -66,20 +66,19 @@
                     <h2 id="2">2. 에이전트 빌더 — 통합의 핵심</h2>
                     <p>도구 4개 + 메모리를
                         <code>create_agent</code>로 결합합니다.</p>
-                    <pre><code class="language-python">_agent = none   # 모듈 캐시 (pdf 인덱싱이 비싸서 한 번만 빌드)
-
+                    <pre><code class="language-python">_agent = None   # 모듈 캐시 (PDF 인덱싱이 비싸서 한 번만 빌드)
 
 def build_agent():
-    """설정+도구+rag+메모리를 결합한 단일 에이전트를 만든다(30강 통합의 핵심)."""
+    """설정+도구+RAG+메모리를 결합한 단일 에이전트를 만든다(30강 통합의 핵심)."""
     from langchain.agents import create_agent
-    from langgraph.checkpoint.memory import inmemorysaver
+    from langgraph.checkpoint.memory import InMemorySaver
 
     llm = get_chat(provider=cfg["llm"]["provider"], temperature=cfg["llm"]["temperature"])
-    # 도구 4종 결합: 주문/재고/faq 조회 + 정책 rag 검색
+    # 도구 4종 결합: 주문/재고/FAQ 조회 + 정책 RAG 검색
     tools = [get_order_status, get_stock, search_faq, build_policy_tool()]
     agent = create_agent(
-        llm, tools=tools, system_prompt=system_prompt,
-        checkpointer=inmemorysaver())     # inmemorysaver = 단기 메모리(thread_id 별 대화 기록)
+        llm, tools=tools, system_prompt=SYSTEM_PROMPT,
+        checkpointer=InMemorySaver())     # InMemorySaver = 단기 메모리(thread_id 별 대화 기록)
     logger.info(f"에이전트 구성 완료(도구 {len(tools)}개)")
     return agent
 </code></pre>
@@ -130,10 +129,10 @@ def answer(message, thread_id="demo"):
                     <hr/>
                     <h2 id="4-answer-28">4. 단일 진입점 answer (28강 설계)</h2>
                     <p>외부에 노출되는 함수입니다.</p>
-                    <pre><code class="language-python">def answer(message: str, thread_id: str = "demo") -&gt; str:
+                    <pre><code class="language-python">def answer(message: str, thread_id: str = "demo") -> str:
     """외부 단일 진입점(28강 설계). 같은 thread_id = 같은 대화로 묶인다."""
     global _agent
-    if _agent is none:
+    if _agent is None:
         _agent = build_agent()
     # config 의 thread_id 로 대화 세션을 구분 → 같은 id면 이전 대화를 이어 기억
     config = {"configurable": {"thread_id": thread_id}}

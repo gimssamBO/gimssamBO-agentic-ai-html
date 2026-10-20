@@ -70,25 +70,25 @@
                     <hr/>
                     <h2 id="3">3. 정책 도구 빌더</h2>
                     <pre><code class="language-python">def build_policy_tool():
-    """정책/멤버십 pdf를 임베딩→faiss→retriever→도구로 만든다."""
-    from langchain_community.document_loaders import pypdfloader
-    from langchain_text_splitters import recursivecharactertextsplitter
-    from langchain_community.vectorstores import faiss
+    """정책/멤버십 PDF를 임베딩→FAISS→retriever→도구로 만든다."""
+    from langchain_community.document_loaders import PyPDFLoader
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+    from langchain_community.vectorstores import FAISS
     from langchain_core.tools.retriever import create_retriever_tool
 
-    logger.info("정책 문서 인덱싱 시작(rag)")
+    logger.info("정책 문서 인덱싱 시작(RAG)")
     docs = []
     for name in ["환불교환정책.pdf", "멤버십정책.pdf"]:
-        docs += pypdfloader(str(docs / name)).load()     # ① pdf들을 페이지 문서로 로드
-    splitter = recursivecharactertextsplitter(           # ② 긴 문서를 검색 단위로 분할
+        docs += PyPDFLoader(str(DOCS / name)).load()     # ① PDF들을 페이지 문서로 로드
+    splitter = RecursiveCharacterTextSplitter(           # ② 긴 문서를 검색 단위로 분할
         chunk_size=cfg["rag"]["chunk_size"], chunk_overlap=cfg["rag"]["chunk_overlap"])
     chunks = splitter.split_documents(docs)
-    vs = faiss.from_documents(chunks, get_embeddings())  # ③④ 임베딩 → faiss 색인
+    vs = FAISS.from_documents(chunks, get_embeddings())  # ③④ 임베딩 → FAISS 색인
     retriever = vs.as_retriever(search_kwargs={"k": cfg["rag"]["top_k"]})  # ⑤ 상위 k개 검색기
     logger.info(f"정책 문서 인덱싱 완료(청크 {len(chunks)}개)")
     return create_retriever_tool(                        # 검색기를 '도구'로 래핑
         retriever, "policy_search",
-        "환불/교환/멤버십 등 승승장구몰 사내 정책 문서를 검색한다.")  # ← llm이 읽는 도구 설명
+        "환불/교환/멤버십 등 승승장구몰 사내 정책 문서를 검색한다.")  # ← LLM이 읽는 도구 설명
 </code></pre>
                     <p>한 줄씩 보겠습니다.</p>
                     <hr/>
